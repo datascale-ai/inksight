@@ -1,33 +1,30 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
-import traceback
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Response, Body
+from fastapi import FastAPI, Query, Response
 from fastapi.responses import HTMLResponse, JSONResponse
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-7s %(name)s  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from core.config import (
     SUPPORTED_MODES,
     DEFAULT_CITY,
-    DEFAULT_LLM_PROVIDER,
-    DEFAULT_LLM_MODEL,
-    DEFAULT_LANGUAGE,
-    DEFAULT_CONTENT_TONE,
     DEFAULT_MODES,
 )
 from core.context import get_date_context, get_weather, calc_battery_pct
-from core.content import (
-    generate_content,
-    generate_briefing_content,
-    generate_artwall_content,
-    generate_recipe_content,
-    generate_fitness_content,
-)
 from core.config_store import (
     init_db,
     save_config,
@@ -36,8 +33,9 @@ from core.config_store import (
     activate_config,
 )
 from core.cache import content_cache
+from core.schemas import ConfigRequest
+from core.pipeline import generate_and_render
 from core.renderer import (
-    render_mode,
     render_error,
     image_to_bmp_bytes,
     image_to_png_bytes,
@@ -74,7 +72,7 @@ def _choose_persona_from_config(config: dict, peek_next: bool = False) -> str:
         modes = DEFAULT_MODES
 
     strategy = config.get("refresh_strategy", "random")
-    print(
+    logger.debug(
         f"[STRATEGY] refresh_strategy={strategy}, modes={modes}, peek_next={peek_next}"
     )
 
@@ -84,7 +82,7 @@ def _choose_persona_from_config(config: dict, peek_next: bool = False) -> str:
         persona = modes[idx % len(modes)]
         if not peek_next:
             _cycle_index[mac] = idx + 1
-            print(
+            logger.debug(
                 f"[CYCLE] {mac}: index {idx} → {idx + 1}, persona={persona}, modes={modes}"
             )
         return persona
@@ -98,98 +96,18 @@ def _resolve_mode(
     """Determine which persona to use for this request."""
     if persona_override and persona_override.upper() in SUPPORTED_MODES:
         persona = persona_override.upper()
-        print(f"[REQUEST] Using override persona: {persona}")
+        logger.debug(f"[REQUEST] Using override persona: {persona}")
     elif config:
         persona = _choose_persona_from_config(config)
         mac_key = config.get("mac", "default")
-        print(
+        logger.debug(
             f"[REQUEST] Chosen persona: {persona}, mac_key={mac_key}, "
             f"current_index={_cycle_index.get(mac_key, 0)}"
         )
     else:
         persona = random.choice(["STOIC", "ROAST", "ZEN", "DAILY"])
-        print(f"[REQUEST] No config, random persona: {persona}")
+        logger.debug(f"[REQUEST] No config, random persona: {persona}")
     return persona
-
-
-# ── Content generation + rendering ───────────────────────────
-
-# Mode-specific content generators (modes not using the generic generate_content)
-_CUSTOM_GENERATORS = {
-    "BRIEFING": lambda cfg: generate_briefing_content(
-        llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
-        llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
-    ),
-    "ARTWALL": lambda cfg, date_str="", weather_str="", festival="": generate_artwall_content(
-        date_str=date_str,
-        weather_str=weather_str,
-        festival=festival,
-        llm_provider=cfg.get("llm_provider", "aliyun"),
-        llm_model=cfg.get("llm_model", "qwen-image-max"),
-    ),
-    "RECIPE": lambda cfg: generate_recipe_content(
-        llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
-        llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
-    ),
-    "FITNESS": lambda cfg: generate_fitness_content(
-        llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
-        llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
-    ),
-}
-
-
-async def _render_for_persona(
-    persona: str,
-    config: dict | None,
-    date_ctx: dict,
-    weather: dict,
-    battery_pct: float,
-) -> "Image.Image":
-    """Generate content for *persona* and render to an e-ink image."""
-    date_str = date_ctx["date_str"]
-    time_str = date_ctx.get("time_str", "")
-    weather_str = weather["weather_str"]
-    weather_code = weather.get("weather_code", -1)
-    cfg = config or {}
-
-    # Custom content generators for BRIEFING / ARTWALL / RECIPE / FITNESS
-    if persona == "ARTWALL":
-        content = await generate_artwall_content(
-            date_str=date_str,
-            weather_str=weather_str,
-            festival=date_ctx.get("festival", ""),
-            llm_provider=cfg.get("llm_provider", "aliyun"),
-            llm_model=cfg.get("llm_model", "qwen-image-max"),
-        )
-    elif persona in _CUSTOM_GENERATORS:
-        content = await _CUSTOM_GENERATORS[persona](cfg)
-    else:
-        # Standard modes: STOIC, ROAST, ZEN, DAILY (+ fallback)
-        content = await generate_content(
-            persona=persona,
-            date_str=date_str,
-            weather_str=weather_str,
-            character_tones=cfg.get("character_tones", []),
-            language=cfg.get("language", DEFAULT_LANGUAGE),
-            content_tone=cfg.get("content_tone", DEFAULT_CONTENT_TONE),
-            festival=date_ctx.get("festival", ""),
-            daily_word=date_ctx.get("daily_word", ""),
-            upcoming_holiday=date_ctx.get("upcoming_holiday", ""),
-            days_until_holiday=date_ctx.get("days_until_holiday", 0),
-            llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
-            llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
-        )
-
-    return render_mode(
-        persona,
-        content,
-        date_str=date_str,
-        weather_str=weather_str,
-        battery_pct=battery_pct,
-        weather_code=weather_code,
-        time_str=time_str,
-        date_ctx=date_ctx,
-    )
 
 
 # ── Main orchestrator ────────────────────────────────────────
@@ -209,9 +127,9 @@ async def _build_image(v: float, mac: str | None, persona_override: str | None =
         await content_cache.check_and_regenerate_all(mac, config, v)
         cached_img = await content_cache.get(mac, persona, config)
         if cached_img:
-            print(f"[CACHE HIT] {mac}:{persona} - Returning cached image")
+            logger.info(f"[CACHE HIT] {mac}:{persona} - Returning cached image")
             return cached_img
-        print(f"[CACHE MISS] {mac}:{persona} - Generating fallback content")
+        logger.info(f"[CACHE MISS] {mac}:{persona} - Generating fallback content")
 
     # Cache miss — generate now
     city = config.get("city", DEFAULT_CITY) if config else None
@@ -220,7 +138,7 @@ async def _build_image(v: float, mac: str | None, persona_override: str | None =
         get_weather(city=city),
     )
 
-    img = await _render_for_persona(persona, config, date_ctx, weather, battery_pct)
+    img = await generate_and_render(persona, config, date_ctx, weather, battery_pct)
 
     # Store in cache
     if mac and config:
@@ -238,23 +156,21 @@ async def render(
     mac: str | None = Query(default=None, description="Device MAC address"),
     persona: str | None = Query(default=None, description="Force persona"),
 ):
-    import time
-
     start_time = time.time()
-    print(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}")
+    logger.debug(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}")
 
     try:
         img = await _build_image(v, mac, persona)
         bmp_bytes = image_to_bmp_bytes(img)
         elapsed = time.time() - start_time
-        print(
+        logger.info(
             f"[RENDER] ✓ Success in {elapsed:.2f}s - Generated BMP: {len(bmp_bytes)} bytes for {mac}:{persona}"
         )
         return Response(content=bmp_bytes, media_type="image/bmp")
     except Exception as e:
         elapsed = time.time() - start_time
-        print(f"[RENDER] ✗ Failed in {elapsed:.2f}s - Error: {e}")
-        traceback.print_exc()
+        logger.error(f"[RENDER] ✗ Failed in {elapsed:.2f}s - Error: {e}")
+        logger.exception("Exception occurred during render")
         err_img = render_error(mac=mac or "unknown")
         return Response(
             content=image_to_bmp_bytes(err_img), media_type="image/bmp", status_code=500
@@ -270,10 +186,10 @@ async def preview(
     try:
         img = await _build_image(v, mac, persona)
         png_bytes = image_to_png_bytes(img)
-        print(f"[PREVIEW] Generated PNG: {len(png_bytes)} bytes")
+        logger.info(f"[PREVIEW] Generated PNG: {len(png_bytes)} bytes")
         return Response(content=png_bytes, media_type="image/png")
     except Exception:
-        traceback.print_exc()
+        logger.exception("Exception occurred during preview")
         err_img = render_error(mac=mac or "unknown")
         return Response(
             content=image_to_png_bytes(err_img), media_type="image/png", status_code=500
@@ -284,15 +200,14 @@ async def preview(
 
 
 @app.post("/api/config")
-async def post_config(body: dict = Body(...)):
-    mac = body.get("mac")
-    if not mac:
-        return JSONResponse({"error": "mac is required"}, status_code=400)
-    config_id = await save_config(mac, body)
+async def post_config(body: ConfigRequest):
+    data = body.model_dump()
+    mac = data["mac"]
+    config_id = await save_config(mac, data)
 
     saved_config = await get_active_config(mac)
     if saved_config:
-        print(
+        logger.info(
             f"[CONFIG VERIFY] Saved config id={saved_config.get('id')}, "
             f"refresh_strategy={saved_config.get('refresh_strategy')}"
         )

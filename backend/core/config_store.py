@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 import json
+import logging
 import aiosqlite
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from .config import (
     DEFAULT_CITY,
@@ -46,7 +49,7 @@ async def init_db():
 async def save_config(mac: str, data: dict) -> int:
     now = datetime.now().isoformat()
     refresh_strategy = data.get("refreshStrategy", "random")
-    print(
+    logger.info(
         f"[CONFIG SAVE] mac={mac}, refreshStrategy={refresh_strategy}, modes={data.get('modes')}"
     )
 
@@ -90,7 +93,7 @@ async def save_config(mac: str, data: dict) -> int:
         )
 
         await db.commit()
-        print(f"[CONFIG SAVE] ✓ Saved as id={config_id}, is_active=1")
+        logger.info(f"[CONFIG SAVE] ✓ Saved as id={config_id}, is_active=1")
         return config_id
 
 
@@ -116,7 +119,7 @@ async def get_active_config(mac: str) -> dict | None:
             return None
         columns = [desc[0] for desc in cursor.description]
         config = _row_to_dict(row, columns)
-        print(
+        logger.info(
             f"[CONFIG LOAD] mac={mac}, id={config.get('id')}, refresh_strategy={config.get('refresh_strategy')}, modes={config.get('modes')}"
         )
         return config

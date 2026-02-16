@@ -24,7 +24,7 @@ static const int IMG_BUF_LEN = ROW_BYTES * H;
 extern uint8_t imgBuf[];
 
 // ── Config defaults ─────────────────────────────────────────
-static const char *DEFAULT_SERVER  = "";  // Set via captive portal
+static const char *DEFAULT_SERVER  = "http://192.168.3.46:8080";  // Set via captive portal
 static const int   WIFI_TIMEOUT    = 15000;   // ms
 static const int   HTTP_TIMEOUT    = 30000;   // ms
 static const int   CFG_BTN_HOLD_MS = 2000;    // Long press duration to trigger config mode
