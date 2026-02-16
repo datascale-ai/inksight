@@ -26,6 +26,8 @@ SCREEN_H = SCREEN_HEIGHT
 EINK_BG = EINK_BACKGROUND
 EINK_FG = EINK_FOREGROUND
 
+_font_warned: set[str] = set()
+
 
 def load_font(font_key: str, size: int) -> ImageFont.FreeTypeFont:
     """从配置加载字体"""
@@ -35,6 +37,9 @@ def load_font(font_key: str, size: int) -> ImageFont.FreeTypeFont:
     path = os.path.join(FONTS_DIR, font_name)
     if os.path.exists(path):
         return ImageFont.truetype(path, size)
+    if font_key not in _font_warned:
+        _font_warned.add(font_key)
+        print(f"[FONT] Missing {font_name}, run: python scripts/setup_fonts.py")
     return ImageFont.load_default()
 
 
@@ -43,6 +48,9 @@ def load_font_by_name(name: str, size: int) -> ImageFont.FreeTypeFont:
     path = os.path.join(FONTS_DIR, name)
     if os.path.exists(path):
         return ImageFont.truetype(path, size)
+    if name not in _font_warned:
+        _font_warned.add(name)
+        print(f"[FONT] Missing {name}, run: python scripts/setup_fonts.py")
     return ImageFont.load_default()
 
 
