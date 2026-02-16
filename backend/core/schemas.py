@@ -23,7 +23,7 @@ _VALID_LANGUAGES = {"zh", "en", "mixed"}
 _VALID_TONES = {"positive", "neutral", "deep", "humor"}
 
 # 允许的刷新策略
-_VALID_STRATEGIES = {"random", "cycle"}
+_VALID_STRATEGIES = {"random", "cycle", "time_slot", "smart"}
 
 
 class ConfigRequest(BaseModel):
@@ -55,6 +55,11 @@ class ConfigRequest(BaseModel):
         default_factory=list,
         max_length=10,
         description="倒计时事件列表 [{name, date, type}]",
+    )
+    timeSlotRules: list[dict] = Field(
+        default_factory=list,
+        max_length=24,
+        description="时段绑定规则 [{startHour, endHour, modes}]",
     )
 
     @field_validator("mac")

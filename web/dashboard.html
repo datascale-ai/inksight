@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>InkSight — Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#fafafa;--card:#fff;--border:#e5e5e5;--text:#1a1a1a;--text2:#737373;--accent:#171717;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--radius:10px;--shadow:0 1px 3px rgba(0,0,0,.06)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh}
+.container{max-width:1000px;margin:0 auto;padding:32px 24px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.35rem;font-weight:700;letter-spacing:-.02em}
+.header h1 span{color:var(--text2);font-weight:400}
+.mac-input{display:flex;gap:8px;align-items:center}
+.mac-input input{padding:8px 12px;font-size:.85rem;border:1px solid var(--border);border-radius:8px;background:#fff;outline:none;width:220px}
+.mac-input input:focus{border-color:var(--accent)}
+.mac-input button{padding:8px 16px;font-size:.82rem;font-weight:600;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:pointer}
+.mac-input button:hover{background:#404040}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.stat-label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:4px}
+.stat-value{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-sub{font-size:.72rem;color:var(--text2);margin-top:2px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+.card-header{padding:12px 16px;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);border-bottom:1px solid var(--border);background:#fafafa}
+.card-body{padding:16px}
+
+.chart-container{position:relative;width:100%;overflow:hidden}
+canvas{display:block;width:100%}
+
+.mode-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.mode-bar-label{font-size:.78rem;font-weight:600;min-width:80px}
+.mode-bar-track{flex:1;height:20px;background:#f5f5f5;border-radius:4px;overflow:hidden}
+.mode-bar-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.mode-bar-count{font-size:.72rem;color:var(--text2);min-width:40px;text-align:right}
+
+.render-table{width:100%;border-collapse:collapse;font-size:.78rem}
+.render-table th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)}
+.render-table td{padding:8px 12px;border-bottom:1px solid var(--border)}
+.render-table tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:.68rem;font-weight:600}
+.badge-success{background:#dcfce7;color:#15803d}
+.badge-error{background:#fef2f2;color:#dc2626}
+.badge-cache{background:#dbeafe;color:#1e40af}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--text2);font-size:.85rem}
+
+/* Two col layout for charts */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.charts-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>InkSight <span>Dashboard</span></h1>
+    <div class="mac-input">
+      <input type="text" id="macIn" placeholder="输入设备 MAC 地址">
+      <button onclick="loadStats()">加载统计</button>
+    </div>
+  </div>
+
+  <!-- Overview cards (shown for global stats) -->
+  <div class="stats-grid" id="overviewCards">
+    <div class="stat-card">
+      <div class="stat-label">设备总数</div>
+      <div class="stat-value" id="statDevices">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">总渲染次数</div>
+      <div class="stat-value" id="statRenders">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">缓存命中率</div>
+      <div class="stat-value" id="statCacheRate">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">平均渲染时间</div>
+      <div class="stat-value" id="statAvgTime">—</div>
+    </div>
+  </div>
+
+  <!-- Device-specific stats (hidden initially) -->
+  <div id="deviceStats" style="display:none">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">最后刷新</div>
+        <div class="stat-value" id="devLastRefresh" style="font-size:1rem">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">电池电压</div>
+        <div class="stat-value" id="devBattery">—</div>
+        <div class="stat-sub" id="devBatterySub"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">WiFi 信号</div>
+        <div class="stat-value" id="devRssi">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">错误次数</div>
+        <div class="stat-value" id="devErrors">—</div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <!-- Mode frequency -->
+      <div class="card">
+        <div class="card-header">模式使用频率</div>
+        <div class="card-body" id="modeFrequency"></div>
+      </div>
+
+      <!-- Battery trend -->
+      <div class="card">
+        <div class="card-header">电池电压趋势</div>
+        <div class="card-body">
+          <div class="chart-container">
+            <canvas id="voltageChart" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily renders chart -->
+    <div class="card">
+      <div class="card-header">每日渲染次数</div>
+      <div class="card-body">
+        <div class="chart-container">
+          <canvas id="dailyChart" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent renders -->
+    <div class="card">
+      <div class="card-header">最近渲染记录</div>
+      <div class="card-body" style="padding:0;overflow-x:auto">
+        <table class="render-table" id="renderTable">
+          <thead><tr><th>时间</th><th>模式</th><th>耗时</th><th>缓存</th><th>状态</th></tr></thead>
+          <tbody id="renderBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="emptyState" class="empty-state" style="display:none">
+    <p>该设备暂无统计数据</p>
+    <p style="font-size:.75rem;margin-top:4px">设备首次请求后将开始记录统计信息</p>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+const COLORS = ['#171717','#4b5563','#6b7280','#9ca3af','#d1d5db','#374151','#1f2937','#525252','#a3a3a3','#e5e7eb'];
+
+// Load global overview on page load
+async function loadOverview() {
+  try {
+    const res = await fetch(`${API_BASE}/api/stats/overview`);
+    if (!res.ok) return;
+    const d = await res.json();
+    document.getElementById('statDevices').textContent = d.total_devices || 0;
+    document.getElementById('statRenders').textContent = d.total_renders || 0;
+    document.getElementById('statCacheRate').textContent = (d.cache_hit_rate || 0) + '%';
+    document.getElementById('statAvgTime').textContent = '—';
+  } catch (e) {
+    console.error('Failed to load overview', e);
+  }
+}
+
+async function loadStats() {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) { loadOverview(); return; }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/stats/${mac}`);
+    if (!res.ok) {
+      document.getElementById('deviceStats').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'block';
+      return;
+    }
+    const d = await res.json();
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('deviceStats').style.display = 'block';
+
+    // Summary cards
+    const lr = d.last_render;
+    document.getElementById('devLastRefresh').textContent = lr ? new Date(lr.time).toLocaleString('zh-CN') : '—';
+
+    const hb = d.heartbeats;
+    if (hb && hb.length > 0) {
+      const last = hb[hb.length - 1];
+      document.getElementById('devBattery').textContent = last.voltage ? last.voltage.toFixed(2) + 'V' : '—';
+      document.getElementById('devBatterySub').textContent = hb.length > 1 ? `${hb.length} 条记录` : '';
+      document.getElementById('devRssi').textContent = last.rssi != null ? last.rssi + ' dBm' : '—';
+    } else {
+      document.getElementById('devBattery').textContent = '—';
+      document.getElementById('devRssi').textContent = '—';
+    }
+
+    document.getElementById('devErrors').textContent = d.error_count || 0;
+
+    // Update overview cards with device data
+    document.getElementById('statRenders').textContent = d.total_renders || 0;
+    document.getElementById('statCacheRate').textContent = (d.cache_hit_rate || 0) + '%';
+    document.getElementById('statAvgTime').textContent = (d.avg_render_time_ms || 0) + 'ms';
+
+    // Mode frequency bars
+    renderModeFrequency(d.mode_frequency || {}, d.total_renders || 1);
+
+    // Voltage chart
+    renderVoltageChart(hb || []);
+
+    // Daily renders chart
+    renderDailyChart(d.daily_renders || []);
+
+    // Render history table
+    await loadRenderHistory(mac);
+
+  } catch (e) {
+    console.error('Failed to load stats', e);
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('deviceStats').style.display = 'none';
+  }
+}
+
+function renderModeFrequency(freq, total) {
+  const container = document.getElementById('modeFrequency');
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) {
+    container.innerHTML = '<div style="color:var(--text2);font-size:.8rem;text-align:center;padding:20px">暂无数据</div>';
+    return;
+  }
+  const maxCount = sorted[0][1];
+  container.innerHTML = sorted.map(([mode, count], i) => {
+    const pct = Math.round(count / total * 100);
+    const barPct = Math.round(count / maxCount * 100);
+    return `<div class="mode-bar">
+      <span class="mode-bar-label">${mode}</span>
+      <div class="mode-bar-track"><div class="mode-bar-fill" style="width:${barPct}%;background:${COLORS[i % COLORS.length]}"></div></div>
+      <span class="mode-bar-count">${count} (${pct}%)</span>
+    </div>`;
+  }).join('');
+}
+
+function renderVoltageChart(heartbeats) {
+  const canvas = document.getElementById('voltageChart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 180 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 180;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (heartbeats.length < 2) {
+    ctx.fillStyle = '#737373';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('数据不足', W / 2, H / 2);
+    return;
+  }
+
+  const voltages = heartbeats.map(h => h.voltage).filter(v => v != null);
+  if (voltages.length < 2) return;
+
+  const pad = { top: 20, right: 20, bottom: 30, left: 45 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+  const minV = Math.min(...voltages) - 0.05;
+  const maxV = Math.max(...voltages) + 0.05;
+
+  // Grid
+  ctx.strokeStyle = '#f0f0f0';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (cH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(W - pad.right, y);
+    ctx.stroke();
+
+    const val = maxV - (maxV - minV) * (i / 4);
+    ctx.fillStyle = '#a3a3a3';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(val.toFixed(2) + 'V', pad.left - 6, y + 3);
+  }
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = '#171717';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  voltages.forEach((v, i) => {
+    const x = pad.left + (cW / (voltages.length - 1)) * i;
+    const y = pad.top + cH - ((v - minV) / (maxV - minV)) * cH;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Dots
+  voltages.forEach((v, i) => {
+    const x = pad.left + (cW / (voltages.length - 1)) * i;
+    const y = pad.top + cH - ((v - minV) / (maxV - minV)) * cH;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#171717';
+    ctx.fill();
+  });
+}
+
+function renderDailyChart(dailyRenders) {
+  const canvas = document.getElementById('dailyChart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 160 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 160;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (dailyRenders.length === 0) {
+    ctx.fillStyle = '#737373';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('暂无数据', W / 2, H / 2);
+    return;
+  }
+
+  const pad = { top: 15, right: 10, bottom: 35, left: 35 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+  const maxCount = Math.max(...dailyRenders.map(d => d.count), 1);
+  const barW = Math.max(6, Math.min(30, (cW / dailyRenders.length) - 4));
+
+  dailyRenders.forEach((d, i) => {
+    const x = pad.left + (cW / dailyRenders.length) * i + (cW / dailyRenders.length - barW) / 2;
+    const barH = (d.count / maxCount) * cH;
+    const y = pad.top + cH - barH;
+
+    ctx.fillStyle = '#171717';
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, 2);
+    ctx.fill();
+
+    // Label
+    if (dailyRenders.length <= 15 || i % Math.ceil(dailyRenders.length / 10) === 0) {
+      ctx.fillStyle = '#a3a3a3';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      const dateLabel = d.date ? d.date.slice(5) : '';
+      ctx.fillText(dateLabel, x + barW / 2, H - pad.bottom + 14);
+    }
+
+    // Count on top
+    if (d.count > 0) {
+      ctx.fillStyle = '#737373';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(d.count, x + barW / 2, y - 4);
+    }
+  });
+
+  // Y axis labels
+  ctx.fillStyle = '#a3a3a3';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('0', pad.left - 6, pad.top + cH + 3);
+  ctx.fillText(maxCount, pad.left - 6, pad.top + 3);
+}
+
+async function loadRenderHistory(mac) {
+  try {
+    const res = await fetch(`${API_BASE}/api/stats/${mac}/renders?limit=20`);
+    if (!res.ok) return;
+    const d = await res.json();
+    const tbody = document.getElementById('renderBody');
+
+    if (!d.renders || d.renders.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text2)">暂无记录</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = d.renders.map(r => {
+      const time = new Date(r.time).toLocaleString('zh-CN');
+      const cacheClass = r.cache_hit ? 'badge-cache' : '';
+      const statusClass = r.status === 'success' ? 'badge-success' : 'badge-error';
+      return `<tr>
+        <td>${time}</td>
+        <td><strong>${r.persona}</strong></td>
+        <td>${r.render_time_ms}ms</td>
+        <td>${r.cache_hit ? '<span class="badge badge-cache">HIT</span>' : 'MISS'}</td>
+        <td><span class="badge ${statusClass}">${r.status}</span></td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load render history', e);
+  }
+}
+
+// Init
+loadOverview();
+
+const urlParams = new URLSearchParams(window.location.search);
+const macParam = urlParams.get('mac');
+if (macParam) {
+  document.getElementById('macIn').value = macParam;
+  loadStats();
+}
+</script>
+</body>
+</html>

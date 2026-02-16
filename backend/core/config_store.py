@@ -49,7 +49,28 @@ async def init_db():
             await db.commit()
         except Exception:
             pass  # Column already exists
+
+        # Migration: add time_slot_rules column if missing
+        try:
+            await db.execute("ALTER TABLE configs ADD COLUMN time_slot_rules TEXT DEFAULT '[]'")
+            await db.commit()
+        except Exception:
+            pass  # Column already exists
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_mac ON configs(mac)")
+
+        # Device state table for persisting runtime state (cycle_index, etc.)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS device_state (
+                mac TEXT PRIMARY KEY,
+                cycle_index INTEGER DEFAULT 0,
+                last_persona TEXT DEFAULT '',
+                last_refresh_at TEXT DEFAULT '',
+                pending_refresh INTEGER DEFAULT 0,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
         await db.commit()
 
 
@@ -68,12 +89,15 @@ async def save_config(mac: str, data: dict) -> int:
         countdown_events_json = json.dumps(
             data.get("countdownEvents", []), ensure_ascii=False
         )
+        time_slot_rules_json = json.dumps(
+            data.get("timeSlotRules", []), ensure_ascii=False
+        )
         cursor = await db.execute(
             """INSERT INTO configs
                (mac, nickname, modes, refresh_strategy, character_tones,
                 language, content_tone, city, refresh_interval, llm_provider, llm_model,
-                countdown_events, is_active, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                countdown_events, time_slot_rules, is_active, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
             (
                 mac,
                 data.get("nickname", ""),
@@ -87,6 +111,7 @@ async def save_config(mac: str, data: dict) -> int:
                 data.get("llmProvider", DEFAULT_LLM_PROVIDER),
                 data.get("llmModel", DEFAULT_LLM_MODEL),
                 countdown_events_json,
+                time_slot_rules_json,
                 now,
             ),
         )
@@ -119,6 +144,12 @@ def _row_to_dict(row, columns) -> dict:
         d["countdownEvents"] = json.loads(ce) if isinstance(ce, str) else ce
     except (json.JSONDecodeError, TypeError):
         d["countdownEvents"] = []
+    # Parse time_slot_rules from JSON string
+    tsr = d.get("time_slot_rules", "[]")
+    try:
+        d["time_slot_rules"] = json.loads(tsr) if isinstance(tsr, str) else tsr
+    except (json.JSONDecodeError, TypeError):
+        d["time_slot_rules"] = []
     # Add mac field for cycle index tracking
     if "mac" not in d:
         d["mac"] = d.get("mac", "default")
@@ -168,3 +199,88 @@ async def activate_config(mac: str, config_id: int) -> bool:
         await db.execute("UPDATE configs SET is_active = 1 WHERE id = ?", (config_id,))
         await db.commit()
         return True
+
+
+# ── Device state (cycle_index, pending_refresh, etc.) ──────
+
+
+async def get_cycle_index(mac: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT cycle_index FROM device_state WHERE mac = ?", (mac,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+
+async def set_cycle_index(mac: str, idx: int):
+    now = datetime.now().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO device_state (mac, cycle_index, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(mac) DO UPDATE SET cycle_index = ?, updated_at = ?""",
+            (mac, idx, now, idx, now),
+        )
+        await db.commit()
+
+
+async def update_device_state(mac: str, **kwargs):
+    """Update device state fields (last_persona, last_refresh_at, pending_refresh, etc.)."""
+    now = datetime.now().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Ensure row exists
+        await db.execute(
+            """INSERT INTO device_state (mac, updated_at)
+               VALUES (?, ?)
+               ON CONFLICT(mac) DO UPDATE SET updated_at = ?""",
+            (mac, now, now),
+        )
+        for key, value in kwargs.items():
+            if key in ("last_persona", "last_refresh_at", "pending_refresh", "cycle_index"):
+                await db.execute(
+                    f"UPDATE device_state SET {key} = ? WHERE mac = ?",
+                    (value, mac),
+                )
+        await db.commit()
+
+
+async def get_device_state(mac: str) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = None
+        cursor = await db.execute(
+            "SELECT * FROM device_state WHERE mac = ?", (mac,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        columns = [desc[0] for desc in cursor.description]
+        return dict(zip(columns, row))
+
+
+async def set_pending_refresh(mac: str, pending: bool = True):
+    now = datetime.now().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO device_state (mac, pending_refresh, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(mac) DO UPDATE SET pending_refresh = ?, updated_at = ?""",
+            (mac, int(pending), now, int(pending), now),
+        )
+        await db.commit()
+
+
+async def consume_pending_refresh(mac: str) -> bool:
+    """Check and clear pending refresh flag. Returns True if was pending."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT pending_refresh FROM device_state WHERE mac = ?", (mac,)
+        )
+        row = await cursor.fetchone()
+        if row and row[0]:
+            await db.execute(
+                "UPDATE device_state SET pending_refresh = 0 WHERE mac = ?", (mac,)
+            )
+            await db.commit()
+            return True
+        return False

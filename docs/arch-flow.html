@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkSight Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;400;700&family=JetBrains+Mono:wght@300;400;500&family=Playfair+Display:wght@700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #f6f1e9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Noto Serif SC', serif;
+  }
+
+  .diagram {
+    width: 960px;
+    padding: 56px 52px 48px;
+    position: relative;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(196,62,28,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(26,26,26,0.03) 0%, transparent 50%),
+      #f6f1e9;
+  }
+
+  /* ── Title ── */
+  .title {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .title h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 5px;
+    color: #1a1a1a;
+  }
+  .title h1 span {
+    font-family: 'Noto Serif SC', serif;
+    font-weight: 200;
+    font-size: 14px;
+    letter-spacing: 6px;
+    color: #8a8078;
+    display: block;
+    margin-top: 4px;
+  }
+  .title::after {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 2px;
+    background: #1a1a1a;
+    margin: 18px auto 0;
+  }
+
+  /* ── Main Row ── */
+  .main-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+  }
+
+  /* ── Nodes ── */
+  .node {
+    position: relative;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
+  /* ESP32 Node */
+  .node-esp {
+    width: 200px;
+    background: #2c2a28;
+    color: #ede8df;
+    padding: 28px 22px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow:
+      0 1px 0 0 #444 inset,
+      0 8px 24px rgba(0,0,0,0.15);
+  }
+  .node-esp .chip-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    background: #3d3a36;
+    border: 1.5px solid #555;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    position: relative;
+  }
+  /* chip pins */
+  .chip-icon::before, .chip-icon::after {
+    content: '';
+    position: absolute;
+    background: #555;
+  }
+  .chip-icon::before {
+    width: 4px; height: 3px;
+    top: -4px; left: 50%;
+    transform: translateX(-50%);
+    box-shadow: -10px 0 0 #555, 10px 0 0 #555, 0 56px 0 #555, -10px 56px 0 #555, 10px 56px 0 #555;
+  }
+  .chip-icon::after {
+    width: 3px; height: 4px;
+    left: -4px; top: 50%;
+    transform: translateY(-50%);
+    box-shadow: 0 -10px 0 #555, 0 10px 0 #555, 56px 0 0 #555, 56px -10px 0 #555, 56px 10px 0 #555;
+  }
+  .node-esp h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .node-esp .sub {
+    font-size: 10px;
+    color: #8a8078;
+    letter-spacing: 0.5px;
+  }
+  .node-esp .badge {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: #c43e1c;
+    border: 1px solid rgba(196,62,28,0.35);
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: rgba(196,62,28,0.06);
+  }
+
+  /* Backend Node */
+  .node-backend {
+    width: 290px;
+    background: #fff;
+    border: 1.5px solid #d4cdc4;
+    padding: 28px 26px;
+    border-radius: 10px;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+  }
+  .node-backend::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: #1a1a1a;
+    border-radius: 10px 10px 0 0;
+  }
+  .node-backend h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    color: #1a1a1a;
+    margin-bottom: 2px;
+  }
+  .node-backend .plat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #8a8078;
+    letter-spacing: 1.5px;
+    margin-bottom: 18px;
+  }
+
+  .service-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+  }
+  .svc {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    background: #faf7f2;
+    border: 1px solid #eae5dc;
+    transition: all 0.2s;
+  }
+  .svc:hover {
+    border-color: #c43e1c;
+    background: #fdf8f5;
+    transform: translateX(2px);
+  }
+  .svc-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .svc-icon.weather { background: #e8f4f8; }
+  .svc-icon.llm     { background: #f0e8f5; }
+  .svc-icon.render   { background: #e8f0e8; }
+  .svc .svc-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: #1a1a1a;
+    letter-spacing: 0.3px;
+  }
+  .svc .svc-desc {
+    font-size: 9px;
+    color: #8a8078;
+    font-family: 'Noto Serif SC', serif;
+    margin-top: 1px;
+  }
+
+  /* E-Ink Node */
+  .node-eink {
+    width: 186px;
+    text-align: center;
+  }
+  .eink-frame {
+    width: 160px;
+    height: 122px;
+    margin: 0 auto 12px;
+    background: #2c2a28;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    position: relative;
+  }
+  .eink-screen {
+    width: 100%;
+    height: 100%;
+    background: #e8e4da;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Simulated e-ink content */
+  .eink-screen .ek-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px;
+    color: #1a1a1a;
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    letter-spacing: 0.5px;
+  }
+  .eink-screen .ek-batt {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 6px;
+    color: #1a1a1a;
+    position: absolute;
+    top: 5px;
+    right: 7px;
+  }
+  .eink-screen .ek-line-top {
+    position: absolute;
+    top: 15px;
+    left: 5px;
+    right: 5px;
+    height: 0.5px;
+    background: #1a1a1a;
+  }
+  .eink-screen .ek-quote {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a1a1a;
+    letter-spacing: 4px;
+    margin-top: 4px;
+  }
+  .eink-screen .ek-author {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 6px;
+    color: #555;
+    margin-top: 4px;
+    letter-spacing: 1px;
+  }
+  .eink-screen .ek-line-bot {
+    position: absolute;
+    bottom: 14px;
+    left: 5px;
+    right: 5px;
+    height: 0.5px;
+    background: #1a1a1a;
+  }
+  .eink-screen .ek-mode {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 5px;
+    color: #1a1a1a;
+    position: absolute;
+    bottom: 5px;
+    left: 7px;
+    letter-spacing: 1px;
+  }
+  .node-eink h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: #1a1a1a;
+    letter-spacing: 1px;
+  }
+  .node-eink .sub {
+    font-size: 10px;
+    color: #8a8078;
+    margin-top: 2px;
+  }
+
+  /* ── Connectors ── */
+  .connector {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100px;
+    position: relative;
+  }
+  .conn-top, .conn-bot {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    position: relative;
+  }
+  .conn-line-h {
+    flex: 1;
+    height: 0;
+    border-top: 1.5px dashed #8a8078;
+  }
+  .conn-line-h.solid {
+    border-top-style: solid;
+    border-top-color: #1a1a1a;
+  }
+  .conn-arrow-r {
+    width: 0; height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 7px solid #1a1a1a;
+    flex-shrink: 0;
+  }
+  .conn-arrow-l {
+    width: 0; height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 7px solid #8a8078;
+    flex-shrink: 0;
+  }
+  .conn-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.5px;
+    padding: 3px 0;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .conn-label.up { color: #1a1a1a; font-weight: 500; }
+  .conn-label.down { color: #8a8078; }
+
+  .conn-spi .conn-line-h {
+    border-top: 2px solid #1a1a1a;
+  }
+  .conn-spi .conn-label {
+    color: #1a1a1a;
+    font-weight: 500;
+    font-size: 9px;
+  }
+
+  /* ── Blink animation for e-ink ── */
+  @keyframes inkRefresh {
+    0%, 90% { opacity: 1; }
+    93% { opacity: 0; }
+    96% { opacity: 1; }
+  }
+  .eink-screen { animation: inkRefresh 8s ease infinite; }
+
+  /* ── Pulse on connector ── */
+  @keyframes dataPulse {
+    0% { opacity: 0; transform: translateX(-20px); }
+    40% { opacity: 1; }
+    100% { opacity: 0; transform: translateX(20px); }
+  }
+  .conn-top .pulse-dot {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #c43e1c;
+    top: -2px;
+    animation: dataPulse 2.5s ease infinite;
+  }
+  .conn-bot .pulse-dot {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #8a8078;
+    top: -2px;
+    animation: dataPulse 2.5s ease infinite reverse;
+  }
+
+  /* ── Fade in ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .node-esp     { animation: fadeIn 0.5s ease 0.1s both; }
+  .connector:first-of-type { animation: fadeIn 0.5s ease 0.25s both; }
+  .node-backend { animation: fadeIn 0.5s ease 0.35s both; }
+  .connector:last-of-type  { animation: fadeIn 0.5s ease 0.5s both; }
+  .node-eink    { animation: fadeIn 0.5s ease 0.6s both; }
+</style>
+</head>
+<body>
+
+<div class="diagram">
+  <div class="title">
+    <h1>INKSIGHT <span>技 术 架 构</span></h1>
+  </div>
+
+  <div class="main-row">
+
+    <!-- ▸ ESP32-C3 -->
+    <div class="node node-esp">
+      <div class="chip-icon">&#9881;</div>
+      <h3>ESP32-C3</h3>
+      <div class="sub">RISC-V &middot; WiFi 4</div>
+      <div class="badge">SuperMini</div>
+    </div>
+
+    <!-- ▸ Connector: ESP ↔ Backend -->
+    <div class="connector">
+      <div class="conn-top">
+        <div class="conn-line-h solid"></div>
+        <div class="conn-arrow-r"></div>
+        <div class="pulse-dot"></div>
+      </div>
+      <div class="conn-label up">HTTP GET</div>
+      <div class="conn-label down">BMP Stream</div>
+      <div class="conn-bot">
+        <div class="conn-arrow-l"></div>
+        <div class="conn-line-h"></div>
+        <div class="pulse-dot"></div>
+      </div>
+    </div>
+
+    <!-- ▸ Vercel Backend -->
+    <div class="node node-backend">
+      <h3>Vercel Backend</h3>
+      <div class="plat">FASTAPI &middot; PYTHON</div>
+      <div class="service-list">
+        <div class="svc">
+          <div class="svc-icon weather">&#127780;</div>
+          <div>
+            <div class="svc-text">Open-Meteo</div>
+            <div class="svc-desc">天气数据 &middot; WMO 代码</div>
+          </div>
+        </div>
+        <div class="svc">
+          <div class="svc-icon llm">&#129302;</div>
+          <div>
+            <div class="svc-text">LLM API</div>
+            <div class="svc-desc">内容生成 &middot; DeepSeek / 百炼 / Kimi</div>
+          </div>
+        </div>
+        <div class="svc">
+          <div class="svc-icon render">&#127912;</div>
+          <div>
+            <div class="svc-text">Pillow Renderer</div>
+            <div class="svc-desc">图像渲染 &middot; 400&times;300 1-bit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ▸ Connector: Backend → E-Ink -->
+    <div class="connector conn-spi">
+      <div class="conn-top">
+        <div class="conn-line-h solid"></div>
+        <div class="conn-arrow-r"></div>
+      </div>
+      <div class="conn-label">SPI Bus</div>
+    </div>
+
+    <!-- ▸ E-Ink Display -->
+    <div class="node node-eink">
+      <div class="eink-frame">
+        <div class="eink-screen">
+          <div class="ek-date">2/16 周一 &middot; 8°C</div>
+          <div class="ek-batt">&#9608;&#9608;&#9608;&#9601; 85%</div>
+          <div class="ek-line-top"></div>
+          <div class="ek-quote">行到水穷处</div>
+          <div class="ek-author">&mdash; 王维</div>
+          <div class="ek-line-bot"></div>
+          <div class="ek-mode">STOIC</div>
+        </div>
+      </div>
+      <h3>4.2" E-Ink</h3>
+      <div class="sub">400&times;300 &middot; 1-bit</div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
