@@ -17,12 +17,12 @@ uint8_t imgBuf[IMG_BUF_LEN];
 
 // ── Runtime state ───────────────────────────────────────────
 static unsigned long cfgBtnPressStart = 0;
-static unsigned long lastSecTick;
-static unsigned long setupDoneMillis;
+static unsigned long setupDoneMillis  = 0;
 
 // ── Forward declarations ────────────────────────────────────
 static void checkConfigButton();
 static void handleFailure(const char *reason);
+static void enterDeepSleep(int minutes);
 
 // ═════════════════════════════════════════════════════════════
 // setup()
@@ -83,15 +83,15 @@ void setup() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 
-    lastSecTick = millis();
-    setupDoneMillis = millis();
-
-    Serial.printf("Time tracking started: %02d:%02d:%02d\n", curHour, curMin, curSec);
 #if DEBUG_MODE
-    Serial.printf("[DEBUG] Content refresh every %d min (user config: %d min)\n",
+    // DEBUG: stay awake with delay loop so USB CDC serial monitor keeps working.
+    // Deep sleep kills the USB connection on ESP32-C3, making serial output invisible.
+    setupDoneMillis = millis();
+    Serial.printf("[DEBUG] Staying awake, refresh every %d min (user config: %d min)\n",
                   DEBUG_REFRESH_MIN, cfgSleepMin);
 #else
-    Serial.printf("Content refresh every %d min\n", cfgSleepMin);
+    Serial.printf("Entering deep sleep for %d min\n", cfgSleepMin);
+    enterDeepSleep(cfgSleepMin);
 #endif
 }
 
@@ -103,27 +103,18 @@ void loop() {
     // Portal mode: only handle web requests
     if (portalActive) {
         handlePortalClients();
+        checkConfigButton();
         delay(5);
         return;
     }
 
-    unsigned long now = millis();
-
+#if DEBUG_MODE
+    // DEBUG: delay-based polling keeps USB CDC alive for serial monitor
     checkConfigButton();
 
-    // Periodic content refresh
-#if DEBUG_MODE
-    unsigned long refreshInterval = DEBUG_REFRESH_MIN * 60000UL;
-#else
-    unsigned long refreshInterval = (unsigned long)cfgSleepMin * 60000UL;
-#endif
-
-    if (now - setupDoneMillis >= refreshInterval) {
-#if DEBUG_MODE
-        Serial.printf("%d min elapsed, refreshing content...\n", DEBUG_REFRESH_MIN);
-#else
-        Serial.printf("%d min elapsed, refreshing content...\n", cfgSleepMin);
-#endif
+    unsigned long refreshInterval = (unsigned long)DEBUG_REFRESH_MIN * 60000UL;
+    if (millis() - setupDoneMillis >= refreshInterval) {
+        Serial.printf("[DEBUG] %d min elapsed, refreshing content...\n", DEBUG_REFRESH_MIN);
         if (connectWiFi()) {
             if (fetchBMP()) {
                 Serial.println("Displaying new content...");
@@ -136,21 +127,27 @@ void loop() {
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
         } else {
-            Serial.println("WiFi reconnect failed, keeping old content");
+            Serial.println("WiFi reconnect failed");
         }
-
         setupDoneMillis = millis();
-        lastSecTick = millis();
-    }
-
-    // Update time display every second (partial refresh)
-    if (now - lastSecTick >= 1000) {
-        lastSecTick = now;
-        tickTime();
-        updateTimeDisplay();
     }
 
     delay(50);
+#else
+    // Production: should never reach here — setup() enters deep sleep.
+    Serial.println("Unexpected loop() entry, entering deep sleep");
+    enterDeepSleep(cfgSleepMin);
+#endif
+}
+
+// ── Deep sleep helper ───────────────────────────────────────
+
+static void enterDeepSleep(int minutes) {
+    epdSleep();
+    Serial.printf("Deep sleep for %d min (~%duA)\n", minutes, 5);
+    Serial.flush();
+    esp_sleep_enable_timer_wakeup((uint64_t)minutes * 60ULL * 1000000ULL);
+    esp_deep_sleep_start();
 }
 
 // ── Failure handler with retry logic ────────────────────────

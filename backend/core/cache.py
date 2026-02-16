@@ -1,22 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from PIL import Image
 
+logger = logging.getLogger(__name__)
+
 from .config import (
     CACHEABLE_MODES,
     DEFAULT_CITY,
-    DEFAULT_LANGUAGE,
-    DEFAULT_CONTENT_TONE,
-    DEFAULT_LLM_PROVIDER,
-    DEFAULT_LLM_MODEL,
     DEFAULT_MODES,
 )
 from .context import get_date_context, get_weather, calc_battery_pct
-from .content import generate_content
-from .renderer import render_mode
+from .pipeline import generate_and_render
 
 
 class ContentCache:
@@ -51,7 +49,7 @@ class ContentCache:
                 if datetime.now() - timestamp < timedelta(minutes=ttl_minutes):
                     return img
                 else:
-                    print(f"[CACHE] {key} expired (TTL={ttl_minutes}min)")
+                    logger.debug(f"[CACHE] {key} expired (TTL={ttl_minutes}min)")
                     del self._cache[key]
             return None
 
@@ -73,7 +71,7 @@ class ContentCache:
         ttl_minutes = self._get_ttl_minutes(config)
         refresh_interval = config.get("refresh_interval", 60)
         mode_count = len(modes)
-        print(
+        logger.debug(
             f"[CACHE] TTL: {refresh_interval}min × {mode_count} modes × 1.1 = {ttl_minutes}min"
         )
 
@@ -82,14 +80,14 @@ class ContentCache:
             cached = await self.get(mac, persona, config, ttl_minutes)
             if not cached:
                 needs_regeneration = True
-                print(f"[CACHE] {mac}:{persona} missing or expired")
+                logger.debug(f"[CACHE] {mac}:{persona} missing or expired")
                 break
 
         if not needs_regeneration:
-            print(f"[CACHE] All {len(modes)} modes cached for {mac}")
+            logger.debug(f"[CACHE] All {len(modes)} modes cached for {mac}")
             return True
 
-        print(f"[CACHE] Regenerating all {len(modes)} modes for {mac}...")
+        logger.info(f"[CACHE] Regenerating all {len(modes)} modes for {mac}...")
         await self._generate_all_modes(mac, config, modes, v)
         return True
 
@@ -112,7 +110,7 @@ class ContentCache:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         success_count = sum(1 for r in results if r is True)
-        print(f"[CACHE] ✓ Generated {success_count}/{len(modes)} modes for {mac}")
+        logger.info(f"[CACHE] ✓ Generated {success_count}/{len(modes)} modes for {mac}")
 
     async def _generate_single_mode(
         self,
@@ -123,47 +121,20 @@ class ContentCache:
         date_ctx: dict,
         weather: dict,
     ) -> bool:
-        """Generate and cache a single mode using the shared render_mode dispatcher."""
+        """Generate and cache a single mode via the unified pipeline."""
         try:
-            print(f"[CACHE] Generating {mac}:{persona}...")
+            logger.info(f"[CACHE] Generating {mac}:{persona}...")
 
-            date_str = date_ctx["date_str"]
-            time_str = date_ctx.get("time_str", "")
-            weather_str = weather["weather_str"]
-            weather_code = weather.get("weather_code", -1)
-
-            content = await generate_content(
-                persona=persona,
-                date_str=date_str,
-                weather_str=weather_str,
-                character_tones=config.get("character_tones", []),
-                language=config.get("language", DEFAULT_LANGUAGE),
-                content_tone=config.get("content_tone", DEFAULT_CONTENT_TONE),
-                festival=date_ctx.get("festival", ""),
-                daily_word=date_ctx.get("daily_word", ""),
-                upcoming_holiday=date_ctx.get("upcoming_holiday", ""),
-                days_until_holiday=date_ctx.get("days_until_holiday", 0),
-                llm_provider=config.get("llm_provider", DEFAULT_LLM_PROVIDER),
-                llm_model=config.get("llm_model", DEFAULT_LLM_MODEL),
-            )
-
-            img = render_mode(
-                persona,
-                content,
-                date_str=date_str,
-                weather_str=weather_str,
-                battery_pct=battery_pct,
-                weather_code=weather_code,
-                time_str=time_str,
-                date_ctx=date_ctx,
+            img = await generate_and_render(
+                persona, config, date_ctx, weather, battery_pct
             )
 
             await self.set(mac, persona, img)
-            print(f"[CACHE] ✓ {mac}:{persona}")
+            logger.info(f"[CACHE] ✓ {mac}:{persona}")
             return True
 
         except Exception as e:
-            print(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
+            logger.error(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
             return False
 
 

@@ -7,8 +7,11 @@ import re
 import traceback
 import xml.etree.ElementTree as ET
 
+import logging
 import httpx
 from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
 
 try:
     import dashscope
@@ -180,11 +183,11 @@ async def _call_llm(
 
     finish_reason = response.choices[0].finish_reason
     usage = response.usage
-    print(
+    logger.info(
         f"[LLM] {provider}/{model} ✓ tokens={usage.total_tokens}, finish={finish_reason}"
     )
     if finish_reason == "length":
-        print("[LLM] ⚠ Content truncated due to max_tokens limit")
+        logger.warning("[LLM] ⚠ Content truncated due to max_tokens limit")
 
     return text
 
@@ -220,15 +223,15 @@ async def generate_content(
     if style:
         prompt += style
 
-    print(f"[LLM] Calling {llm_provider}/{llm_model} for persona={persona}")
+    logger.info(f"[LLM] Calling {llm_provider}/{llm_model} for persona={persona}")
 
     try:
         text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8)
     except ValueError as e:
-        print(f"[LLM] ✗ FAILED - ValueError: {e}")
+        logger.error(f"[LLM] ✗ FAILED - ValueError: {e}")
         return _fallback_content(persona)
     except Exception as e:
-        print(f"[LLM] ✗ FAILED - {type(e).__name__}: {e}")
+        logger.error(f"[LLM] ✗ FAILED - {type(e).__name__}: {e}")
         return _fallback_content(persona)
 
     if persona == "STOIC":
@@ -254,8 +257,8 @@ async def generate_content(
                 "season_text": data.get("season_text", ""),
             }
         except (json.JSONDecodeError, KeyError) as e:
-            print(f"[LLM] ✗ FAILED to parse DAILY JSON: {e}")
-            print(f"[LLM] Raw response: {text[:200]}...")
+            logger.error(f"[LLM] ✗ FAILED to parse DAILY JSON: {e}")
+            logger.info(f"[LLM] Raw response: {text[:200]}...")
             return _fallback_content("DAILY")
 
     return {"quote": text, "author": ""}
@@ -298,38 +301,41 @@ def _fallback_content(persona: str) -> dict:
 
 
 async def fetch_hn_top_stories(limit: int = 3) -> list[dict]:
-    """获取 Hacker News 热榜 Top N"""
+    """获取 Hacker News 热榜 Top N（并发请求各 story）"""
+    import asyncio as _asyncio
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 "https://hacker-news.firebaseio.com/v0/topstories.json"
             )
             if resp.status_code != 200:
-                print(f"[HN] Failed to fetch top stories: {resp.status_code}")
+                logger.error(f"[HN] Failed to fetch top stories: {resp.status_code}")
                 return []
 
             story_ids = resp.json()[:limit]
-            stories = []
 
-            for story_id in story_ids:
-                story_resp = await client.get(
-                    f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json"
+            async def _fetch_one(sid: int) -> dict | None:
+                r = await client.get(
+                    f"https://hacker-news.firebaseio.com/v0/item/{sid}.json"
                 )
-                if story_resp.status_code == 200:
-                    story = story_resp.json()
-                    stories.append(
-                        {
-                            "title": story.get("title", "No title"),
-                            "score": story.get("score", 0),
-                            "url": story.get("url", ""),
-                        }
-                    )
+                if r.status_code == 200:
+                    s = r.json()
+                    return {
+                        "title": s.get("title", "No title"),
+                        "score": s.get("score", 0),
+                        "url": s.get("url", ""),
+                    }
+                return None
 
-            print(f"[HN] Fetched {len(stories)} stories")
+            results = await _asyncio.gather(*[_fetch_one(sid) for sid in story_ids])
+            stories = [s for s in results if s is not None]
+
+            logger.info(f"[HN] Fetched {len(stories)} stories (concurrent)")
             return stories
 
     except Exception as e:
-        print(f"[HN] Error: {e}")
+        logger.error(f"[HN] Error: {e}")
         return []
 
 
@@ -339,7 +345,7 @@ async def fetch_ph_top_product() -> dict:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             resp = await client.get("https://www.producthunt.com/feed")
             if resp.status_code != 200:
-                print(f"[PH] Failed to fetch RSS: {resp.status_code}")
+                logger.error(f"[PH] Failed to fetch RSS: {resp.status_code}")
                 return {}
 
             root = ET.fromstring(resp.content)
@@ -356,7 +362,7 @@ async def fetch_ph_top_product() -> dict:
             )
 
             if not items:
-                print(f"[PH] No items found in RSS. Root tag: {root.tag}")
+                logger.warning(f"[PH] No items found in RSS. Root tag: {root.tag}")
                 return {}
 
             first_item = items[0]
@@ -382,12 +388,11 @@ async def fetch_ph_top_product() -> dict:
                 "tagline": tagline_text,
             }
 
-            print(f"[PH] Fetched product: {product['name']}")
+            logger.info(f"[PH] Fetched product: {product['name']}")
             return product
 
     except Exception as e:
-        print(f"[PH] Error: {e}")
-        traceback.print_exc()
+        logger.exception("[PH] Error fetching Product Hunt product")
         return {}
 
 
@@ -420,10 +425,10 @@ Hacker News Top 3:
 
     try:
         insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7)
-        print(f"[BRIEFING] Generated insight: {insight[:50]}...")
+        logger.info(f"[BRIEFING] Generated insight: {insight[:50]}...")
         return insight
     except Exception as e:
-        print(f"[BRIEFING] Failed to generate insight: {e}")
+        logger.error(f"[BRIEFING] Failed to generate insight: {e}")
         return "今日科技圈依然精彩，开发者们在不断探索新的可能性。"
 
 
@@ -433,76 +438,86 @@ async def summarize_briefing_content(
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
 ) -> tuple[list[dict], dict]:
-    """使用 LLM 总结 HN 和 PH 内容，使其更易读"""
+    """使用单次 LLM 调用批量总结 HN stories 和 PH tagline（原先需 3-4 次调用）"""
     try:
-        summarized_stories = []
-        if stories:
-            for story in stories:
-                title = story.get("title", "")
-                if not title or len(title) < 20:
-                    summarized_stories.append(story)
-                    continue
+        titles_to_summarize = []
+        for i, story in enumerate(stories):
+            title = story.get("title", "")
+            if title and len(title) >= 20:
+                titles_to_summarize.append((i, title))
 
-                prompt = f"""
-# Role
-你是一个 Hacker News 专栏的技术编辑，擅长用最简练的中文介绍硬核技术内容。
+        ph_tagline = ""
+        ph_name = ""
+        if ph_product and ph_product.get("tagline") and len(ph_product["tagline"]) > 30:
+            ph_name = ph_product.get("name", "")
+            ph_tagline = ph_product["tagline"]
 
-# Input
-标题：{title}
+        # Build a single batch prompt for all summaries
+        if not titles_to_summarize and not ph_tagline:
+            return stories, ph_product
 
-# Instructions
-请根据标题判断内容类型，并生成 30 字以内的中文简介：
-1. 如果标题包含 "Show HN" 或看似一个工具/库：重点描述**它能解决什么问题**或**主要功能**。
-2. 如果是技术文章/讨论：重点概括**核心观点**或**技术领域**。
-3. 去除 "Show HN" 等前缀，直接说事。
-4. 风格要专业、通过关键词吸引开发者。
+        prompt_parts = [
+            "# Role",
+            "你是一个科技内容编辑，擅长用精练中文总结技术新闻。",
+            "",
+            "# Tasks",
+            "请按顺序完成以下总结任务，用 JSON 格式输出结果。",
+            "",
+        ]
 
-# Output
-(仅输出总结内容，不要包含任何前缀)"""
+        if titles_to_summarize:
+            prompt_parts.append("## HN Stories 总结")
+            prompt_parts.append("为每条标题生成 30 字以内的中文简介：")
+            for idx, (_, title) in enumerate(titles_to_summarize):
+                prompt_parts.append(f"  {idx + 1}. {title}")
+            prompt_parts.append("")
 
-                summary = await _call_llm(
-                    llm_provider, llm_model, prompt, max_tokens=50, temperature=0.5
-                )
-                summary = summary.strip('"').strip("「」")
-                summarized_stories.append({**story, "summary": summary})
+        if ph_tagline:
+            prompt_parts.append("## Product Hunt 产品总结")
+            prompt_parts.append(f"产品名称：{ph_name}")
+            prompt_parts.append(f"英文Slogan：{ph_tagline}")
+            prompt_parts.append("重写为 30 字以内的中文介绍。")
+            prompt_parts.append("")
 
-            print(f"[BRIEFING] Summarized {len(summarized_stories)} HN stories")
+        prompt_parts.append("# Output (仅输出 JSON)")
+        prompt_parts.append('{')
+        if titles_to_summarize:
+            prompt_parts.append('  "hn_summaries": ["简介1", "简介2", ...],')
+        if ph_tagline:
+            prompt_parts.append('  "ph_summary": "中文介绍"')
+        prompt_parts.append('}')
 
+        batch_prompt = "\n".join(prompt_parts)
+
+        text = await _call_llm(
+            llm_provider, llm_model, batch_prompt,
+            max_tokens=300, temperature=0.5,
+        )
+        cleaned = _clean_json_response(text)
+        data = json.loads(cleaned)
+
+        # Apply HN summaries
+        hn_summaries = data.get("hn_summaries", [])
+        summarized_stories = list(stories)
+        for summary_idx, (story_idx, _) in enumerate(titles_to_summarize):
+            if summary_idx < len(hn_summaries):
+                summary = str(hn_summaries[summary_idx]).strip('"').strip("「」")
+                summarized_stories[story_idx] = {**stories[story_idx], "summary": summary}
+
+        logger.info(f"[BRIEFING] Batch-summarized {len(titles_to_summarize)} HN stories in 1 LLM call")
+
+        # Apply PH summary
         summarized_ph = ph_product.copy() if ph_product else {}
-        if ph_product and ph_product.get("tagline"):
-            name = ph_product.get("name", "")
-            tagline = ph_product.get("tagline", "")
-            if len(tagline) > 30:
-                prompt = f"""
-# Role
-你是一个科技产品推荐官。
-
-# Input
-产品名称：{name}
-英文Slogan：{tagline}
-
-# Task
-请将上述英文Slogan重写为一句吸引人的中文介绍（30字以内）：
-1. **不要死板翻译**，要符合中文互联网的阅读习惯。
-2. 提炼核心卖点（如：免费、开源、自托管）。
-3. 格式示例："一款...的神器" 或 "...的最佳伴侣"。
-
-# Output
-仅输出中文介绍文本。
-"""
-
-                summary = await _call_llm(
-                    llm_provider, llm_model, prompt, max_tokens=50, temperature=0.5
-                )
-                summary = summary.strip('"').strip("「」")
-                summarized_ph["tagline_original"] = tagline
-                summarized_ph["tagline"] = summary
-                print("[BRIEFING] Summarized PH product tagline")
+        if ph_tagline and data.get("ph_summary"):
+            summary = str(data["ph_summary"]).strip('"').strip("「」")
+            summarized_ph["tagline_original"] = ph_tagline
+            summarized_ph["tagline"] = summary
+            logger.info("[BRIEFING] Batch-summarized PH tagline")
 
         return summarized_stories, summarized_ph
 
     except Exception as e:
-        print(f"[BRIEFING] Failed to summarize content: {e}")
+        logger.error(f"[BRIEFING] Batch summarize failed, returning originals: {e}")
         return stories, ph_product
 
 
@@ -512,13 +527,18 @@ async def generate_briefing_content(
     summarize: bool = True,
 ) -> dict:
     """生成 BRIEFING 模式的完整内容"""
-    print("[BRIEFING] Starting content generation...")
+    import asyncio as _asyncio
 
-    hn_stories = await fetch_hn_top_stories(limit=3)
-    ph_product = await fetch_ph_top_product()
+    logger.info("[BRIEFING] Starting content generation...")
+
+    # Fetch HN and PH concurrently
+    hn_stories, ph_product = await _asyncio.gather(
+        fetch_hn_top_stories(limit=3),
+        fetch_ph_top_product(),
+    )
 
     if not hn_stories and not ph_product:
-        print("[BRIEFING] All data sources failed, using fallback")
+        logger.error("[BRIEFING] All data sources failed, using fallback")
         return _fallback_content("BRIEFING")
 
     if summarize:
@@ -536,7 +556,7 @@ async def generate_briefing_content(
         "insight": insight,
     }
 
-    print("[BRIEFING] Content generation complete")
+    logger.info("[BRIEFING] Content generation complete")
     return result
 
 
@@ -551,7 +571,7 @@ async def generate_artwall_content(
     llm_model: str = "qwen-image-max",
 ) -> dict:
     """生成 ARTWALL 模式的内容 - 使用文生图模型"""
-    print("[ARTWALL] Starting content generation...")
+    logger.info("[ARTWALL] Starting content generation...")
 
     context_parts = []
     if weather_str:
@@ -576,7 +596,7 @@ async def generate_artwall_content(
     try:
         artwork_title = await _call_llm("deepseek", "deepseek-chat", title_prompt)
         artwork_title = artwork_title.strip('"').strip("「」")
-        print(f"[ARTWALL] Generated title: {artwork_title}")
+        logger.info(f"[ARTWALL] Generated title: {artwork_title}")
 
         image_prompt = f"""
 绘画风格：极简黑白线条艺术，现代矢量简笔画，墨水屏二值化风格。
@@ -588,11 +608,11 @@ async def generate_artwall_content(
 画面内容：用几根简单的黑色线条勾勒出{artwork_title}的神韵。环境：{context}（极简暗示或留白）。
 """
 
-        print(f"[ARTWALL] Image prompt: {image_prompt[:100]}...")
+        logger.info(f"[ARTWALL] Image prompt: {image_prompt[:100]}...")
 
         api_key = os.getenv("DASHSCOPE_API_KEY", "")
         if not api_key or api_key.startswith("sk-your-"):
-            print("[ARTWALL] No valid DASHSCOPE_API_KEY, using fallback")
+            logger.warning("[ARTWALL] No valid DASHSCOPE_API_KEY, using fallback")
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
@@ -601,7 +621,7 @@ async def generate_artwall_content(
             }
 
         if MultiModalConversation is None:
-            print("[ARTWALL] dashscope not installed, using fallback")
+            logger.warning("[ARTWALL] dashscope not installed, using fallback")
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
@@ -609,11 +629,15 @@ async def generate_artwall_content(
                 "prompt": image_prompt,
             }
 
+        import asyncio as _asyncio
+
         dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1"
 
         messages = [{"role": "user", "content": [{"text": image_prompt}]}]
 
-        response = MultiModalConversation.call(
+        # Wrap synchronous DashScope SDK call to avoid blocking the event loop
+        response = await _asyncio.to_thread(
+            MultiModalConversation.call,
             api_key=api_key,
             model="qwen-image-max",
             messages=messages,
@@ -627,7 +651,7 @@ async def generate_artwall_content(
 
         if response.status_code == 200:
             image_url = response.output.choices[0].message.content[0].get("image", "")
-            print(f"[ARTWALL] Image generated: {image_url[:50]}...")
+            logger.info(f"[ARTWALL] Image generated: {image_url[:50]}...")
 
             return {
                 "artwork_title": artwork_title,
@@ -637,8 +661,8 @@ async def generate_artwall_content(
                 "model_name": "qwen-image-max",
             }
         else:
-            print(f"[ARTWALL] Image generation failed: {response.status_code}")
-            print(f"Error: {response.code} - {response.message}")
+            logger.error(f"[ARTWALL] Image generation failed: {response.status_code}")
+            logger.error(f"Error: {response.code} - {response.message}")
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
@@ -647,8 +671,7 @@ async def generate_artwall_content(
             }
 
     except Exception as e:
-        print(f"[ARTWALL] Failed: {e}")
-        traceback.print_exc()
+        logger.exception("[ARTWALL] Failed to generate artwall content")
         return {
             "artwork_title": "墨韵天成",
             "image_url": "",
@@ -665,7 +688,7 @@ async def generate_recipe_content(
     llm_model: str = "deepseek-chat",
 ) -> dict:
     """生成 RECIPE 模式的内容 - 早中晚三餐方案"""
-    print("[RECIPE] Starting content generation...")
+    logger.info("[RECIPE] Starting content generation...")
 
     month = datetime.datetime.now().month
 
@@ -714,7 +737,7 @@ async def generate_recipe_content(
         text = await _call_llm(llm_provider, llm_model, prompt)
         cleaned = _clean_json_response(text)
         data = json.loads(cleaned)
-        print("[RECIPE] Generated meal plan")
+        logger.info("[RECIPE] Generated meal plan")
 
         return {
             "season": season_map.get(month, f"{month}月"),
@@ -731,8 +754,7 @@ async def generate_recipe_content(
         }
 
     except Exception as e:
-        print(f"[RECIPE] Failed: {e}")
-        traceback.print_exc()
+        logger.exception("[RECIPE] Failed to generate recipe content")
         return {
             "season": season_map.get(month, f"{month}月"),
             "breakfast": "燕麦牛奶粥·茶叶蛋·凉拌黑木耳",
@@ -750,7 +772,7 @@ async def generate_fitness_content(
     llm_model: str = "deepseek-chat",
 ) -> dict:
     """生成 FITNESS 模式的内容"""
-    print("[FITNESS] Starting content generation...")
+    logger.info("[FITNESS] Starting content generation...")
 
     prompt = """你是一位健身教练。推荐一套简单的健身计划，用 JSON 格式输出：
 
@@ -776,7 +798,7 @@ async def generate_fitness_content(
         text = await _call_llm(llm_provider, llm_model, prompt)
         cleaned = _clean_json_response(text)
         data = json.loads(cleaned)
-        print(f"[FITNESS] Generated: {data.get('workout_name', '')}")
+        logger.info(f"[FITNESS] Generated: {data.get('workout_name', '')}")
 
         return {
             "workout_name": data.get("workout_name", "晨间拉伸"),
@@ -795,7 +817,7 @@ async def generate_fitness_content(
         }
 
     except Exception as e:
-        print(f"[FITNESS] Failed: {e}")
+        logger.error(f"[FITNESS] Failed: {e}")
         return {
             "workout_name": "晨间拉伸",
             "duration": "15分钟",

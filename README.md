@@ -49,14 +49,8 @@ InkSight 通过后端 LLM（DeepSeek / 通义千问 / Kimi）生成基于当前�
 
 ## 技术架构
 
-```
-ESP32-C3 (WiFi) ──HTTP GET──> Vercel (FastAPI)
-                                  ├── Open-Meteo (天气)
-                                  ├── LLM API (内容生成)
-                                  └── Pillow (图像渲染)
-                 <──BMP 二进制流──┘
-ESP32 ──SPI──> 4.2" E-Ink Display
-```
+![技术架构图](structure.png)
+
 
 | 层 | 技术栈 |
 |----|--------|
@@ -89,6 +83,9 @@ cd inksight/backend
 # 安装依赖
 pip install -r requirements.txt
 
+# 下载字体文件 (Noto Serif SC, Lora, Inter — 约 70MB)
+python scripts/setup_fonts.py
+
 # 配置环境变量
 cp .env.example .env
 # 编辑 .env 文件，填入你的 API Key
@@ -97,7 +94,7 @@ cp .env.example .env
 python -m uvicorn api.index:app --host 0.0.0.0 --port 8080
 ```
 
-启动后访问 `http://localhost:8000` 查看预览控制台。
+启动后访问 `http://localhost:8080` 查看预览控制台。
 
 ### 3. 固件烧录
 
@@ -124,7 +121,7 @@ pio device monitor
 
 ## 配置说明
 
-访问 `http://your-server:8000/config?mac=XX:XX:XX:XX:XX:XX` 进行在线配置：
+访问 `http://your-server:8080/config?mac=XX:XX:XX:XX:XX:XX` 进行在线配置：
 
 | 配置项 | 说明 |
 |--------|------|
@@ -153,6 +150,10 @@ inksight/
 │   │   ├── context.py      # 环境上下文 (天气/日期)
 │   │   ├── content.py      # LLM 内容生成
 │   │   ├── renderer.py     # 图像渲染
+│   ├── scripts/            # 工具脚本
+│   │   └── setup_fonts.py  # 字体下载脚本
+│   ├── fonts/              # 字体文件 (TTF 需通过脚本下载)
+│   │   └── icons/          # PNG 图标 (已包含在仓库中)
 │   │   ├── config_store.py # 配置存储 (SQLite)
 │   │   ├── cache.py        # 缓存系统
 │   │   └── patterns/       # 8 种内容模式实现

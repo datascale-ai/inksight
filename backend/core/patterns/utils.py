@@ -4,8 +4,11 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger(__name__)
 from ..config import (
     SCREEN_WIDTH,
     SCREEN_HEIGHT,
@@ -39,7 +42,7 @@ def load_font(font_key: str, size: int) -> ImageFont.FreeTypeFont:
         return ImageFont.truetype(path, size)
     if font_key not in _font_warned:
         _font_warned.add(font_key)
-        print(f"[FONT] Missing {font_name}, run: python scripts/setup_fonts.py")
+        logger.warning(f"[FONT] Missing {font_name}, run: python scripts/setup_fonts.py")
     return ImageFont.load_default()
 
 
@@ -50,7 +53,7 @@ def load_font_by_name(name: str, size: int) -> ImageFont.FreeTypeFont:
         return ImageFont.truetype(path, size)
     if name not in _font_warned:
         _font_warned.add(name)
-        print(f"[FONT] Missing {name}, run: python scripts/setup_fonts.py")
+        logger.warning(f"[FONT] Missing {name}, run: python scripts/setup_fonts.py")
     return ImageFont.load_default()
 
 

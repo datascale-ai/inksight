@@ -16,6 +16,23 @@ bool wifiConnected = false;
 static WebServer webServer(80);
 static DNSServer dnsServer;
 
+// ── Input validation helpers ────────────────────────────────
+
+static const int PORTAL_MAX_SSID   = 32;
+static const int PORTAL_MAX_PASS   = 64;
+static const int PORTAL_MAX_URL    = 200;
+static const int PORTAL_MAX_CONFIG = 2048;
+
+static String sanitizeInput(const String &input, int maxLen) {
+    String result = input.substring(0, maxLen);
+    result.trim();
+    return result;
+}
+
+static bool isValidUrl(const String &url) {
+    return url.startsWith("http://") || url.startsWith("https://");
+}
+
 // ── Start captive portal ────────────────────────────────────
 
 void startCaptivePortal() {
@@ -68,8 +85,8 @@ void startCaptivePortal() {
 
     // ── Route: Save WiFi credentials ────────────────────────
     webServer.on("/save_wifi", HTTP_POST, []() {
-        String ssid = webServer.arg("ssid");
-        String pass = webServer.arg("pass");
+        String ssid = sanitizeInput(webServer.arg("ssid"), PORTAL_MAX_SSID);
+        String pass = sanitizeInput(webServer.arg("pass"), PORTAL_MAX_PASS);
 
         if (ssid.length() == 0) {
             webServer.send(200, "application/json", "{\"ok\":false,\"msg\":\"SSID empty\"}");
@@ -101,11 +118,13 @@ void startCaptivePortal() {
 
     // ── Route: Save user config ─────────────────────────────
     webServer.on("/save_config", HTTP_POST, []() {
-        String config = webServer.arg("config");
-        if (config.length() > 0) {
-            saveUserConfig(config);
-            Serial.println("Config saved to NVS");
+        String config = sanitizeInput(webServer.arg("config"), PORTAL_MAX_CONFIG);
+        if (config.length() == 0) {
+            webServer.send(200, "application/json", "{\"ok\":false,\"msg\":\"Config empty\"}");
+            return;
         }
+        saveUserConfig(config);
+        Serial.println("Config saved to NVS");
         webServer.send(200, "application/json", "{\"ok\":true}");
 
         // Post config to backend if connected

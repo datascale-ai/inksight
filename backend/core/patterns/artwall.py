@@ -3,7 +3,11 @@ ARTWALL 模式 - AI 艺术画廊
 使用文生图模型生成黑白版画风格的艺术作品
 """
 
+import logging
 from PIL import Image, ImageDraw
+
+logger = logging.getLogger(__name__)
+
 from .utils import (
     SCREEN_W,
     SCREEN_H,
@@ -85,7 +89,7 @@ def render_artwall(
                 
                 return img
         except Exception as e:
-            print(f"[ARTWALL] Failed to load image: {e}")
+            logger.error(f"[ARTWALL] Failed to load image: {e}")
     
     y = 80
     
