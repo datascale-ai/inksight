@@ -23,6 +23,9 @@ static const int IMG_BUF_LEN = ROW_BYTES * H;
 // Shared framebuffer (defined in main.cpp)
 extern uint8_t imgBuf[];
 
+// ── Refresh strategy ─────────────────────────────────────────
+static const int FULL_REFRESH_INTERVAL = 10;  // Full refresh every N updates to clear ghosting
+
 // ── Config defaults ─────────────────────────────────────────
 static const char *DEFAULT_SERVER  = "http://192.168.3.46:8080";  // Set via captive portal
 static const int   WIFI_TIMEOUT    = 15000;   // ms

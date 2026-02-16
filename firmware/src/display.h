@@ -18,4 +18,7 @@ void showError(const char *msg);
 // Update time display via partial refresh (HH:MM:SS)
 void updateTimeDisplay();
 
+// Smart display: uses no-flash partial refresh normally, full refresh every N cycles
+void smartDisplay(const uint8_t *image);
+
 #endif // INKSIGHT_DISPLAY_H

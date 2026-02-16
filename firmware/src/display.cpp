@@ -192,3 +192,20 @@ void updateTimeDisplay() {
 
     epdPartialDisplay(partBuf, TIME_RGN_X0, TIME_RGN_Y0, TIME_RGN_X1, TIME_RGN_Y1);
 }
+
+// ── Smart display with hybrid refresh strategy ──────────────
+// Uses fast refresh (0xC7 + temperature LUT, ~1.5s, minimal flash) most of the time.
+// Performs a full refresh (0xF7, clears ghosting) every FULL_REFRESH_INTERVAL cycles.
+
+static int refreshCount = 0;
+
+void smartDisplay(const uint8_t *image) {
+    if (refreshCount % FULL_REFRESH_INTERVAL == 0) {
+        Serial.printf("smartDisplay: full refresh (cycle %d)\n", refreshCount);
+        epdDisplay(image);
+    } else {
+        Serial.printf("smartDisplay: fast refresh (cycle %d)\n", refreshCount);
+        epdDisplayFast(image);
+    }
+    refreshCount++;
+}

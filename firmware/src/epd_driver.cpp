@@ -43,6 +43,30 @@ static void epdReset() {
     digitalWrite(PIN_EPD_RST, HIGH); delay(100);
 }
 
+// ── Helper: configure RAM window for full screen ────────────
+
+static void epdSetFullWindow() {
+    epdSendCommand(0x11);  // Data Entry Mode Setting
+    epdSendData(0x03);     //   X increment, Y increment
+
+    epdSendCommand(0x44);  // Set RAM X address range
+    epdSendData(0x00);
+    epdSendData((W - 1) / 8);
+
+    epdSendCommand(0x45);  // Set RAM Y address range
+    epdSendData(0x00);
+    epdSendData(0x00);
+    epdSendData((H - 1) & 0xFF);
+    epdSendData(((H - 1) >> 8) & 0xFF);
+
+    epdSendCommand(0x4E);  // Set RAM X address counter
+    epdSendData(0x00);
+
+    epdSendCommand(0x4F);  // Set RAM Y address counter
+    epdSendData(0x00);
+    epdSendData(0x00);
+}
+
 // ── GPIO initialization ─────────────────────────────────────
 
 void gpioInit() {
@@ -57,7 +81,7 @@ void gpioInit() {
     digitalWrite(PIN_EPD_SCK, LOW);
 }
 
-// ── EPD full init (Waveshare 4.2" V2, SSD1683 driver) ──────
+// ── EPD full init (standard mode, Waveshare 4.2" V2 SSD1683) ──
 
 void epdInit() {
     epdReset();
@@ -73,33 +97,46 @@ void epdInit() {
     epdSendCommand(0x3C);  // Border Waveform Control
     epdSendData(0x05);
 
-    epdSendCommand(0x11);  // Data Entry Mode Setting
-    epdSendData(0x03);     //   X increment, Y increment
-
-    epdSendCommand(0x44);  // Set RAM X address range
-    epdSendData(0x00);                // X start
-    epdSendData((W - 1) / 8);        // X end
-
-    epdSendCommand(0x45);  // Set RAM Y address range
-    epdSendData(0x00);                // Y start low
-    epdSendData(0x00);                // Y start high
-    epdSendData((H - 1) & 0xFF);     // Y end low
-    epdSendData(((H - 1) >> 8) & 0xFF); // Y end high
-
-    epdSendCommand(0x4E);  // Set RAM X address counter
-    epdSendData(0x00);
-
-    epdSendCommand(0x4F);  // Set RAM Y address counter
-    epdSendData(0x00);
-    epdSendData(0x00);
-
+    epdSetFullWindow();
     epdWaitBusy();
 }
 
-// ── EPD full-screen display ─────────────────────────────────
+// ── EPD fast init (loads fast-refresh LUT via temperature register) ──
+// Based on official Waveshare epd4in2_V2 Init_Fast() implementation.
+// The 0x1A register sets a temperature value that selects faster internal LUT.
+// 0x6E = ~1.5s refresh, 0x5A = ~1s refresh.
+
+void epdInitFast() {
+    epdReset();
+    epdWaitBusy();
+
+    epdSendCommand(0x12);  // Software Reset
+    epdWaitBusy();
+
+    epdSendCommand(0x21);  // Display Update Control 1
+    epdSendData(0x40);
+    epdSendData(0x00);
+
+    epdSendCommand(0x3C);  // Border Waveform Control
+    epdSendData(0x05);
+
+    epdSendCommand(0x1A);  // Write to temperature register
+    epdSendData(0x6E);     //   Value for ~1.5s fast refresh
+
+    epdSendCommand(0x22);  // Display Update Control 2
+    epdSendData(0x91);     //   Load temperature + Load LUT, then power down
+    epdSendCommand(0x20);  // Master Activation
+    epdWaitBusy();
+
+    epdSetFullWindow();
+    epdWaitBusy();
+}
+
+// ── EPD full-screen display (standard full refresh, 0xF7) ───
+// Clears all ghosting but has visible black-white flash (~3-4s).
 
 void epdDisplay(const uint8_t *image) {
-    epdInit();  // Re-initialize before full refresh
+    epdInit();
 
     int w = W / 8;
 
@@ -108,13 +145,38 @@ void epdDisplay(const uint8_t *image) {
         for (int i = 0; i < w; i++)
             epdSendData(image[i + j * w]);
 
-    epdSendCommand(0x26);  // Write RED RAM (used as old data for refresh)
+    epdSendCommand(0x26);  // Write RED RAM (old data for refresh)
     for (int j = 0; j < H; j++)
         for (int i = 0; i < w; i++)
             epdSendData(image[i + j * w]);
 
     epdSendCommand(0x22);  // Display Update Control 2
     epdSendData(0xF7);     //   Full update sequence
+    epdSendCommand(0x20);  // Activate Display Update Sequence
+    epdWaitBusy();
+}
+
+// ── EPD full-screen display (fast refresh, 0xC7) ────────────
+// Much less flashing than full refresh (~1.5s).
+// Requires epdInitFast() to be called first to load the fast LUT.
+
+void epdDisplayFast(const uint8_t *image) {
+    epdInitFast();
+
+    int w = W / 8;
+
+    epdSendCommand(0x24);  // Write Black/White RAM
+    for (int j = 0; j < H; j++)
+        for (int i = 0; i < w; i++)
+            epdSendData(image[i + j * w]);
+
+    epdSendCommand(0x26);  // Write RED RAM
+    for (int j = 0; j < H; j++)
+        for (int i = 0; i < w; i++)
+            epdSendData(image[i + j * w]);
+
+    epdSendCommand(0x22);  // Display Update Control 2
+    epdSendData(0xC7);     //   Fast update: skip LUT load (already loaded by InitFast)
     epdSendCommand(0x20);  // Activate Display Update Sequence
     epdWaitBusy();
 }

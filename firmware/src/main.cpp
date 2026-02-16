@@ -75,7 +75,7 @@ void setup() {
     resetRetryCount();
 
     Serial.println("Displaying image...");
-    epdDisplay(imgBuf);
+    smartDisplay(imgBuf);
     Serial.println("Display done");
 
     syncNTP();
@@ -118,7 +118,7 @@ void loop() {
         if (connectWiFi()) {
             if (fetchBMP()) {
                 Serial.println("Displaying new content...");
-                epdDisplay(imgBuf);
+                smartDisplay(imgBuf);
                 Serial.println("Display done");
                 syncNTP();
             } else {
