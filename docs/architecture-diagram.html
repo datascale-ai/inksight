@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkSight - 技术架构图</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;400;700;900&family=JetBrains+Mono:wght@300;500&family=Playfair+Display:wght@400;700;900&display=swap');
+
+  :root {
+    --ink: #1a1a1a;
+    --paper: #f5f0e8;
+    --paper-light: #faf6ef;
+    --accent: #c43e1c;
+    --accent-soft: #e8a88a;
+    --muted: #8a8078;
+    --border: #d4cdc4;
+    --shadow: rgba(26, 26, 26, 0.08);
+    --hw-bg: #2c2c2c;
+    --fw-bg: #3d3530;
+    --be-bg: #f5f0e8;
+    --ext-bg: #fdfbf7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Noto Serif SC', serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Header ─── */
+  .header {
+    text-align: center;
+    padding: 60px 20px 40px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    display: block;
+    width: 60px;
+    height: 2px;
+    background: var(--ink);
+    margin: 24px auto 0;
+  }
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+  }
+  .header h1 span {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px;
+    font-weight: 200;
+    letter-spacing: 8px;
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+  }
+  .header .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 16px;
+    letter-spacing: 2px;
+    font-weight: 400;
+  }
+
+  /* ─── Canvas ─── */
+  .canvas {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ─── Tier Label ─── */
+  .tier {
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .tier-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    padding-left: 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tier-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ─── Flow Arrow between tiers ─── */
+  .flow-connector {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+    position: relative;
+  }
+  .flow-connector .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .flow-connector .arrow-line {
+    width: 1.5px;
+    height: 22px;
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--ink) 0px, var(--ink) 4px,
+      transparent 4px, transparent 8px
+    );
+  }
+  .flow-connector .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--ink);
+  }
+  .flow-connector .arrow-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    position: absolute;
+    right: calc(50% - 160px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--paper);
+    padding: 2px 8px;
+    border: 1px solid var(--accent-soft);
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .flow-connector .arrow-label-left {
+    right: auto;
+    left: calc(50% - 160px);
+  }
+
+  /* ─── Hardware Tier ─── */
+  .hardware-row {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .hw-card {
+    background: var(--hw-bg);
+    color: #f0ebe4;
+    border-radius: 8px;
+    padding: 20px 24px;
+    flex: 1;
+    min-width: 200px;
+    max-width: 320px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hw-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent);
+  }
+  .hw-card .hw-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .hw-card h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .hw-card p {
+    font-size: 11px;
+    color: #a09890;
+    line-height: 1.6;
+  }
+  .hw-card .hw-spec {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-soft);
+    margin-top: 8px;
+    display: inline-block;
+    border: 1px solid rgba(196,62,28,0.3);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .hw-connector {
+    display: flex;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    gap: 4px;
+    flex-shrink: 0;
+    min-width: 50px;
+    justify-content: center;
+  }
+  .hw-connector .conn-line {
+    width: 24px;
+    height: 1.5px;
+    background: repeating-linear-gradient(to right, var(--muted) 0px, var(--muted) 4px, transparent 4px, transparent 8px);
+  }
+
+  /* ─── Firmware Tier ─── */
+  .firmware-card {
+    background: var(--fw-bg);
+    color: #f0ebe4;
+    border-radius: 8px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .firmware-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+  }
+  .firmware-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .firmware-header h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+  .firmware-header .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent-soft);
+    border: 1px solid rgba(196,62,28,0.3);
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+  .fw-modules {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .fw-mod {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .fw-mod .mod-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: #e8ddd0;
+    margin-bottom: 3px;
+  }
+  .fw-mod .mod-file {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #7a7068;
+  }
+
+  /* ─── Backend Tier ─── */
+  .backend-card {
+    background: var(--paper-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px;
+    position: relative;
+  }
+  .backend-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--ink);
+    border-radius: 8px 8px 0 0;
+  }
+  .be-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .be-header h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+  .be-header .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+
+  /* Backend internal layout */
+  .be-flow {
+    display: grid;
+    grid-template-columns: 160px 1fr 160px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .be-flow {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .be-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .be-box {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    position: relative;
+  }
+  .be-box.api-entry {
+    border-left: 3px solid var(--accent);
+  }
+  .be-box .box-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .be-box .box-title .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .be-box .box-desc {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .be-box .box-file {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+
+  /* Core modules grid */
+  .be-core {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .core-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .core-row.triple {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  /* Patterns section */
+  .patterns-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border);
+  }
+  .patterns-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .patterns-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  @media (max-width: 700px) {
+    .patterns-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .pattern-chip {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 10px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .pattern-chip:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--shadow);
+  }
+  .pattern-chip .p-icon {
+    font-size: 16px;
+    margin-bottom: 2px;
+    display: block;
+  }
+  .pattern-chip .p-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  .pattern-chip .p-cn {
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  /* ─── External Services ─── */
+  .ext-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .ext-card {
+    background: var(--ext-bg);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    position: relative;
+  }
+  .ext-card .ext-icon {
+    font-size: 18px;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .ext-card h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+  .ext-card p {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .ext-card .ext-url {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    margin-top: 6px;
+    word-break: break-all;
+  }
+
+  /* ─── Data Flow Legend ─── */
+  .legend {
+    margin-top: 48px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--paper-light);
+  }
+  .legend h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    color: var(--muted);
+  }
+  .legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px 32px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .legend-item .l-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--accent);
+    background: rgba(196,62,28,0.08);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ─── Performance Strip ─── */
+  .perf-strip {
+    margin-top: 32px;
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+  }
+  .perf-item {
+    flex: 1;
+    padding: 16px 12px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .perf-item:last-child { border-right: none; }
+  .perf-item .perf-val {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .perf-item .perf-unit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+  .perf-item .perf-label {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ─── Footer ─── */
+  .footer {
+    text-align: center;
+    padding: 40px 20px 48px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  /* ─── Animations ─── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tier { animation: fadeUp 0.6s ease both; }
+  .tier:nth-child(2) { animation-delay: 0.1s; }
+  .tier:nth-child(4) { animation-delay: 0.2s; }
+  .tier:nth-child(6) { animation-delay: 0.3s; }
+  .tier:nth-child(8) { animation-delay: 0.4s; }
+  .tier:nth-child(10) { animation-delay: 0.5s; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>InkSight <span>墨 见 &mdash; 技 术 架 构</span></h1>
+  <div class="subtitle">ESP32-C3 &middot; FastAPI &middot; LLM &middot; E-Ink Display</div>
+</div>
+
+<div class="canvas">
+
+  <!-- ━━ TIER 1: Hardware ━━ -->
+  <div class="tier">
+    <div class="tier-label">01 &mdash; Hardware Layer &middot; 硬件层</div>
+    <div class="hardware-row">
+      <div class="hw-card">
+        <span class="hw-icon">&#9889;</span>
+        <h3>LiFePO4 Battery</h3>
+        <p>磷酸铁锂电池 + TP5000 充电模块，电压范围 2.5V&ndash;3.65V</p>
+        <span class="hw-spec">3.2V &middot; Deep Sleep 3-6 月</span>
+      </div>
+      <div class="hw-connector">
+        <span class="conn-line"></span>PWR<span class="conn-line"></span>
+      </div>
+      <div class="hw-card">
+        <span class="hw-icon">&#9881;</span>
+        <h3>ESP32-C3 SuperMini</h3>
+        <p>RISC-V 单核 160MHz，WiFi 4，BLE 5.0，超低功耗微控制器</p>
+        <span class="hw-spec">WiFi &middot; 4MB Flash &middot; GPIO</span>
+      </div>
+      <div class="hw-connector">
+        <span class="conn-line"></span>SPI<span class="conn-line"></span>
+      </div>
+      <div class="hw-card">
+        <span class="hw-icon">&#9635;</span>
+        <h3>4.2" E-Ink Display</h3>
+        <p>400&times;300 分辨率，1-bit 黑白，SPI 接口电子墨水屏</p>
+        <span class="hw-spec">400&times;300 &middot; 1-bit &middot; GxEPD2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow: Hardware → Firmware -->
+  <div class="flow-connector">
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+    </div>
+  </div>
+
+  <!-- ━━ TIER 2: Firmware ━━ -->
+  <div class="tier">
+    <div class="tier-label">02 &mdash; Firmware Layer &middot; 固件层</div>
+    <div class="firmware-card">
+      <div class="firmware-header">
+        <h3>ESP32-C3 Firmware</h3>
+        <span class="tag">PlatformIO / Arduino</span>
+        <span class="tag">C++</span>
+      </div>
+      <div class="fw-modules">
+        <div class="fw-mod">
+          <div class="mod-name">Main Loop</div>
+          <div class="mod-file">main.cpp</div>
+        </div>
+        <div class="fw-mod">
+          <div class="mod-name">EPD Driver</div>
+          <div class="mod-file">epd_driver.cpp</div>
+        </div>
+        <div class="fw-mod">
+          <div class="mod-name">Display</div>
+          <div class="mod-file">display.cpp</div>
+        </div>
+        <div class="fw-mod">
+          <div class="mod-name">Network</div>
+          <div class="mod-file">network.cpp</div>
+        </div>
+        <div class="fw-mod">
+          <div class="mod-name">Storage</div>
+          <div class="mod-file">storage.cpp</div>
+        </div>
+        <div class="fw-mod">
+          <div class="mod-name">Captive Portal</div>
+          <div class="mod-file">portal.cpp</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow: Firmware ↔ Backend -->
+  <div class="flow-connector">
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+    </div>
+    <span class="arrow-label">HTTP GET /api/render?v={voltage}&amp;mac={mac}</span>
+    <span class="arrow-label arrow-label-left">&#8592; BMP Binary Stream</span>
+  </div>
+
+  <!-- ━━ TIER 3: Backend ━━ -->
+  <div class="tier">
+    <div class="tier-label">03 &mdash; Backend Service &middot; 后端服务</div>
+    <div class="backend-card">
+      <div class="be-header">
+        <h3>FastAPI Application</h3>
+        <span class="tag">Python 3.10+</span>
+        <span class="tag">Vercel Serverless</span>
+        <span class="tag">Async</span>
+      </div>
+
+      <div class="be-flow">
+        <!-- Left: API Entry -->
+        <div class="be-entry">
+          <div class="be-box api-entry">
+            <div class="box-title"><span class="dot"></span>API Gateway</div>
+            <div class="box-desc">
+              <strong>GET</strong> /api/render &rarr; BMP<br>
+              <strong>GET</strong> /api/preview &rarr; PNG<br>
+              <strong>POST</strong> /api/config<br>
+              <strong>GET</strong> /api/config/{mac}
+            </div>
+            <div class="box-file">api/index.py</div>
+          </div>
+          <div class="be-box">
+            <div class="box-title"><span class="dot"></span>Config Store</div>
+            <div class="box-desc">SQLite 设备配置管理<br>多配置历史 &middot; 激活切换</div>
+            <div class="box-file">core/config_store.py</div>
+          </div>
+        </div>
+
+        <!-- Center: Core Modules -->
+        <div class="be-core">
+          <div class="core-row">
+            <div class="be-box">
+              <div class="box-title"><span class="dot"></span>Context</div>
+              <div class="box-desc">日期/天气/节气/农历<br>环境上下文聚合</div>
+              <div class="box-file">core/context.py</div>
+            </div>
+            <div class="be-box">
+              <div class="box-title"><span class="dot"></span>Content</div>
+              <div class="box-desc">LLM 内容生成引擎<br>多 Provider 统一接口</div>
+              <div class="box-file">core/content.py</div>
+            </div>
+          </div>
+          <div class="core-row">
+            <div class="be-box">
+              <div class="box-title"><span class="dot"></span>Renderer</div>
+              <div class="box-desc">Pillow 图像渲染<br>400&times;300 1-bit BMP</div>
+              <div class="box-file">core/renderer.py</div>
+            </div>
+            <div class="be-box">
+              <div class="box-title"><span class="dot"></span>Cache</div>
+              <div class="box-desc">内存缓存 + TTL<br>并行预生成所有模式</div>
+              <div class="box-file">core/cache.py</div>
+            </div>
+          </div>
+
+          <!-- 8 Patterns -->
+          <div class="patterns-section">
+            <div class="patterns-label">8 Content Patterns &middot; 内容模式</div>
+            <div class="patterns-grid">
+              <div class="pattern-chip">
+                <span class="p-icon">&#128220;</span>
+                <div class="p-name">STOIC</div>
+                <div class="p-cn">斯多葛哲学</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#9889;</span>
+                <div class="p-name">ROAST</div>
+                <div class="p-cn">毒舌吐槽</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#9775;</span>
+                <div class="p-name">ZEN</div>
+                <div class="p-cn">禅意</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#9733;</span>
+                <div class="p-name">DAILY</div>
+                <div class="p-cn">每日推荐</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#128225;</span>
+                <div class="p-name">BRIEFING</div>
+                <div class="p-cn">AI 简报</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#127912;</span>
+                <div class="p-name">ARTWALL</div>
+                <div class="p-cn">AI 画廊</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#127858;</span>
+                <div class="p-name">RECIPE</div>
+                <div class="p-cn">每日食谱</div>
+              </div>
+              <div class="pattern-chip">
+                <span class="p-icon">&#127947;</span>
+                <div class="p-name">FITNESS</div>
+                <div class="p-cn">健身计划</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Output -->
+        <div class="be-entry">
+          <div class="be-box">
+            <div class="box-title"><span class="dot"></span>Image Output</div>
+            <div class="box-desc">
+              BMP &rarr; 设备显示<br>
+              PNG &rarr; Web 预览
+            </div>
+            <div class="box-file">core/renderer.py</div>
+          </div>
+          <div class="be-box">
+            <div class="box-title"><span class="dot"></span>刷新策略</div>
+            <div class="box-desc">
+              <strong>cycle</strong> 循环轮换<br>
+              <strong>random</strong> 随机轮换
+            </div>
+            <div class="box-file">api/index.py</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow: Backend → External -->
+  <div class="flow-connector">
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+    </div>
+    <span class="arrow-label">REST API / OpenAI SDK (Async)</span>
+  </div>
+
+  <!-- ━━ TIER 4: External Services ━━ -->
+  <div class="tier">
+    <div class="tier-label">04 &mdash; External Services &middot; 外部服务</div>
+    <div class="ext-row">
+      <div class="ext-card">
+        <span class="ext-icon">&#129302;</span>
+        <h4>LLM Providers</h4>
+        <p>OpenAI 兼容接口，多供应商支持</p>
+        <div class="ext-url">DeepSeek &middot; api.deepseek.com/v1</div>
+        <div class="ext-url">阿里百炼 &middot; dashscope.aliyuncs.com</div>
+        <div class="ext-url">月之暗面 &middot; api.moonshot.cn/v1</div>
+      </div>
+      <div class="ext-card">
+        <span class="ext-icon">&#127780;</span>
+        <h4>Open-Meteo</h4>
+        <p>免费开源天气 API<br>气温 &middot; 天气代码 &middot; WMO 标准</p>
+        <div class="ext-url">api.open-meteo.com/v1/forecast</div>
+      </div>
+      <div class="ext-card">
+        <span class="ext-icon">&#128240;</span>
+        <h4>Hacker News</h4>
+        <p>科技新闻 Top Stories<br>Firebase REST API</p>
+        <div class="ext-url">hacker-news.firebaseio.com/v0</div>
+      </div>
+      <div class="ext-card">
+        <span class="ext-icon">&#128640;</span>
+        <h4>Product Hunt</h4>
+        <p>每日产品发现 #1<br>RSS Feed 解析</p>
+        <div class="ext-url">producthunt.com/feed</div>
+      </div>
+      <div class="ext-card">
+        <span class="ext-icon">&#128197;</span>
+        <h4>Holiday API</h4>
+        <p>中国节假日/工作日查询<br>下一个假日倒计时</p>
+        <div class="ext-url">timor.tech/api/holiday</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ━━ TIER 5: Web Frontend ━━ -->
+  <div class="tier" style="margin-top: 32px;">
+    <div class="tier-label">05 &mdash; Web Frontend &middot; Web 前端</div>
+    <div class="ext-row">
+      <div class="ext-card" style="border-style: solid;">
+        <span class="ext-icon">&#9881;</span>
+        <h4>Config Page</h4>
+        <p>设备在线配置管理<br>模式选择 &middot; LLM 设置 &middot; 位置</p>
+        <div class="ext-url">web/config.html</div>
+      </div>
+      <div class="ext-card" style="border-style: solid;">
+        <span class="ext-icon">&#128065;</span>
+        <h4>Preview Console</h4>
+        <p>内容预览控制台<br>实时渲染 &middot; 模式切换</p>
+        <div class="ext-url">web/preview.html</div>
+      </div>
+      <div class="ext-card" style="border-style: solid;">
+        <span class="ext-icon">&#128246;</span>
+        <h4>Captive Portal</h4>
+        <p>ESP32 内置配网页面<br>WiFi 选择 &middot; 服务器配置</p>
+        <div class="ext-url">firmware/data/portal_html.h</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ━━ Data Flow Legend ━━ -->
+  <div class="legend">
+    <h4>Data Flow &middot; 数据流转</h4>
+    <div class="legend-grid">
+      <div class="legend-item">
+        <span class="l-num">1</span>
+        <div>ESP32 唤醒，通过 WiFi 发送 <strong>HTTP GET</strong> 到后端，携带电压值和 MAC 地址</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">2</span>
+        <div>后端从 <strong>SQLite</strong> 加载设备配置，根据刷新策略选择内容模式</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">3</span>
+        <div>检查<strong>内存缓存</strong>，命中则直接返回；未命中则<strong>并行</strong>预生成所有模式</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">4</span>
+        <div><strong>并行获取</strong>环境上下文：日期/农历/节气 + Open-Meteo 天气 + 节假日信息</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">5</span>
+        <div>调用 <strong>LLM API</strong>（DeepSeek / 百炼 / Kimi）生成结构化内容</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">6</span>
+        <div><strong>Pillow</strong> 渲染 400&times;300 1-bit 图像，转换为 BMP 二进制流返回</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">7</span>
+        <div>ESP32 接收 BMP 数据，通过 <strong>SPI</strong> 写入电子墨水屏显示</div>
+      </div>
+      <div class="legend-item">
+        <span class="l-num">8</span>
+        <div>显示完成后进入 <strong>Deep Sleep</strong>，等待下次定时唤醒（10 分钟 ~ 24 小时）</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ━━ Performance ━━ -->
+  <div class="perf-strip">
+    <div class="perf-item">
+      <div class="perf-val">&lt;1</div>
+      <div class="perf-unit">SEC</div>
+      <div class="perf-label">缓存命中响应</div>
+    </div>
+    <div class="perf-item">
+      <div class="perf-val">15-20</div>
+      <div class="perf-unit">SEC</div>
+      <div class="perf-label">缓存未命中</div>
+    </div>
+    <div class="perf-item">
+      <div class="perf-val">&gt;95</div>
+      <div class="perf-unit">%</div>
+      <div class="perf-label">缓存命中率</div>
+    </div>
+    <div class="perf-item">
+      <div class="perf-val">3-6</div>
+      <div class="perf-unit">MONTH</div>
+      <div class="perf-label">单次充电续航</div>
+    </div>
+    <div class="perf-item">
+      <div class="perf-val">8</div>
+      <div class="perf-unit">MODES</div>
+      <div class="perf-label">内容模式</div>
+    </div>
+    <div class="perf-item">
+      <div class="perf-val">3</div>
+      <div class="perf-unit">LLM</div>
+      <div class="perf-label">供应商支持</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  InkSight &middot; 墨见 &middot; MIT License &middot; Architecture Diagram v0.8
+</div>
+
+</body>
+</html>

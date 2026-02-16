@@ -101,6 +101,9 @@
       color: var(--text-secondary);
       border-bottom: 1px solid var(--border);
       background: #fafafa;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .card-body { padding: 16px; }
 
@@ -114,13 +117,12 @@
       padding: 8px;
       box-shadow: inset 0 0 0 1px #e5e5e5, 0 4px 12px rgba(0,0,0,0.08);
       position: relative;
+      transition: all 0.3s ease;
     }
     .screen-frame img {
       display: block;
-      width: 400px;
-      height: 300px;
-      /* image-rendering: pixelated; */
       background: #fff;
+      image-rendering: auto;
     }
     .screen-label {
       margin-top: 10px;
@@ -287,6 +289,69 @@
     .screen-frame.flash img {
       animation: eink-flash 0.5s ease;
     }
+
+    /* History panel */
+    .history-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .history-item:hover { background: #fafafa; }
+    .history-item:last-child { border-bottom: none; }
+    .history-thumb {
+      width: 60px;
+      height: 45px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: #f5f5f5;
+    }
+    .history-info { flex: 1; min-width: 0; }
+    .history-info .h-mode { font-size: 0.75rem; font-weight: 600; }
+    .history-info .h-meta { font-size: 0.65rem; color: var(--text-secondary); }
+
+    /* Progress bar for All Modes */
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.3s ease;
+      border-radius: 2px;
+    }
+
+    /* Resolution selector */
+    .res-grid {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .res-btn {
+      padding: 4px 8px;
+      font-size: 0.68rem;
+      font-family: inherit;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+    .res-btn:hover { border-color: #a3a3a3; }
+    .res-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
   </style>
 </head>
 <body>
@@ -315,7 +380,7 @@
                 <div class="loading-text">Rendering...</div>
               </div>
             </div>
-            <div class="screen-label">400 × 300 · 1-bit monochrome · pixelated</div>
+            <div class="screen-label" id="screenLabel">400 × 300 · 1-bit monochrome</div>
           </div>
         </div>
 
@@ -334,6 +399,19 @@
               <span class="info-value" id="infoSize">—</span>
               <span class="info-label">Request URL</span>
               <span class="info-value" id="infoUrl" style="word-break:break-all;">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Render History -->
+        <div class="card" style="margin-top: 12px;">
+          <div class="card-header">
+            <span>Render History</span>
+            <button onclick="clearHistory()" style="border:none;background:none;font-size:.68rem;color:var(--text-secondary);cursor:pointer">Clear</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="history-list" id="historyList">
+              <div style="padding:16px;text-align:center;font-size:.75rem;color:var(--text-secondary)">No renders yet</div>
             </div>
           </div>
         </div>
@@ -397,6 +475,16 @@
               </div>
             </div>
 
+            <!-- Resolution -->
+            <div class="form-group">
+              <label class="form-label">Screen Size</label>
+              <div class="res-grid">
+                <button class="res-btn active" data-w="400" data-h="300" onclick="selectResolution(this)">4.2" 400×300</button>
+                <button class="res-btn" data-w="296" data-h="128" onclick="selectResolution(this)">2.9" 296×128</button>
+                <button class="res-btn" data-w="800" data-h="480" onclick="selectResolution(this)">7.5" 800×480</button>
+              </div>
+            </div>
+
             <button class="btn-generate" id="generateBtn" onclick="generate()">
               Generate Preview
             </button>
@@ -406,13 +494,18 @@
         <!-- Quick Presets -->
         <div class="card" style="margin-top: 12px;">
           <div class="card-header">Quick Presets</div>
-          <div class="card-body" style="display:flex; flex-wrap:wrap; gap:6px;">
-            <button class="persona-btn" style="flex:1;min-width:70px;font-size:0.72rem;padding:6px;"
-                    onclick="applyPreset('full')">🔋 Full</button>
-            <button class="persona-btn" style="flex:1;min-width:70px;font-size:0.72rem;padding:6px;"
-                    onclick="applyPreset('low')">🪫 Low</button>
-            <button class="persona-btn" style="flex:1;min-width:70px;font-size:0.72rem;padding:6px;"
-                    onclick="applyPreset('all')">🔄 All Modes</button>
+          <div class="card-body">
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              <button class="persona-btn" style="flex:1;min-width:70px;font-size:0.72rem;padding:6px;"
+                      onclick="applyPreset('full')">Full</button>
+              <button class="persona-btn" style="flex:1;min-width:70px;font-size:0.72rem;padding:6px;"
+                      onclick="applyPreset('low')">Low</button>
+              <button class="persona-btn" id="allModesBtn" style="flex:1;min-width:70px;font-size:0.72rem;padding:6px;"
+                      onclick="applyPreset('all')">All Modes</button>
+            </div>
+            <div class="progress-bar" id="allModesProgress" style="display:none">
+              <div class="progress-bar-fill" id="allModesFill" style="width:0%"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -420,11 +513,14 @@
   </div>
 
   <script>
-    // State
+    // ── State ───────────────────────────────────────────────────
     let selectedPersona = 'DAILY';
-    let isLoading = false;
+    let currentAbortController = null;
+    let allModesRunning = false;
+    let renderHistory = [];
+    let currentResolution = { w: 400, h: 300, label: '4.2"' };
 
-    // DOM refs
+    // ── DOM refs ────────────────────────────────────────────────
     const previewImg = document.getElementById('previewImg');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const screenFrame = document.getElementById('screenFrame');
@@ -432,22 +528,42 @@
     const voltageValue = document.getElementById('voltageValue');
     const generateBtn = document.getElementById('generateBtn');
 
-    // Voltage slider
+    // Set initial image size
+    previewImg.style.width = '400px';
+    previewImg.style.height = '300px';
+
+    // ── Voltage slider ──────────────────────────────────────────
     voltageSlider.addEventListener('input', () => {
       voltageValue.textContent = parseFloat(voltageSlider.value).toFixed(2) + 'V';
     });
 
-    // Persona selection
+    // ── Resolution selector ─────────────────────────────────────
+    function selectResolution(btn) {
+      document.querySelectorAll('.res-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const w = parseInt(btn.dataset.w);
+      const h = parseInt(btn.dataset.h);
+      currentResolution = { w, h, label: btn.textContent.trim() };
+      previewImg.style.width = w + 'px';
+      previewImg.style.height = h + 'px';
+      document.getElementById('screenLabel').textContent = `${w} × ${h} · 1-bit monochrome`;
+    }
+
+    // ── Persona selection ───────────────────────────────────────
     function selectPersona(btn) {
       document.querySelectorAll('.persona-grid .persona-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedPersona = btn.dataset.persona;
     }
 
-    // Generate preview
+    // ── Generate preview (with AbortController) ─────────────────
     async function generate() {
-      if (isLoading) return;
-      isLoading = true;
+      // Cancel any in-flight request
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+      currentAbortController = new AbortController();
+
       generateBtn.disabled = true;
       loadingOverlay.classList.add('active');
 
@@ -466,7 +582,7 @@
       const startTime = performance.now();
 
       try {
-        const resp = await fetch(url);
+        const resp = await fetch(url, { signal: currentAbortController.signal });
         const elapsed = Math.round(performance.now() - startTime);
         const blob = await resp.blob();
 
@@ -477,6 +593,9 @@
           // E-ink flash animation
           screenFrame.classList.add('flash');
           setTimeout(() => screenFrame.classList.remove('flash'), 500);
+
+          // Add to history
+          addToHistory(persona || 'AUTO', imgUrl, elapsed, blob.size);
         } else {
           document.getElementById('infoStatus').textContent = `✗ ${resp.status} Error`;
           document.getElementById('infoStatus').className = 'info-value error';
@@ -487,17 +606,75 @@
         document.getElementById('infoPersona').textContent = persona || 'AUTO → (server decides)';
 
       } catch (err) {
-        document.getElementById('infoStatus').textContent = `✗ Network Error`;
-        document.getElementById('infoStatus').className = 'info-value error';
+        if (err.name === 'AbortError') {
+          document.getElementById('infoStatus').textContent = '⚡ Cancelled';
+          document.getElementById('infoStatus').className = 'info-value';
+        } else {
+          document.getElementById('infoStatus').textContent = `✗ Network Error`;
+          document.getElementById('infoStatus').className = 'info-value error';
+        }
         document.getElementById('infoTime').textContent = '—';
       }
 
       loadingOverlay.classList.remove('active');
       generateBtn.disabled = false;
-      isLoading = false;
+      currentAbortController = null;
     }
 
-    // Presets
+    // ── Render history ──────────────────────────────────────────
+    function addToHistory(persona, imageUrl, elapsed, size) {
+      const entry = {
+        persona,
+        imageUrl,
+        elapsed,
+        size,
+        timestamp: new Date().toLocaleTimeString('zh-CN')
+      };
+      renderHistory.unshift(entry);
+      if (renderHistory.length > 30) {
+        const removed = renderHistory.pop();
+        URL.revokeObjectURL(removed.imageUrl);
+      }
+      renderHistoryUI();
+    }
+
+    function renderHistoryUI() {
+      const container = document.getElementById('historyList');
+      if (renderHistory.length === 0) {
+        container.innerHTML = '<div style="padding:16px;text-align:center;font-size:.75rem;color:var(--text-secondary)">No renders yet</div>';
+        return;
+      }
+      container.innerHTML = renderHistory.map((h, i) => `
+        <div class="history-item" onclick="viewHistoryItem(${i})">
+          <img class="history-thumb" src="${h.imageUrl}" alt="${h.persona}">
+          <div class="history-info">
+            <div class="h-mode">${h.persona}</div>
+            <div class="h-meta">${h.timestamp} · ${h.elapsed}ms · ${(h.size/1024).toFixed(1)}KB</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function viewHistoryItem(index) {
+      const h = renderHistory[index];
+      if (h) {
+        previewImg.src = h.imageUrl;
+        document.getElementById('infoPersona').textContent = h.persona;
+        document.getElementById('infoTime').textContent = h.elapsed + 'ms';
+        document.getElementById('infoSize').textContent = (h.size/1024).toFixed(1) + ' KB';
+        document.getElementById('infoStatus').textContent = '✓ From History';
+        screenFrame.classList.add('flash');
+        setTimeout(() => screenFrame.classList.remove('flash'), 500);
+      }
+    }
+
+    function clearHistory() {
+      renderHistory.forEach(h => URL.revokeObjectURL(h.imageUrl));
+      renderHistory = [];
+      renderHistoryUI();
+    }
+
+    // ── Presets (with throttling and cancel for All Modes) ──────
     async function applyPreset(preset) {
       if (preset === 'full') {
         voltageSlider.value = 3.45;
@@ -508,23 +685,47 @@
         voltageValue.textContent = '3.10V';
         generate();
       } else if (preset === 'all') {
-        // Cycle through all modes
+        if (allModesRunning) {
+          // Cancel running All Modes
+          allModesRunning = false;
+          document.getElementById('allModesBtn').textContent = 'All Modes';
+          document.getElementById('allModesProgress').style.display = 'none';
+          if (currentAbortController) currentAbortController.abort();
+          return;
+        }
+
+        allModesRunning = true;
+        document.getElementById('allModesBtn').textContent = 'Stop';
+        const progressBar = document.getElementById('allModesProgress');
+        const progressFill = document.getElementById('allModesFill');
+        progressBar.style.display = 'block';
+
         const modes = ['STOIC', 'ROAST', 'ZEN', 'DAILY', 'BRIEFING', 'ARTWALL', 'RECIPE', 'FITNESS', 'POETRY', 'COUNTDOWN'];
-        for (const mode of modes) {
-          selectedPersona = mode;
-          // Highlight active button
+        for (let i = 0; i < modes.length; i++) {
+          if (!allModesRunning) break;
+
+          selectedPersona = modes[i];
           document.querySelectorAll('.persona-grid .persona-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.persona === mode);
+            b.classList.toggle('active', b.dataset.persona === modes[i]);
           });
+
+          progressFill.style.width = ((i + 1) / modes.length * 100) + '%';
           await generate();
-          if (mode !== modes[modes.length - 1]) {
-            await new Promise(r => setTimeout(r, 800));
+
+          if (!allModesRunning) break;
+          if (i < modes.length - 1) {
+            await new Promise(r => setTimeout(r, 1500));
           }
         }
+
+        allModesRunning = false;
+        document.getElementById('allModesBtn').textContent = 'All Modes';
+        progressBar.style.display = 'none';
+        progressFill.style.width = '0%';
       }
     }
 
-    // Health check on load
+    // ── Health check ────────────────────────────────────────────
     async function checkHealth() {
       try {
         const resp = await fetch('/api/health');
@@ -541,11 +742,9 @@
       }
     }
 
-    // Init
+    // ── Init ────────────────────────────────────────────────────
     checkHealth();
-    // Auto-generate on load
     generate();
   </script>
 </body>
 </html>
-

@@ -16,11 +16,15 @@
 uint8_t imgBuf[IMG_BUF_LEN];
 
 // ── Runtime state ───────────────────────────────────────────
-static unsigned long cfgBtnPressStart = 0;
-static unsigned long setupDoneMillis  = 0;
+static unsigned long cfgBtnPressStart   = 0;
+static unsigned long setupDoneMillis    = 0;
+static unsigned long lastShortPressTime = 0;
+static bool          pendingRefresh     = false;
+static bool          pendingNextMode    = false;
 
 // ── Forward declarations ────────────────────────────────────
 static void checkConfigButton();
+static void triggerImmediateRefresh();
 static void handleFailure(const char *reason);
 static void enterDeepSleep(int minutes);
 
@@ -112,23 +116,18 @@ void loop() {
     // DEBUG: delay-based polling keeps USB CDC alive for serial monitor
     checkConfigButton();
 
+    // Handle button-triggered refresh
+    if (pendingRefresh || pendingNextMode) {
+        triggerImmediateRefresh();
+        pendingRefresh = false;
+        pendingNextMode = false;
+        setupDoneMillis = millis();
+    }
+
     unsigned long refreshInterval = (unsigned long)DEBUG_REFRESH_MIN * 60000UL;
     if (millis() - setupDoneMillis >= refreshInterval) {
         Serial.printf("[DEBUG] %d min elapsed, refreshing content...\n", DEBUG_REFRESH_MIN);
-        if (connectWiFi()) {
-            if (fetchBMP()) {
-                Serial.println("Displaying new content...");
-                smartDisplay(imgBuf);
-                Serial.println("Display done");
-                syncNTP();
-            } else {
-                Serial.println("Fetch failed, keeping old content");
-            }
-            WiFi.disconnect(true);
-            WiFi.mode(WIFI_OFF);
-        } else {
-            Serial.println("WiFi reconnect failed");
-        }
+        triggerImmediateRefresh();
         setupDoneMillis = millis();
     }
 
@@ -171,7 +170,30 @@ static void handleFailure(const char *reason) {
     }
 }
 
-// ── Config button handler (long press to enter portal) ──────
+// ── Immediate refresh (reused by button press and timer) ────
+
+static void triggerImmediateRefresh() {
+    Serial.println("[REFRESH] Triggering immediate refresh...");
+    if (connectWiFi()) {
+        if (fetchBMP()) {
+            Serial.println("Displaying new content...");
+            smartDisplay(imgBuf);
+            Serial.println("Display done");
+            syncNTP();
+        } else {
+            Serial.println("Fetch failed, keeping old content");
+        }
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    } else {
+        Serial.println("WiFi reconnect failed");
+    }
+}
+
+// ── Config button handler ───────────────────────────────────
+// Short press (<2s):  trigger immediate refresh
+// Double-click:       switch to next mode (adds &next=1 to URL)
+// Long press (>=2s):  restart into config portal
 
 static void checkConfigButton() {
     bool isPressed = (digitalRead(PIN_CFG_BTN) == LOW);
@@ -179,7 +201,6 @@ static void checkConfigButton() {
     if (isPressed) {
         if (cfgBtnPressStart == 0) {
             cfgBtnPressStart = millis();
-            Serial.println("Config button pressed");
         } else {
             unsigned long holdTime = millis() - cfgBtnPressStart;
             if (holdTime >= (unsigned long)CFG_BTN_HOLD_MS) {
@@ -191,8 +212,33 @@ static void checkConfigButton() {
         }
     } else {
         if (cfgBtnPressStart != 0) {
-            Serial.printf("Config button released after %lums\n", millis() - cfgBtnPressStart);
+            unsigned long pressDuration = millis() - cfgBtnPressStart;
+            cfgBtnPressStart = 0;
+
+            if (pressDuration >= (unsigned long)SHORT_PRESS_MIN_MS &&
+                pressDuration < (unsigned long)CFG_BTN_HOLD_MS) {
+                // Valid short press detected
+                unsigned long now = millis();
+                if (now - lastShortPressTime < (unsigned long)DOUBLE_CLICK_MS) {
+                    // Double-click: switch to next mode
+                    Serial.println("[BTN] Double-click -> next mode");
+                    pendingNextMode = true;
+                    lastShortPressTime = 0;
+                } else {
+                    // First click: schedule single-click action after timeout
+                    lastShortPressTime = now;
+                    Serial.printf("[BTN] Short press (%lums), waiting for double-click...\n", pressDuration);
+                }
+            }
+        } else {
+            // Check if single-click timeout has passed
+            if (lastShortPressTime != 0 &&
+                (millis() - lastShortPressTime >= (unsigned long)DOUBLE_CLICK_MS)) {
+                // Single click confirmed: immediate refresh
+                Serial.println("[BTN] Single click -> immediate refresh");
+                pendingRefresh = true;
+                lastShortPressTime = 0;
+            }
         }
-        cfgBtnPressStart = 0;
     }
 }

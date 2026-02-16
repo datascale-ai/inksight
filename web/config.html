@@ -6,7 +6,7 @@
 <title>InkSight 配置管理</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bk:#1a1a1a;--gy:#888;--bg:#fafaf7;--bd:#d4d4cf}
+:root{--bk:#1a1a1a;--gy:#888;--bg:#fafaf7;--bd:#d4d4cf;--green:#16a34a;--red:#dc2626}
 body{font-family:'Inter',-apple-system,sans-serif;background:linear-gradient(135deg,#f5f5f0,#e8e8e0);color:var(--bk);line-height:1.6;min-height:100vh;padding:24px}
 .container{max-width:800px;margin:0 auto}
 .card{background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.08);padding:32px;margin-bottom:20px}
@@ -19,18 +19,20 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .btn{padding:12px 24px;font-size:.9rem;font-weight:600;color:#fff;background:var(--bk);border:none;border-radius:10px;cursor:pointer}
 .btn:hover{background:#333}
 .btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-secondary{background:#6b7280}
+.btn-secondary:hover{background:#4b5563}
+.btn-outline{background:#fff;color:var(--bk);border:1px solid var(--bd)}
+.btn-outline:hover{background:var(--bg)}
 .cg{display:flex;flex-wrap:wrap;gap:8px}
-.ch{padding:6px 12px;font-size:.8rem;border:1px solid var(--bd);border-radius:18px;cursor:pointer;background:#fff;color:var(--gy)}
+.ch{padding:6px 12px;font-size:.8rem;border:1px solid var(--bd);border-radius:18px;cursor:pointer;background:#fff;color:var(--gy);position:relative}
 .ch:hover{border-color:var(--bk);color:var(--bk)}
 .ch.sel{background:var(--bk);color:#fff;border-color:var(--bk)}
-.pg{display:flex;gap:8px}
-.pi{flex:1;padding:8px;text-align:center;font-size:.8rem;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:#fff;color:var(--gy)}
+.ch[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bk);color:#fff;padding:4px 10px;border-radius:6px;font-size:.7rem;white-space:nowrap;z-index:10;pointer-events:none}
+.ch[data-tip]:hover::before{content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:var(--bk);z-index:10}
+.pg{display:flex;gap:8px;flex-wrap:wrap}
+.pi{flex:1;padding:8px;text-align:center;font-size:.8rem;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:#fff;color:var(--gy);min-width:70px}
 .pi:hover{background:var(--bg)}
 .pi.sel{background:var(--bk);color:#fff}
-.alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:.85rem}
-.alert.success{background:#dcfce7;color:#15803d}
-.alert.error{background:#fef2f2;color:#dc2626}
-.alert.info{background:#dbeafe;color:#1e40af}
 .hist-item{padding:12px;border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fff}
 .hist-item:hover{border-color:var(--bk);background:var(--bg)}
 .hist-item.active{border-color:var(--bk);background:var(--bg)}
@@ -41,15 +43,65 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .hist-actions button:hover{background:var(--bg)}
 .tc{margin-bottom:6px}
 .tcl{font-size:.68rem;color:var(--gy);margin-bottom:3px;font-weight:500}
+
+/* Toast notifications */
+#toastContainer{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:12px 20px;border-radius:10px;font-size:.85rem;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.12);transform:translateX(120%);transition:transform .3s ease,opacity .3s ease;opacity:0;pointer-events:auto;max-width:360px}
+.toast.show{transform:translateX(0);opacity:1}
+.toast-success{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+.toast-error{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.toast-info{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
+
+/* Time slot editor */
+.ts-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.ts-row .inp,.ts-row .sel{width:auto;flex:none}
+.ts-modes{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-width:200px}
+.ts-modes .ch{padding:3px 8px;font-size:.72rem}
+
+/* Preview modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.active{opacity:1;pointer-events:auto}
+.modal-content{background:#fff;border-radius:16px;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-content h3{font-size:1.1rem;margin-bottom:12px}
+.modal-close{float:right;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gy)}
+
+/* Confirm dialog */
+.confirm-bar{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+.confirm-bar .btn{padding:8px 18px;font-size:.82rem}
+
+/* Strategy description */
+.strategy-desc{font-size:.72rem;color:var(--gy);margin-top:6px;min-height:1.2em}
 </style>
 </head>
 <body>
+<div id="toastContainer"></div>
+
+<div id="previewModal" class="modal-overlay" onclick="if(event.target===this)closePreviewModal()">
+<div class="modal-content">
+<button class="modal-close" onclick="closePreviewModal()">&times;</button>
+<h3>配置预览</h3>
+<div id="previewModeSelect" style="margin-bottom:12px"></div>
+<div style="text-align:center">
+<img id="previewImg" style="max-width:100%;border:2px solid #d4d4d4;border-radius:6px;background:#f5f5f5" alt="Preview">
+<div id="previewStatus" style="font-size:.75rem;color:var(--gy);margin-top:8px"></div>
+</div>
+</div>
+</div>
+
+<div id="confirmModal" class="modal-overlay" onclick="if(event.target===this)closeConfirm(false)">
+<div class="modal-content" style="max-width:400px">
+<p id="confirmMsg" style="font-size:.9rem;line-height:1.6"></p>
+<div class="confirm-bar">
+<button class="btn btn-outline" onclick="closeConfirm(false)">取消</button>
+<button class="btn" onclick="closeConfirm(true)">确定</button>
+</div>
+</div>
+</div>
+
 <div class="container">
 <div class="card">
 <h1>InkSight 配置管理</h1>
 <p class="subtitle">在线修改设备配置，无需重新连接热点</p>
-
-<div id="alert" style="display:none"></div>
 
 <div class="fg">
 <label class="lbl">设备 MAC 地址</label>
@@ -57,9 +109,10 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div style="font-size:.75rem;color:var(--gy);margin-top:4px">在设备屏幕底部或初始配置页面可以找到，也可以通过 URL 参数传递</div>
 </div>
 
-<div style="display:flex;gap:8px">
-<button class="btn" onclick="loadConfig()" id="loadBtn" style="flex:1">加载当前配置</button>
-<button class="btn" onclick="loadHistory()" id="historyBtn" style="flex:1;background:#6b7280">查看历史配置</button>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn" onclick="loadConfig()" id="loadBtn" style="flex:1;min-width:120px">加载当前配置</button>
+<button class="btn btn-secondary" onclick="loadHistory()" id="historyBtn" style="flex:1;min-width:120px">查看历史配置</button>
+<button class="btn" onclick="triggerRefresh()" style="flex:1;min-width:120px;background:var(--green)">立即刷新</button>
 </div>
 
 <div id="historyList" style="display:none;margin-top:16px"></div>
@@ -67,7 +120,14 @@ h1{font-size:1.8rem;margin-bottom:8px}
 
 <div id="configForm" style="display:none">
 <div class="card">
-<h2 style="font-size:1.3rem;margin-bottom:16px">设备配置</h2>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+<h2 style="font-size:1.3rem">设备配置</h2>
+<div style="display:flex;gap:6px">
+<button class="btn btn-outline" onclick="exportConfig()" style="padding:6px 12px;font-size:.75rem">导出 JSON</button>
+<button class="btn btn-outline" onclick="document.getElementById('importFile').click()" style="padding:6px 12px;font-size:.75rem">导入 JSON</button>
+<input type="file" id="importFile" accept=".json" style="display:none" onchange="importConfig(event)">
+</div>
+</div>
 
 <div class="fg">
 <label class="lbl">昵称</label>
@@ -93,9 +153,19 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div class="fg">
 <label class="lbl">刷新策略</label>
 <div class="pg" id="strategy">
-<div class="pi" data-v="random" onclick="sp(this,'strategy')">随机轮换</div>
-<div class="pi" data-v="cycle" onclick="sp(this,'strategy')">循环轮换</div>
+<div class="pi" data-v="random" onclick="selectStrategy(this)">随机轮换</div>
+<div class="pi" data-v="cycle" onclick="selectStrategy(this)">循环轮换</div>
+<div class="pi" data-v="time_slot" onclick="selectStrategy(this)">时段绑定</div>
+<div class="pi" data-v="smart" onclick="selectStrategy(this)">智能模式</div>
 </div>
+<div class="strategy-desc" id="strategyDesc"></div>
+</div>
+
+<div class="fg" id="timeSlotSection" style="display:none">
+<label class="lbl">时段规则</label>
+<div id="timeSlotRules"></div>
+<button type="button" onclick="addTimeSlotRule()" style="margin-top:8px;padding:6px 14px;font-size:.8rem;border:1px solid var(--bd);border-radius:6px;cursor:pointer;background:#fff">+ 添加时段</button>
+<div style="font-size:.7rem;color:var(--gy);margin-top:4px">为不同时间段配置不同的内容模式，未覆盖的时段使用随机选择</div>
 </div>
 
 <div class="fg">
@@ -120,26 +190,26 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div class="fg">
 <label class="lbl">角色语气</label>
 <div class="tc"><div class="tcl">文学</div><div class="cg">
-<span class="ch" data-t="鲁迅" onclick="tc(this)">鲁迅</span>
-<span class="ch" data-t="王小波" onclick="tc(this)">王小波</span>
-<span class="ch" data-t="张爱玲" onclick="tc(this)">张爱玲</span>
-<span class="ch" data-t="村上春树" onclick="tc(this)">村上春树</span>
+<span class="ch" data-t="鲁迅" data-tip="犀利讽刺，针砭时弊" onclick="tc(this)">鲁迅</span>
+<span class="ch" data-t="王小波" data-tip="黑色幽默，自由不羁" onclick="tc(this)">王小波</span>
+<span class="ch" data-t="张爱玲" data-tip="冷峻细腻，洞察人性" onclick="tc(this)">张爱玲</span>
+<span class="ch" data-t="村上春树" data-tip="孤独美学，淡淡忧伤" onclick="tc(this)">村上春树</span>
 </div></div>
 <div class="tc"><div class="tcl">影视</div><div class="cg">
-<span class="ch" data-t="王家卫" onclick="tc(this)">王家卫</span>
-<span class="ch" data-t="周星驰" onclick="tc(this)">周星驰</span>
-<span class="ch" data-t="甄嬛" onclick="tc(this)">甄嬛</span>
-<span class="ch" data-t="白展堂" onclick="tc(this)">白展堂</span>
+<span class="ch" data-t="王家卫" data-tip="文艺腔调，情绪留白" onclick="tc(this)">王家卫</span>
+<span class="ch" data-t="周星驰" data-tip="无厘头喜剧，笑中带泪" onclick="tc(this)">周星驰</span>
+<span class="ch" data-t="甄嬛" data-tip="宫斗话术，步步为营" onclick="tc(this)">甄嬛</span>
+<span class="ch" data-t="白展堂" data-tip="江湖气息，搞笑担当" onclick="tc(this)">白展堂</span>
 </div></div>
 <div class="tc"><div class="tcl">哲学</div><div class="cg">
-<span class="ch" data-t="苏格拉底" onclick="tc(this)">苏格拉底</span>
-<span class="ch" data-t="庄子" onclick="tc(this)">庄子</span>
-<span class="ch" data-t="尼采" onclick="tc(this)">尼采</span>
+<span class="ch" data-t="苏格拉底" data-tip="追问本质，反诘启发" onclick="tc(this)">苏格拉底</span>
+<span class="ch" data-t="庄子" data-tip="逍遥自在，万物齐同" onclick="tc(this)">庄子</span>
+<span class="ch" data-t="尼采" data-tip="超人意志，永恒回归" onclick="tc(this)">尼采</span>
 </div></div>
 <div class="tc"><div class="tcl">AI / 科幻</div><div class="cg">
-<span class="ch" data-t="JARVIS" onclick="tc(this)">JARVIS</span>
-<span class="ch" data-t="智子" onclick="tc(this)">智子</span>
-<span class="ch" data-t="马文" onclick="tc(this)">马文</span>
+<span class="ch" data-t="JARVIS" data-tip="智能管家，优雅高效" onclick="tc(this)">JARVIS</span>
+<span class="ch" data-t="智子" data-tip="冷酷理性，降维打击" onclick="tc(this)">智子</span>
+<span class="ch" data-t="马文" data-tip="偏执型机器人，宇宙级丧" onclick="tc(this)">马文</span>
 </div></div>
 <div style="margin-top:6px">
 <input type="text" class="inp" id="custTone" placeholder="或自定义：东北大爷、川普...">
@@ -177,7 +247,10 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div style="font-size:.7rem;color:var(--gy);margin-top:4px">最多 10 个事件，倒计时显示最近 3 个</div>
 </div>
 
-<button class="btn" onclick="saveConfig()">保存配置</button>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn" onclick="saveConfig()" style="flex:1">保存配置</button>
+<button class="btn btn-outline" onclick="openPreviewModal()" style="flex:1">预览效果</button>
+</div>
 </div>
 </div>
 </div>
@@ -191,21 +264,59 @@ const llmModels = {
   moonshot: [{v:'moonshot-v1-8k',n:'Kimi K1.5'},{v:'moonshot-v1-32k',n:'Kimi K1.5 32K'},{v:'kimi-k2-turbo-preview',n:'Kimi K2 Turbo'}]
 };
 
-function showAlert(msg, type) {
-  const el = document.getElementById('alert');
-  el.className = `alert ${type}`;
-  el.textContent = msg;
-  el.style.display = 'block';
-  setTimeout(() => el.style.display = 'none', 5000);
+const strategyDescs = {
+  random: '从已启用的模式中随机选取',
+  cycle: '按顺序循环切换已启用的模式',
+  time_slot: '根据时间段显示不同内容模式（需配置时段规则）',
+  smart: '根据时间段自动匹配最佳模式（早餐建议/科技简报/运动计划等）'
+};
+
+const ALL_MODES = ['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN'];
+
+// ── Toast notifications ──────────────────────────────────────
+
+function showToast(msg, type='info', duration=3000) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 300);
+  }, duration);
 }
 
-function tc(el) {
-  el.classList.toggle('sel');
+// ── Confirm dialog (replaces native confirm) ─────────────────
+
+let _confirmResolve = null;
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    document.getElementById('confirmMsg').textContent = msg;
+    document.getElementById('confirmModal').classList.add('active');
+  });
 }
+function closeConfirm(result) {
+  document.getElementById('confirmModal').classList.remove('active');
+  if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
+}
+
+// ── Basic UI helpers ─────────────────────────────────────────
+
+function tc(el) { el.classList.toggle('sel'); }
 
 function sp(el, group) {
   document.querySelectorAll(`#${group} .pi`).forEach(i => i.classList.remove('sel'));
   el.classList.add('sel');
+}
+
+function selectStrategy(el) {
+  sp(el, 'strategy');
+  const v = el.dataset.v;
+  document.getElementById('strategyDesc').textContent = strategyDescs[v] || '';
+  document.getElementById('timeSlotSection').style.display = v === 'time_slot' ? 'block' : 'none';
 }
 
 function updateModels() {
@@ -220,60 +331,89 @@ function updateModels() {
   });
 }
 
+// ── Time slot rule editor ────────────────────────────────────
+
+function addTimeSlotRule(startHour=9, endHour=12, modes=[]) {
+  const container = document.getElementById('timeSlotRules');
+  if (container.children.length >= 12) { showToast('最多添加 12 个时段', 'error'); return; }
+
+  const row = document.createElement('div');
+  row.className = 'ts-row';
+
+  let modesHtml = ALL_MODES.map(m => {
+    const sel = modes.includes(m) ? ' sel' : '';
+    return `<span class="ch${sel}" data-m="${m}" onclick="tc(this)">${m}</span>`;
+  }).join('');
+
+  row.innerHTML = `
+    <input type="number" class="inp" min="0" max="23" value="${startHour}" style="width:60px;padding:6px 8px;font-size:.8rem" placeholder="起">
+    <span style="color:var(--gy)">—</span>
+    <input type="number" class="inp" min="0" max="24" value="${endHour}" style="width:60px;padding:6px 8px;font-size:.8rem" placeholder="止">
+    <span style="color:var(--gy);font-size:.75rem">时</span>
+    <div class="ts-modes">${modesHtml}</div>
+    <button onclick="this.parentElement.remove()" style="padding:4px 8px;border:1px solid var(--bd);border-radius:6px;cursor:pointer;background:#fff;color:var(--red);font-size:.8rem">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function getTimeSlotRules() {
+  const rules = [];
+  document.querySelectorAll('#timeSlotRules .ts-row').forEach(row => {
+    const inputs = row.querySelectorAll('input[type=number]');
+    const startHour = parseInt(inputs[0].value) || 0;
+    const endHour = parseInt(inputs[1].value) || 24;
+    const modes = [];
+    row.querySelectorAll('.ts-modes .ch.sel').forEach(el => modes.push(el.dataset.m));
+    if (modes.length > 0) rules.push({ startHour, endHour, modes });
+  });
+  return rules;
+}
+
+function fillTimeSlotRules(rules) {
+  const container = document.getElementById('timeSlotRules');
+  container.innerHTML = '';
+  (rules || []).forEach(r => {
+    addTimeSlotRule(r.startHour || 0, r.endHour || 24, r.modes || []);
+  });
+}
+
+// ── Config load / save ───────────────────────────────────────
+
 async function loadConfig() {
   const mac = document.getElementById('macIn').value.trim();
-  if (!mac) {
-    showAlert('请输入 MAC 地址', 'error');
-    return;
-  }
+  if (!mac) { showToast('请输入 MAC 地址', 'error'); return; }
 
   try {
     const res = await fetch(`${API_BASE}/api/config/${mac}`);
-    if (!res.ok) {
-      showAlert('未找到该设备的配置', 'error');
-      return;
-    }
-
+    if (!res.ok) { showToast('未找到该设备的配置', 'error'); return; }
     const cfg = await res.json();
     fillForm(cfg);
-    
     document.getElementById('configForm').style.display = 'block';
     document.getElementById('historyList').style.display = 'none';
-    showAlert('配置加载成功', 'success');
+    showToast('配置加载成功', 'success');
   } catch (e) {
-    showAlert('加载失败: ' + e.message, 'error');
+    showToast('加载失败: ' + e.message, 'error');
   }
 }
 
 async function loadHistory() {
   const mac = document.getElementById('macIn').value.trim();
-  if (!mac) {
-    showAlert('请输入 MAC 地址', 'error');
-    return;
-  }
+  if (!mac) { showToast('请输入 MAC 地址', 'error'); return; }
 
   try {
     const res = await fetch(`${API_BASE}/api/config/${mac}/history`);
-    if (!res.ok) {
-      showAlert('未找到历史配置', 'error');
-      return;
-    }
-
+    if (!res.ok) { showToast('未找到历史配置', 'error'); return; }
     const data = await res.json();
     const configs = data.configs || [];
-    
-    if (configs.length === 0) {
-      showAlert('暂无历史配置', 'info');
-      return;
-    }
+    if (configs.length === 0) { showToast('暂无历史配置', 'info'); return; }
 
+    const strategyNames = {random:'随机',cycle:'循环',time_slot:'时段绑定',smart:'智能'};
     const historyList = document.getElementById('historyList');
     historyList.innerHTML = '<h3 style="font-size:1.1rem;margin-bottom:12px">历史配置</h3>';
-    
-    configs.forEach((cfg, idx) => {
+
+    configs.forEach((cfg) => {
       const isActive = cfg.is_active === 1;
       const date = new Date(cfg.created_at).toLocaleString('zh-CN');
-      
       const item = document.createElement('div');
       item.className = 'hist-item' + (isActive ? ' active' : '');
       item.innerHTML = `
@@ -282,68 +422,52 @@ async function loadHistory() {
         </div>
         <div class="hist-content">
           <strong>模式:</strong> ${cfg.modes.join(', ')}<br>
-          <strong>刷新:</strong> ${cfg.refresh_strategy === 'random' ? '随机' : '循环'} / ${cfg.refresh_interval}分钟<br>
+          <strong>刷新:</strong> ${strategyNames[cfg.refresh_strategy] || cfg.refresh_strategy} / ${cfg.refresh_interval}分钟<br>
           <strong>城市:</strong> ${cfg.city} · <strong>AI:</strong> ${cfg.llm_provider}/${cfg.llm_model}
         </div>
         <div class="hist-actions">
-          <button onclick="useHistoryConfig(${cfg.id})">📝 编辑此配置</button>
-          ${!isActive ? `<button onclick="activateConfig(${cfg.id})">✓ 使用此配置</button>` : ''}
+          <button onclick="useHistoryConfig(${cfg.id})">编辑此配置</button>
+          ${!isActive ? `<button onclick="activateConfig(${cfg.id})">使用此配置</button>` : ''}
         </div>
       `;
       historyList.appendChild(item);
     });
-    
+
     historyList.style.display = 'block';
     document.getElementById('configForm').style.display = 'none';
   } catch (e) {
-    showAlert('加载失败: ' + e.message, 'error');
+    showToast('加载失败: ' + e.message, 'error');
   }
 }
 
 async function useHistoryConfig(configId) {
   const mac = document.getElementById('macIn').value.trim();
-  
   try {
     const res = await fetch(`${API_BASE}/api/config/${mac}/history`);
     const data = await res.json();
     const cfg = data.configs.find(c => c.id === configId);
-    
-    if (!cfg) {
-      showAlert('配置不存在', 'error');
-      return;
-    }
-    
+    if (!cfg) { showToast('配置不存在', 'error'); return; }
     fillForm(cfg);
     document.getElementById('configForm').style.display = 'block';
     document.getElementById('historyList').style.display = 'none';
-    showAlert('已加载历史配置，可以编辑后保存', 'info');
+    showToast('已加载历史配置，可以编辑后保存', 'info');
   } catch (e) {
-    showAlert('加载失败: ' + e.message, 'error');
+    showToast('加载失败: ' + e.message, 'error');
   }
 }
 
 async function activateConfig(configId) {
   const mac = document.getElementById('macIn').value.trim();
-  
-  if (!confirm('确定要激活此配置吗？\n\n设备将在下次刷新时应用。')) {
-    return;
-  }
-  
+  const ok = await showConfirm('确定要激活此配置吗？设备将在下次刷新时应用。');
+  if (!ok) return;
+
   try {
-    const res = await fetch(`${API_BASE}/api/config/${mac}/activate/${configId}`, {
-      method: 'PUT'
-    });
-    
+    const res = await fetch(`${API_BASE}/api/config/${mac}/activate/${configId}`, { method: 'PUT' });
     if (!res.ok) throw new Error('激活失败');
-    
-    if (confirm('✓ 配置已激活！\n\n设备将在下次刷新时应用新配置。\n\n点击"确定"继续')) {
-      // User clicked OK
-    }
-    loadHistory(); // 刷新列表
+    showToast('配置已激活，设备将在下次刷新时应用', 'success');
+    loadHistory();
   } catch (e) {
-    if (confirm('✗ 激活失败\n\n' + e.message + '\n\n点击"确定"继续')) {
-      // User clicked OK
-    }
+    showToast('激活失败: ' + e.message, 'error');
   }
 }
 
@@ -351,45 +475,45 @@ function fillForm(cfg) {
   document.getElementById('nickname').value = cfg.nickname || '';
   document.getElementById('city').value = cfg.city || '杭州';
   document.getElementById('interval').value = cfg.refresh_interval || 60;
-  
+
   // Modes
   document.querySelectorAll('#modes .ch').forEach(el => {
     el.classList.remove('sel');
-    if (cfg.modes.includes(el.dataset.m)) el.classList.add('sel');
+    if (cfg.modes && cfg.modes.includes(el.dataset.m)) el.classList.add('sel');
   });
-  
+
   // Strategy
+  const strategy = cfg.refresh_strategy || 'random';
   document.querySelectorAll('#strategy .pi').forEach(el => {
     el.classList.remove('sel');
-    if (el.dataset.v === cfg.refresh_strategy) el.classList.add('sel');
+    if (el.dataset.v === strategy) {
+      el.classList.add('sel');
+      selectStrategy(el);
+    }
   });
-  
+
   // Language
   document.querySelectorAll('#language .pi').forEach(el => {
     el.classList.remove('sel');
     if (el.dataset.v === cfg.language) el.classList.add('sel');
   });
-  
+
   // Tone
   document.querySelectorAll('#tone .pi').forEach(el => {
     el.classList.remove('sel');
     if (el.dataset.v === cfg.content_tone) el.classList.add('sel');
   });
-  
+
   // Character Tones
   document.querySelectorAll('#configForm .tc .ch').forEach(el => {
     el.classList.remove('sel');
     if (cfg.character_tones && cfg.character_tones.includes(el.dataset.t)) el.classList.add('sel');
   });
-  
-  // Custom tone
-  const customTones = (cfg.character_tones || []).filter(t => 
-    !['鲁迅','王小波','张爱玲','村上春树','王家卫','周星驰','甄嬛','白展堂','苏格拉底','庄子','尼采','JARVIS','智子','马文'].includes(t)
-  );
-  if (customTones.length > 0) {
-    document.getElementById('custTone').value = customTones.join(', ');
-  }
-  
+
+  const builtinTones = ['鲁迅','王小波','张爱玲','村上春树','王家卫','周星驰','甄嬛','白展堂','苏格拉底','庄子','尼采','JARVIS','智子','马文'];
+  const customTones = (cfg.character_tones || []).filter(t => !builtinTones.includes(t));
+  document.getElementById('custTone').value = customTones.length > 0 ? customTones.join(', ') : '';
+
   // LLM
   document.getElementById('llmProvider').value = cfg.llm_provider || 'deepseek';
   updateModels();
@@ -397,47 +521,44 @@ function fillForm(cfg) {
 
   // Countdown events
   fillCountdownEvents(cfg.countdown_events || cfg.countdownEvents || []);
+
+  // Time slot rules
+  fillTimeSlotRules(cfg.time_slot_rules || cfg.timeSlotRules || []);
 }
 
-async function saveConfig() {
+function collectFormData() {
   const mac = document.getElementById('macIn').value.trim();
-  if (!mac) {
-    showAlert('请输入 MAC 地址', 'error');
-    return;
-  }
-
   const modes = [];
   document.querySelectorAll('#modes .ch.sel').forEach(el => modes.push(el.dataset.m));
-  
-  if (modes.length === 0) {
-    showAlert('请至少选择一个内容模式', 'error');
-    return;
-  }
 
   const characterTones = [];
   document.querySelectorAll('#configForm .tc .ch.sel').forEach(el => characterTones.push(el.dataset.t));
   const custTone = document.getElementById('custTone').value.trim();
   if (custTone) {
-    custTone.split(/[,，、]/).forEach(t => {
-      const trimmed = t.trim();
-      if (trimmed) characterTones.push(trimmed);
-    });
+    custTone.split(/[,，、]/).forEach(t => { const trimmed = t.trim(); if (trimmed) characterTones.push(trimmed); });
   }
 
-  const data = {
-    mac: mac,
+  return {
+    mac,
     nickname: document.getElementById('nickname').value.trim(),
-    modes: modes,
+    modes,
     refreshStrategy: document.querySelector('#strategy .pi.sel')?.dataset.v || 'random',
-    characterTones: characterTones,
+    characterTones,
     language: document.querySelector('#language .pi.sel')?.dataset.v || 'zh',
     contentTone: document.querySelector('#tone .pi.sel')?.dataset.v || 'neutral',
     city: document.getElementById('city').value.trim() || '杭州',
     llmProvider: document.getElementById('llmProvider').value,
     llmModel: document.getElementById('llmModel').value,
     refreshInterval: parseInt(document.getElementById('interval').value) || 60,
-    countdownEvents: getCountdownEvents()
+    countdownEvents: getCountdownEvents(),
+    timeSlotRules: getTimeSlotRules()
   };
+}
+
+async function saveConfig() {
+  const data = collectFormData();
+  if (!data.mac) { showToast('请输入 MAC 地址', 'error'); return; }
+  if (data.modes.length === 0) { showToast('请至少选择一个内容模式', 'error'); return; }
 
   try {
     const res = await fetch(`${API_BASE}/api/config`, {
@@ -445,32 +566,129 @@ async function saveConfig() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data)
     });
-
     if (!res.ok) throw new Error('保存失败');
-    
-    if (confirm('✓ 配置保存成功！\n\n设备将在下次刷新时应用新配置。\n\n点击"确定"继续')) {
-      // User clicked OK, do nothing
-    }
+    showToast('配置保存成功！设备将在下次刷新时应用', 'success');
   } catch (e) {
-    if (confirm('✗ 保存失败\n\n' + e.message + '\n\n点击"确定"继续')) {
-      // User clicked OK, do nothing
-    }
+    showToast('保存失败: ' + e.message, 'error');
   }
 }
 
-// Countdown events management
+// ── Trigger immediate refresh ────────────────────────────────
+
+async function triggerRefresh() {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) { showToast('请先输入 MAC 地址', 'error'); return; }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/device/${mac}/refresh`, { method: 'POST' });
+    if (!res.ok) throw new Error('请求失败');
+    showToast('刷新指令已发送，设备将在下次唤醒时刷新', 'success');
+  } catch (e) {
+    showToast('发送失败: ' + e.message, 'error');
+  }
+}
+
+// ── Config import / export ───────────────────────────────────
+
+function exportConfig() {
+  const data = collectFormData();
+  if (!data.mac) { showToast('请先加载配置', 'error'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `inksight-config-${data.mac.replace(/:/g, '')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('配置已导出', 'success');
+}
+
+function importConfig(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.mac) document.getElementById('macIn').value = data.mac;
+      // Convert to the format fillForm expects
+      const cfg = {
+        nickname: data.nickname || '',
+        modes: data.modes || [],
+        refresh_strategy: data.refreshStrategy || data.refresh_strategy || 'random',
+        language: data.language || 'zh',
+        content_tone: data.contentTone || data.content_tone || 'neutral',
+        character_tones: data.characterTones || data.character_tones || [],
+        city: data.city || '杭州',
+        llm_provider: data.llmProvider || data.llm_provider || 'deepseek',
+        llm_model: data.llmModel || data.llm_model || 'deepseek-chat',
+        refresh_interval: data.refreshInterval || data.refresh_interval || 60,
+        countdownEvents: data.countdownEvents || [],
+        time_slot_rules: data.timeSlotRules || data.time_slot_rules || [],
+      };
+      fillForm(cfg);
+      document.getElementById('configForm').style.display = 'block';
+      showToast('配置已导入，检查后点击保存', 'success');
+    } catch (err) {
+      showToast('JSON 格式无效: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── Config preview modal ─────────────────────────────────────
+
+function openPreviewModal() {
+  const data = collectFormData();
+  if (data.modes.length === 0) { showToast('请至少选择一个模式', 'error'); return; }
+
+  const selectDiv = document.getElementById('previewModeSelect');
+  selectDiv.innerHTML = '<div class="cg">' + data.modes.map(m =>
+    `<span class="ch" onclick="previewMode('${m}', this)" style="cursor:pointer">${m}</span>`
+  ).join('') + '</div>';
+
+  document.getElementById('previewImg').src = '';
+  document.getElementById('previewStatus').textContent = '选择一个模式开始预览';
+  document.getElementById('previewModal').classList.add('active');
+}
+
+function closePreviewModal() {
+  document.getElementById('previewModal').classList.remove('active');
+}
+
+async function previewMode(mode, el) {
+  if (el) {
+    el.closest('.cg').querySelectorAll('.ch').forEach(c => c.classList.remove('sel'));
+    el.classList.add('sel');
+  }
+  document.getElementById('previewStatus').textContent = '渲染中...';
+  const img = document.getElementById('previewImg');
+  try {
+    const start = performance.now();
+    const res = await fetch(`${API_BASE}/api/preview?persona=${mode}&v=3.30`);
+    const elapsed = Math.round(performance.now() - start);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+    document.getElementById('previewStatus').textContent = `${mode} · ${elapsed}ms · ${(blob.size/1024).toFixed(1)}KB`;
+  } catch (e) {
+    document.getElementById('previewStatus').textContent = '渲染失败: ' + e.message;
+  }
+}
+
+// ── Countdown events ─────────────────────────────────────────
+
 function addCountdownEvent(name='', date='', type='countdown') {
   const container = document.getElementById('countdownEvents');
-  const count = container.children.length;
-  if (count >= 10) { showAlert('最多添加 10 个事件', 'error'); return; }
-
+  if (container.children.length >= 10) { showToast('最多添加 10 个事件', 'error'); return; }
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
   row.innerHTML = `
     <input type="text" class="inp cd-name" placeholder="事件名称" value="${name}" style="flex:2">
     <input type="date" class="inp cd-date" value="${date}" style="flex:2">
     <select class="sel cd-type" style="flex:1;padding:8px"><option value="countdown" ${type==='countdown'?'selected':''}>倒计时</option><option value="countup" ${type==='countup'?'selected':''}>正计日</option></select>
-    <button onclick="this.parentElement.remove()" style="padding:6px 10px;border:1px solid var(--bd);border-radius:6px;cursor:pointer;background:#fff;color:#dc2626;font-size:.8rem">✕</button>
+    <button onclick="this.parentElement.remove()" style="padding:6px 10px;border:1px solid var(--bd);border-radius:6px;cursor:pointer;background:#fff;color:var(--red);font-size:.8rem">✕</button>
   `;
   container.appendChild(row);
 }
@@ -494,10 +712,9 @@ function fillCountdownEvents(events) {
   });
 }
 
-// Initialize
+// ── Initialize ───────────────────────────────────────────────
 updateModels();
 
-// Auto-load config from URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const macParam = urlParams.get('mac');
 if (macParam) {
@@ -507,4 +724,3 @@ if (macParam) {
 </script>
 </body>
 </html>
-

@@ -31,6 +31,8 @@ static const char *DEFAULT_SERVER  = "http://192.168.3.46:8080";  // Set via cap
 static const int   WIFI_TIMEOUT    = 15000;   // ms
 static const int   HTTP_TIMEOUT    = 30000;   // ms
 static const int   CFG_BTN_HOLD_MS = 2000;    // Long press duration to trigger config mode
+static const int   SHORT_PRESS_MIN_MS = 50;   // Minimum short press duration (debounce)
+static const int   DOUBLE_CLICK_MS = 500;     // Max interval between clicks for double-click
 static const int   MAX_RETRY_COUNT = 5;       // Max retries before deep sleep
 static const int   RETRY_DELAY_SEC = 10;      // Delay between retries (seconds)
 

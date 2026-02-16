@@ -65,8 +65,9 @@ static bool readExact(WiFiClient *s, uint8_t *buf, int len) {
 bool fetchBMP() {
     float v = readBatteryVoltage();
     String mac = WiFi.macAddress();
-    String url = cfgServer + "/api/render?v=" + String(v, 2) + "&mac=" + mac;
-    Serial.printf("GET %s\n", url.c_str());
+    int rssi = WiFi.RSSI();
+    String url = cfgServer + "/api/render?v=" + String(v, 2) + "&mac=" + mac + "&rssi=" + String(rssi);
+    Serial.printf("GET %s (RSSI=%d)\n", url.c_str(), rssi);
 
     WiFiClient client;
     HTTPClient http;
