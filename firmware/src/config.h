@@ -27,7 +27,7 @@ extern uint8_t imgBuf[];
 static const int FULL_REFRESH_INTERVAL = 10;  // Full refresh every N updates to clear ghosting
 
 // ── Config defaults ─────────────────────────────────────────
-static const char *DEFAULT_SERVER  = "http://192.168.3.46:8080";  // Set via captive portal
+static const char *DEFAULT_SERVER  = "http://192.168.3.30:8080";  // Set via captive portal
 static const int   WIFI_TIMEOUT    = 15000;   // ms
 static const int   HTTP_TIMEOUT    = 30000;   // ms
 static const int   CFG_BTN_HOLD_MS = 2000;    // Long press duration to trigger config mode

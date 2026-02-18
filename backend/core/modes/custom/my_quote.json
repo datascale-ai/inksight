@@ -1,0 +1,41 @@
+{
+  "mode_id": "MY_QUOTE",
+  "display_name": "我的语录",
+  "icon": "book",
+  "cacheable": true,
+  "description": "自定义语录模式",
+  "content": {
+    "type": "llm",
+    "prompt_template": "你是一位人生导师。根据以下环境信息，生成一句富有哲理的语录和作者，用 | 分隔。\n环境：{context}",
+    "output_format": "text_split",
+    "output_separator": "|",
+    "output_fields": [
+      "quote",
+      "author"
+    ],
+    "temperature": 0.8,
+    "fallback": {
+      "quote": "生活不止眼前的苟且",
+      "author": "高晓松"
+    }
+  },
+  "layout": {
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "quote",
+        "font": "noto_serif_light",
+        "font_size": 16,
+        "vertical_center": true
+      }
+    ],
+    "footer": {
+      "label": "MY_QUOTE",
+      "attribution_template": "— {author}"
+    }
+  }
+}

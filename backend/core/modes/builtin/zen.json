@@ -1,0 +1,38 @@
+{
+  "mode_id": "ZEN",
+  "display_name": "禅意",
+  "icon": "zen",
+  "cacheable": true,
+  "description": "极简汉字，代表当下状态",
+
+  "content": {
+    "type": "llm",
+    "prompt_template": "你是一位禅宗大师。只输出一个最能代表当下状态的汉字，不要任何其他内容。\n环境：{context}",
+    "output_format": "raw",
+    "output_fields": ["word"],
+    "post_process": { "word": "first_char" },
+    "temperature": 0.8,
+    "fallback": {
+      "word": "静"
+    }
+  },
+
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": true },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "word",
+        "font": "noto_serif_regular",
+        "font_size": 48,
+        "max_width_ratio": 0.5,
+        "vertical_center": true
+      }
+    ],
+    "footer": {
+      "label": "ZEN",
+      "attribution_template": "— ...",
+      "dashed": true
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "mode_id": "STOIC",
+  "display_name": "斯多葛哲学",
+  "icon": "book",
+  "cacheable": true,
+  "description": "庄重、内省的哲学语录",
+
+  "content": {
+    "type": "llm",
+    "prompt_template": "你是一位斯多葛哲学导师。根据以下环境信息，生成一句简短的斯多葛哲学语录，风格庄重、内省，适合刻在石碑上。只输出语录本身和作者，用 | 分隔。\n环境：{context}",
+    "output_format": "text_split",
+    "output_separator": "|",
+    "output_fields": ["quote", "author"],
+    "temperature": 0.8,
+    "fallback": {
+      "quote": "The impediment to action advances action. What stands in the way becomes the way.",
+      "author": "Marcus Aurelius"
+    }
+  },
+
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "quote",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 16,
+        "max_width_ratio": 0.88,
+        "vertical_center": true
+      }
+    ],
+    "footer": {
+      "label": "STOIC",
+      "attribution_template": "— {author}"
+    }
+  }
+}

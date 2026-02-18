@@ -9,9 +9,9 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 from .config import (
-    CACHEABLE_MODES,
     DEFAULT_CITY,
     DEFAULT_MODES,
+    get_cacheable_modes,
 )
 from .context import get_date_context, get_weather, calc_battery_pct
 from .pipeline import generate_and_render
@@ -29,7 +29,8 @@ class ContentCache:
         """Calculate cache TTL based on refresh interval and number of modes"""
         refresh_interval = config.get("refresh_interval", 60)
         modes = config.get("modes", DEFAULT_MODES)
-        mode_count = len([m for m in modes if m in CACHEABLE_MODES])
+        cacheable = get_cacheable_modes()
+        mode_count = len([m for m in modes if m in cacheable])
 
         # TTL = refresh_interval × mode_count (complete one cycle)
         # Add 10% buffer to avoid edge cases
@@ -63,7 +64,8 @@ class ContentCache:
         self, mac: str, config: dict, v: float = 3.3
     ) -> bool:
         """Check if all modes are cached, if not, regenerate all modes"""
-        modes = [m for m in config.get("modes", DEFAULT_MODES) if m in CACHEABLE_MODES]
+        cacheable = get_cacheable_modes()
+        modes = [m for m in config.get("modes", DEFAULT_MODES) if m in cacheable]
 
         if not modes:
             return False

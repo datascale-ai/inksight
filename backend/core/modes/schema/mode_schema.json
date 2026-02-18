@@ -1,0 +1,287 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InkSight Mode Definition",
+  "description": "JSON Schema for defining custom e-ink display modes",
+  "type": "object",
+  "required": ["mode_id", "display_name", "content", "layout"],
+  "properties": {
+    "mode_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{1,31}$",
+      "description": "Unique uppercase identifier (e.g. MOTIVATIONAL)"
+    },
+    "display_name": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "Human-readable name shown in UI"
+    },
+    "icon": {
+      "type": "string",
+      "default": "star",
+      "description": "Icon name from fonts/icons/ directory (without .png)"
+    },
+    "cacheable": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether rendered images can be pre-cached"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Short description of the mode"
+    },
+    "content": {
+      "$ref": "#/definitions/content_def"
+    },
+    "layout": {
+      "$ref": "#/definitions/layout_def"
+    }
+  },
+  "definitions": {
+    "content_def": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["llm", "llm_json", "static"],
+          "description": "llm: text output parsed by format rules; llm_json: JSON output; static: config-driven data"
+        },
+        "prompt_template": {
+          "type": "string",
+          "description": "Prompt template with {context} placeholder for environment info"
+        },
+        "output_format": {
+          "type": "string",
+          "enum": ["text_split", "raw", "json"],
+          "default": "raw",
+          "description": "How to parse LLM text output"
+        },
+        "output_separator": {
+          "type": "string",
+          "default": "|",
+          "description": "Separator for text_split format"
+        },
+        "output_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Field names for text_split or json output"
+        },
+        "output_schema": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["string", "number", "array", "boolean"] },
+              "default": {},
+              "description": { "type": "string" }
+            }
+          },
+          "description": "Schema for llm_json output fields with types and defaults"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0.8
+        },
+        "fallback": {
+          "type": "object",
+          "description": "Default content dict returned when LLM call fails"
+        },
+        "static_data": {
+          "type": "object",
+          "description": "Fixed data for static content type"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "llm" } } },
+          "then": { "required": ["prompt_template", "output_format", "fallback"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "llm_json" } } },
+          "then": { "required": ["prompt_template", "output_schema", "fallback"] }
+        }
+      ]
+    },
+    "layout_def": {
+      "type": "object",
+      "required": ["body"],
+      "properties": {
+        "status_bar": {
+          "type": "object",
+          "properties": {
+            "style": { "type": "string", "enum": ["default", "minimal"], "default": "default" },
+            "line_width": { "type": "integer", "minimum": 1, "maximum": 3, "default": 1 },
+            "dashed": { "type": "boolean", "default": false }
+          }
+        },
+        "body": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/block" },
+          "minItems": 1,
+          "description": "Ordered list of layout blocks rendered top to bottom"
+        },
+        "footer": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string", "description": "Mode label in footer (defaults to mode_id)" },
+            "attribution_template": { "type": "string", "description": "Template like '— {author}' with content field refs" },
+            "line_width": { "type": "integer", "minimum": 1, "maximum": 3, "default": 1 },
+            "dashed": { "type": "boolean", "default": false },
+            "font": { "type": "string" },
+            "font_size": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        { "$ref": "#/definitions/centered_text_block" },
+        { "$ref": "#/definitions/text_block" },
+        { "$ref": "#/definitions/separator_block" },
+        { "$ref": "#/definitions/section_block" },
+        { "$ref": "#/definitions/list_block" },
+        { "$ref": "#/definitions/vertical_stack_block" },
+        { "$ref": "#/definitions/conditional_block" },
+        { "$ref": "#/definitions/spacer_block" },
+        { "$ref": "#/definitions/icon_text_block" }
+      ]
+    },
+    "centered_text_block": {
+      "type": "object",
+      "required": ["type", "field"],
+      "properties": {
+        "type": { "const": "centered_text" },
+        "field": { "type": "string", "description": "Content field name to render" },
+        "font": { "type": "string", "default": "noto_serif_light" },
+        "font_size": { "type": "integer", "default": 16 },
+        "font_name": { "type": "string", "description": "Direct font filename (overrides font key)" },
+        "max_width_ratio": { "type": "number", "minimum": 0.3, "maximum": 1.0, "default": 0.88 },
+        "line_spacing": { "type": "integer", "default": 8 },
+        "vertical_center": { "type": "boolean", "default": true, "description": "Center in available body space" }
+      }
+    },
+    "text_block": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "text" },
+        "field": { "type": "string", "description": "Content field name" },
+        "template": { "type": "string", "description": "Text template with {field} refs" },
+        "font": { "type": "string", "default": "noto_serif_regular" },
+        "font_size": { "type": "integer", "default": 14 },
+        "align": { "type": "string", "enum": ["left", "center", "right"], "default": "center" },
+        "margin_x": { "type": "integer", "default": 24 },
+        "max_lines": { "type": "integer", "default": 3 }
+      }
+    },
+    "separator_block": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "separator" },
+        "style": { "type": "string", "enum": ["solid", "dashed", "short"], "default": "solid" },
+        "margin_x": { "type": "integer", "default": 24 },
+        "width": { "type": "integer", "description": "Fixed width for short separators" },
+        "line_width": { "type": "integer", "default": 1 }
+      }
+    },
+    "section_block": {
+      "type": "object",
+      "required": ["type", "title"],
+      "properties": {
+        "type": { "const": "section" },
+        "title": { "type": "string" },
+        "icon": { "type": "string" },
+        "title_font": { "type": "string", "default": "noto_serif_regular" },
+        "title_font_size": { "type": "integer", "default": 14 },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/block" }
+        }
+      }
+    },
+    "list_block": {
+      "type": "object",
+      "required": ["type", "field"],
+      "properties": {
+        "type": { "const": "list" },
+        "field": { "type": "string", "description": "Content field name (must be an array)" },
+        "max_items": { "type": "integer", "default": 8 },
+        "item_template": { "type": "string", "description": "Template per item, e.g. '{index}. {name}'" },
+        "right_field": { "type": "string", "description": "Item sub-field to render right-aligned" },
+        "font": { "type": "string", "default": "noto_serif_regular" },
+        "font_size": { "type": "integer", "default": 13 },
+        "item_spacing": { "type": "integer", "default": 16 },
+        "margin_x": { "type": "integer", "default": 32 },
+        "numbered": { "type": "boolean", "default": false }
+      }
+    },
+    "vertical_stack_block": {
+      "type": "object",
+      "required": ["type", "children"],
+      "properties": {
+        "type": { "const": "vertical_stack" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/block" }
+        },
+        "spacing": { "type": "integer", "default": 0 }
+      }
+    },
+    "conditional_block": {
+      "type": "object",
+      "required": ["type", "field", "conditions"],
+      "properties": {
+        "type": { "const": "conditional" },
+        "field": { "type": "string", "description": "Content field to evaluate" },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["op", "children"],
+            "properties": {
+              "op": { "type": "string", "enum": ["eq", "gt", "lt", "gte", "lte", "len_eq", "len_gt", "exists"] },
+              "value": {},
+              "children": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/block" }
+              }
+            }
+          }
+        },
+        "fallback_children": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/block" },
+          "description": "Blocks to render if no condition matches"
+        }
+      }
+    },
+    "spacer_block": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "spacer" },
+        "height": { "type": "integer", "default": 12 }
+      }
+    },
+    "icon_text_block": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "icon_text" },
+        "icon": { "type": "string" },
+        "text": { "type": "string", "description": "Static text or template" },
+        "field": { "type": "string", "description": "Content field (overrides text)" },
+        "font": { "type": "string", "default": "noto_serif_regular" },
+        "font_size": { "type": "integer", "default": 14 },
+        "icon_size": { "type": "integer", "default": 12 },
+        "margin_x": { "type": "integer", "default": 24 }
+      }
+    }
+  }
+}

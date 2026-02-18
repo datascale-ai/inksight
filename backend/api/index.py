@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from core.config import (
-    SUPPORTED_MODES,
     DEFAULT_CITY,
     DEFAULT_MODES,
 )
+from core.mode_registry import get_registry
 from core.context import get_date_context, get_weather, calc_battery_pct
 from core.config_store import (
     init_db,
@@ -147,7 +147,8 @@ async def _resolve_mode(
     mac: str | None, config: dict | None, persona_override: str | None
 ) -> str:
     """Determine which persona to use for this request."""
-    if persona_override and persona_override.upper() in SUPPORTED_MODES:
+    registry = get_registry()
+    if persona_override and registry.is_supported(persona_override.upper()):
         persona = persona_override.upper()
         logger.debug(f"[REQUEST] Using override persona: {persona}")
     elif config:
@@ -329,6 +330,90 @@ async def put_activate(mac: str, config_id: int):
     if not ok:
         return JSONResponse({"error": "config not found"}, status_code=404)
     return {"ok": True}
+
+
+# ── Custom mode endpoints ────────────────────────────────────
+
+
+@app.get("/api/modes")
+async def list_modes():
+    """List all available modes (builtin + custom)."""
+    registry = get_registry()
+    modes = []
+    for info in registry.list_modes():
+        modes.append({
+            "mode_id": info.mode_id,
+            "display_name": info.display_name,
+            "icon": info.icon,
+            "cacheable": info.cacheable,
+            "description": info.description,
+            "source": info.source,
+        })
+    return {"modes": modes}
+
+
+@app.post("/api/modes/custom")
+async def create_custom_mode(body: dict):
+    """Upload a JSON mode definition."""
+    import json as _json
+    from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def
+
+    mode_id = body.get("mode_id", "").upper()
+    if not mode_id:
+        return JSONResponse({"error": "mode_id is required"}, status_code=400)
+
+    if not _validate_mode_def(body):
+        return JSONResponse({"error": "Invalid mode definition"}, status_code=400)
+
+    body["mode_id"] = mode_id
+
+    registry = get_registry()
+    if registry.is_builtin(mode_id):
+        return JSONResponse(
+            {"error": f"Cannot override builtin mode: {mode_id}"}, status_code=409
+        )
+
+    file_path = Path(CUSTOM_JSON_DIR) / f"{mode_id.lower()}.json"
+    file_path.write_text(_json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    registry.unregister_custom(mode_id)
+    loaded = registry.load_json_mode(str(file_path), source="custom")
+    if not loaded:
+        file_path.unlink(missing_ok=True)
+        return JSONResponse({"error": "Failed to load mode definition"}, status_code=400)
+
+    logger.info(f"[MODES] Created custom mode: {mode_id}")
+    return {"ok": True, "mode_id": mode_id}
+
+
+@app.get("/api/modes/custom/{mode_id}")
+async def get_custom_mode(mode_id: str):
+    """Get a custom mode's JSON definition."""
+    registry = get_registry()
+    jm = registry.get_json_mode(mode_id.upper())
+    if not jm or jm.info.source != "custom":
+        return JSONResponse({"error": "Custom mode not found"}, status_code=404)
+    return jm.definition
+
+
+@app.delete("/api/modes/custom/{mode_id}")
+async def delete_custom_mode(mode_id: str):
+    """Delete a custom mode."""
+    mode_id = mode_id.upper()
+    registry = get_registry()
+
+    jm = registry.get_json_mode(mode_id)
+    if not jm or jm.info.source != "custom":
+        return JSONResponse({"error": "Custom mode not found"}, status_code=404)
+
+    file_path = jm.file_path
+    registry.unregister_custom(mode_id)
+
+    if file_path:
+        Path(file_path).unlink(missing_ok=True)
+
+    logger.info(f"[MODES] Deleted custom mode: {mode_id}")
+    return {"ok": True, "mode_id": mode_id}
 
 
 # ── Misc endpoints ───────────────────────────────────────────
