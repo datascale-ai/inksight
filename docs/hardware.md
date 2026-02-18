@@ -20,33 +20,33 @@
 USB VBUS (5V) ──> TP5000 IN
 TP5000 OUT ──> Battery (3.2V)
 Battery ──> ESP32 3.3V Pin (直连，旁路 LDO)
-Battery ──> 100K Resistor ──> GPIO 3 (ADC) (电压检测)
+Battery ──> 100K Resistor ──> GPIO 0 (ADC) (电压检测)
 ```
 
 ### SPI 信号域 (ESP32-C3 -> E-Ink)
 
 | ESP32 Pin | E-Ink Pin | 功能 |
 |-----------|-----------|------|
-| GPIO 8 | CLK | SPI 时钟 (SCK) |
-| GPIO 9 | DIN | SPI 数据 (MOSI) |
+| GPIO 4 | CLK | SPI 时钟 (SCK) |
+| GPIO 6 | DIN | SPI 数据 (MOSI) |
 | GPIO 7 | CS | 片选 |
-| GPIO 6 | DC | 数据/命令选择 |
-| GPIO 5 | RST | 复位 |
-| GPIO 4 | BUSY | 忙信号 |
+| GPIO 1 | DC | 数据/命令选择 |
+| GPIO 2 | RST | 复位 |
+| GPIO 10 | BUSY | 忙信号 |
 
 ## 3. 接线示意图
 
 ```
-                    ┌──────────────────┐
-                    │   ESP32-C3       │
-                    │   SuperMini      │
-USB-C ──> TP5000 ──>│ 3V3         GPIO8├──> CLK (E-Ink)
-                    │             GPIO9├──> DIN (E-Ink)
-          Battery ──>│ GND         GPIO7├──> CS  (E-Ink)
-                    │             GPIO6├──> DC  (E-Ink)
-  100K ──> GPIO3 <──│ ADC         GPIO5├──> RST (E-Ink)
-                    │             GPIO4├──> BUSY(E-Ink)
-                    └──────────────────┘
+                    ┌───────────────────┐
+                    │   ESP32-C3        │
+                    │   SuperMini       │
+USB-C ──> TP5000 ──>│ 3V3         GPIO4 ├──> CLK (E-Ink)
+                    │             GPIO6 ├──> DIN (E-Ink)
+          Battery ──>│ GND         GPIO7 ├──> CS  (E-Ink)
+                    │             GPIO1 ├──> DC  (E-Ink)
+  100K ──> GPIO0 <──│ ADC         GPIO2 ├──> RST (E-Ink)
+                    │             GPIO10├──> BUSY(E-Ink)
+                    └───────────────────┘
 
                     ┌──────────────────┐
                     │  4.2" E-Paper    │
@@ -70,7 +70,7 @@ USB-C ──> TP5000 ──>│ 3V3         GPIO8├──> CLK (E-Ink)
 
 ### 电压检测
 
-- 通过 100K 电阻分压后接 GPIO 3 (ADC) 读取电池电压。
+- 通过 100K 电阻分压后接 GPIO 0 (ADC) 读取电池电压。
 - ADC 校准需要实际测量后修正。
 
 ## 5. 续航估算
@@ -90,7 +90,7 @@ USB-C ──> TP5000 ──>│ 3V3         GPIO8├──> CLK (E-Ink)
 
 1. **焊接 TP5000 模块:** 将 TP5000 充电模块的输入端连接 USB-C 接口，输出端连接电池。
 2. **连接电源:** 电池正极连接 ESP32 的 3V3 引脚，负极连接 GND。
-3. **连接电压检测:** 从电池正极经 100K 电阻连接到 GPIO 3。
+3. **连接电压检测:** 从电池正极经 100K 电阻连接到 GPIO 0。
 4. **连接 E-Ink 屏幕:** 按上方引脚映射表，使用杜邦线连接 6 根 SPI 信号线。
 5. **固定结构:** 使用 M3 铜柱和 PCB 夹板固定，或 3D 打印外壳。
 6. **烧录固件:** 参考 [快速开始](../README.md#-快速开始) 中的固件烧录部分。

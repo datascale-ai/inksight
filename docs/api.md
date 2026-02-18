@@ -30,8 +30,8 @@
 |--------|------|------|------|------|
 | `v` | `float` | 是 | `3.25` | 电池当前电压 |
 | `mac` | `string` | 否 | `A1:B2:C3:D4` | 设备 MAC 地址 |
-| `w` | `int` | 否 | `400` | 屏幕宽度 (默认 400) |
-| `h` | `int` | 否 | `300` | 屏幕高度 (默认 300) |
+| `persona` | `string` | 否 | `鲁迅` | 强制指定角色语气 |
+| `rssi` | `int` | 否 | `-65` | WiFi 信号强度 (dBm) |
 
 #### 响应
 
@@ -65,15 +65,15 @@ curl -X GET "https://your-url.vercel.app/api/render?v=3.20&mac=test_device" --ou
 
 ### 2.3 设备配置
 
-- **URL:** `GET /api/config`
+- **URL:** `GET /api/config/{mac}`
 
-#### 请求参数
+#### 路径参数
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| `mac` | `string` | 是 | 设备 MAC 地址 |
+| 参数名 | 类型 | 描述 |
+|--------|------|------|
+| `mac` | `string` | 设备 MAC 地址 |
 
-返回该设备的 Web 配置页面。
+返回该设备的当前配置。
 
 - **URL:** `POST /api/config`
 
@@ -107,7 +107,7 @@ curl -X GET "https://your-url.vercel.app/api/render?v=3.20&mac=test_device" --ou
 
 ### 2.5 激活历史配置
 
-- **URL:** `POST /api/config/{mac}/activate/{config_id}`
+- **URL:** `PUT /api/config/{mac}/activate/{config_id}`
 
 将指定的历史配置设为当前活跃配置。
 
