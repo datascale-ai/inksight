@@ -162,6 +162,8 @@ pio device monitor
 
 ## 配置说明
 
+![配置管理](images/configuration.png)
+
 访问 `http://your-server:8080/config?mac=XX:XX:XX:XX:XX:XX` 进行在线配置：
 
 | 配置项 | 说明 |
@@ -191,6 +193,8 @@ API 接口详见 [API 文档](docs/api.md)。
 ---
 
 ## 统计仪表板
+
+![统计仪表板](images/dashboard.png)
 
 访问 `http://your-server:8080/dashboard?mac=XX:XX:XX:XX:XX:XX` 查看设备统计：
 

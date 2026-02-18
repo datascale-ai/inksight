@@ -161,6 +161,8 @@ Alternatively, open `firmware/src/main.cpp` in Arduino IDE to compile and upload
 
 ## Configuration
 
+![Configuration](images/configuration.png)
+
 Visit `http://your-server:8080/config?mac=XX:XX:XX:XX:XX:XX` to configure your device:
 
 | Setting | Description |
@@ -190,6 +192,8 @@ See the [API Documentation](docs/api.md) (Chinese) for full endpoint details.
 ---
 
 ## Statistics Dashboard
+
+![Statistics Dashboard](images/dashboard.png)
 
 Visit `http://your-server:8080/dashboard?mac=XX:XX:XX:XX:XX:XX` to view device statistics:
 
