@@ -9,10 +9,7 @@ English | [中文](README_ZH.md)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 
-<!-- 
-TODO: Add product photo
-![InkSight Demo](docs/images/demo.jpg) 
--->
+![InkSight](images/intro.jpg)
 
 ---
 
@@ -37,6 +34,8 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 ---
 
 ## Content Modes
+
+![Content Modes](images/modes.jpg)
 
 | Mode | Description |
 |------|-------------|

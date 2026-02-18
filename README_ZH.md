@@ -11,10 +11,7 @@
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 
-<!-- 
-TODO: 添加项目实物照片
-![InkSight Demo](docs/images/demo.jpg) 
--->
+![InkSight](images/intro.jpg)
 
 ---
 
@@ -37,6 +34,8 @@ InkSight 通过后端 LLM（DeepSeek / 通义千问 / Kimi）生成基于当前�
 ---
 
 ## 内容模式
+
+![内容模式](images/modes.jpg)
 
 | 模式 | 说明 |
 |------|------|
