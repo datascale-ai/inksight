@@ -1,0 +1,80 @@
+{
+  "mode_id": "POETRY",
+  "display_name": "每日古诗词",
+  "icon": "star",
+  "cacheable": true,
+  "description": "与季节天气相关的中国古诗词",
+
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位古典文学专家。根据以下环境信息，推荐一首与当前季节、天气或节日相关的中国古诗词。\n用 JSON 格式输出：{{\"title\": \"诗名\", \"author\": \"朝代·作者\", \"lines\": [\"诗句1\", \"诗句2\", ...], \"note\": \"一句话赏析（20字以内）\"}}\n要求：\n1. 选择经典诗词，涵盖唐诗、宋词、元曲等\n2. 每次推荐不同的诗词，避免重复\n3. 诗句完整呈现，每句单独一个元素\n4. 只输出 JSON，不要其他内容\n环境：{context}",
+    "output_schema": {
+      "title": { "type": "string", "default": "静夜思" },
+      "author": { "type": "string", "default": "唐·李白" },
+      "lines": { "type": "array", "default": ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"] },
+      "note": { "type": "string", "default": "千古思乡名篇" }
+    },
+    "temperature": 0.8,
+    "fallback": {
+      "title": "静夜思",
+      "author": "唐·李白",
+      "lines": ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"],
+      "note": "千古思乡名篇"
+    }
+  },
+
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": true },
+    "body": [
+      { "type": "spacer", "height": 14 },
+      {
+        "type": "text",
+        "field": "title",
+        "font": "noto_serif_bold",
+        "font_size": 14,
+        "align": "center"
+      },
+      { "type": "spacer", "height": 4 },
+      {
+        "type": "text",
+        "field": "author",
+        "font": "noto_serif_light",
+        "font_size": 11,
+        "align": "center"
+      },
+      { "type": "spacer", "height": 6 },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 60,
+        "line_width": 1
+      },
+      { "type": "spacer", "height": 8 },
+      {
+        "type": "list",
+        "field": "lines",
+        "max_items": 8,
+        "item_template": "{_value}",
+        "font": "noto_serif_regular",
+        "font_size": 16,
+        "item_spacing": 24,
+        "margin_x": 30,
+        "align": "center"
+      },
+      { "type": "spacer", "height": 8 },
+      {
+        "type": "text",
+        "field": "note",
+        "font": "noto_serif_light",
+        "font_size": 10,
+        "align": "center",
+        "max_lines": 2
+      }
+    ],
+    "footer": {
+      "label": "POETRY",
+      "attribution_template": "— {author}",
+      "dashed": true
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "mode_id": "ROAST",
+  "display_name": "毒舌吐槽",
+  "icon": "electric_bolt",
+  "cacheable": true,
+  "description": "犀利的中文吐槽，缓解压力",
+
+  "content": {
+    "type": "llm",
+    "prompt_template": "你是一个毒舌 AI 助手，擅长黑色幽默和反讽。根据以下环境信息，生成一句犀利的吐槽短句，让人破防但又忍不住笑。只输出短句本身，不要加引号。\n环境：{context}",
+    "output_format": "raw",
+    "output_fields": ["quote"],
+    "temperature": 0.8,
+    "fallback": {
+      "quote": "服务器也累了，和你一样需要休息。"
+    }
+  },
+
+  "layout": {
+    "status_bar": { "line_width": 2, "dashed": false },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "quote",
+        "font_name": "NotoSerifSC-Bold.ttf",
+        "font_size": 15,
+        "max_width_ratio": 0.88,
+        "vertical_center": true
+      }
+    ],
+    "footer": {
+      "label": "ROAST",
+      "attribution_template": "— InkSight AI",
+      "line_width": 2
+    }
+  }
+}

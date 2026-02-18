@@ -71,6 +71,31 @@ h1{font-size:1.8rem;margin-bottom:8px}
 
 /* Strategy description */
 .strategy-desc{font-size:.72rem;color:var(--gy);margin-top:6px;min-height:1.2em}
+
+/* Custom mode editor */
+.mode-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.mode-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff}
+.mode-item:hover{border-color:var(--bk);background:var(--bg)}
+.mode-meta{flex:1;min-width:0}
+.mode-meta strong{font-size:.9rem}
+.mode-meta .mode-src{font-size:.68rem;padding:2px 6px;border-radius:4px;margin-left:6px}
+.mode-src-builtin{background:#dbeafe;color:#1e40af}
+.mode-src-builtin_json{background:#e0e7ff;color:#4338ca}
+.mode-src-custom{background:#dcfce7;color:#15803d}
+.mode-meta p{font-size:.75rem;color:var(--gy);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mode-actions{display:flex;gap:6px;flex-shrink:0;margin-left:12px}
+.mode-actions button{padding:4px 10px;font-size:.75rem;border:1px solid var(--bd);border-radius:6px;cursor:pointer;background:#fff}
+.mode-actions button:hover{background:var(--bg)}
+.mode-actions .btn-del{color:var(--red);border-color:#fecaca}
+.mode-actions .btn-del:hover{background:#fef2f2}
+.json-editor{width:100%;min-height:260px;font-family:'Menlo','Monaco','Courier New',monospace;font-size:.8rem;padding:12px;border:1px solid var(--bd);border-radius:10px;background:#fafaf7;resize:vertical;line-height:1.5;tab-size:2}
+.json-editor:focus{border-color:var(--bk);outline:none}
+.json-error{font-size:.75rem;color:var(--red);margin-top:4px;min-height:1.1em}
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px}
+.tpl-card{padding:10px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;background:#fff;text-align:center}
+.tpl-card:hover{border-color:var(--bk);background:var(--bg)}
+.tpl-card strong{font-size:.85rem;display:block;margin-bottom:4px}
+.tpl-card span{font-size:.7rem;color:var(--gy)}
 </style>
 </head>
 <body>
@@ -253,6 +278,50 @@ h1{font-size:1.8rem;margin-bottom:8px}
 </div>
 </div>
 </div>
+
+<!-- Custom mode management -->
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+<h2 style="font-size:1.3rem">自定义模式</h2>
+<div style="display:flex;gap:6px">
+<button class="btn btn-outline" onclick="refreshModeList()" style="padding:6px 12px;font-size:.75rem">刷新列表</button>
+<button class="btn" onclick="openModeEditor()" style="padding:6px 12px;font-size:.75rem">+ 新建模式</button>
+</div>
+</div>
+<div id="modeList" class="mode-list">
+<div style="color:var(--gy);font-size:.85rem;text-align:center;padding:16px">加载中...</div>
+</div>
+</div>
+
+<!-- Mode editor modal -->
+<div id="modeEditorModal" class="modal-overlay" onclick="if(event.target===this)closeModeEditor()">
+<div class="modal-content" style="max-width:700px">
+<button class="modal-close" onclick="closeModeEditor()">&times;</button>
+<h3 id="modeEditorTitle">新建自定义模式</h3>
+
+<div style="margin:12px 0">
+<label class="lbl">从模板开始</label>
+<div class="tpl-grid">
+<div class="tpl-card" onclick="fillModeTemplate('quote')"><strong>语录模式</strong><span>居中文本 + 作者</span></div>
+<div class="tpl-card" onclick="fillModeTemplate('list')"><strong>列表模式</strong><span>标题 + 项目列表</span></div>
+<div class="tpl-card" onclick="fillModeTemplate('zen')"><strong>极简模式</strong><span>大字居中单字</span></div>
+<div class="tpl-card" onclick="fillModeTemplate('sections')"><strong>分栏模式</strong><span>多区块 + 图标</span></div>
+</div>
+</div>
+
+<div class="fg">
+<label class="lbl">模式定义 (JSON)</label>
+<textarea class="json-editor" id="modeJsonIn" spellcheck="false" oninput="validateModeJson()"></textarea>
+<div class="json-error" id="modeJsonError"></div>
+</div>
+
+<div style="display:flex;gap:8px">
+<button class="btn" onclick="saveModeDefinition()" style="flex:1">保存模式</button>
+<button class="btn btn-outline" onclick="previewCustomMode()" style="flex:1">预览效果</button>
+</div>
+</div>
+</div>
+
 </div>
 
 <script>
@@ -658,6 +727,14 @@ function closePreviewModal() {
 }
 
 async function previewMode(mode, el) {
+  // Open the preview modal if not already visible
+  const modal = document.getElementById('previewModal');
+  if (!modal.classList.contains('active')) {
+    document.getElementById('previewModeSelect').innerHTML = '';
+    document.getElementById('previewImg').src = '';
+    modal.classList.add('active');
+  }
+
   if (el) {
     el.closest('.cg').querySelectorAll('.ch').forEach(c => c.classList.remove('sel'));
     el.classList.add('sel');
@@ -712,8 +789,306 @@ function fillCountdownEvents(events) {
   });
 }
 
+// ── Custom mode management ───────────────────────────────────
+
+const MODE_TEMPLATES = {
+  quote: {
+    mode_id: "MY_QUOTE",
+    display_name: "我的语录",
+    icon: "book",
+    cacheable: true,
+    description: "自定义语录模式",
+    content: {
+      type: "llm",
+      prompt_template: "你是一位人生导师。根据以下环境信息，生成一句富有哲理的语录和作者，用 | 分隔。\n环境：{context}",
+      output_format: "text_split",
+      output_separator: "|",
+      output_fields: ["quote", "author"],
+      temperature: 0.8,
+      fallback: { quote: "生活不止眼前的苟且", author: "高晓松" }
+    },
+    layout: {
+      status_bar: { line_width: 1, dashed: false },
+      body: [{ type: "centered_text", field: "quote", font: "noto_serif_light", font_size: 16, vertical_center: true }],
+      footer: { label: "MY_QUOTE", attribution_template: "— {author}" }
+    }
+  },
+  list: {
+    mode_id: "MY_LIST",
+    display_name: "我的列表",
+    icon: "star",
+    cacheable: false,
+    description: "自定义列表模式",
+    content: {
+      type: "llm_json",
+      prompt_template: "推荐 5 个今日值得关注的话题，用 JSON 输出：{{\"title\": \"标题\", \"items\": [{{\"name\": \"话题\", \"desc\": \"简述\"}}]}}\n只输出 JSON。\n环境：{context}",
+      output_schema: {
+        title: { type: "string", "default": "今日话题" },
+        items: { type: "array", "default": [{ name: "示例话题", desc: "简要描述" }] }
+      },
+      temperature: 0.8,
+      fallback: { title: "今日话题", items: [{ name: "暂无数据", desc: "请稍后重试" }] }
+    },
+    layout: {
+      status_bar: { line_width: 1 },
+      body: [
+        { type: "spacer", height: 14 },
+        { type: "text", field: "title", font: "noto_serif_bold", font_size: 16, align: "center" },
+        { type: "spacer", height: 4 },
+        { type: "separator", style: "solid", margin_x: 24 },
+        { type: "list", field: "items", max_items: 6, item_template: "{name}", right_field: "desc", font_size: 13, margin_x: 24, numbered: true, item_spacing: 18 }
+      ],
+      footer: { label: "MY_LIST", attribution_template: "InkSight" }
+    }
+  },
+  zen: {
+    mode_id: "MY_ZEN",
+    display_name: "极简字",
+    icon: "zen",
+    cacheable: true,
+    description: "一个大字代表当下",
+    content: {
+      type: "llm",
+      prompt_template: "根据当前环境，输出一个最有意境的汉字，不要其他内容。\n环境：{context}",
+      output_format: "raw",
+      output_fields: ["word"],
+      post_process: { word: "first_char" },
+      temperature: 0.9,
+      fallback: { word: "悟" }
+    },
+    layout: {
+      status_bar: { dashed: true },
+      body: [{ type: "centered_text", field: "word", font: "noto_serif_regular", font_size: 48, vertical_center: true }],
+      footer: { label: "MY_ZEN", attribution_template: "— ...", dashed: true }
+    }
+  },
+  sections: {
+    mode_id: "MY_SECTIONS",
+    display_name: "分栏展示",
+    icon: "sunny",
+    cacheable: false,
+    description: "多区块内容展示",
+    content: {
+      type: "llm_json",
+      prompt_template: "你是一位生活助手。用 JSON 输出今日推荐：{{\"greeting\": \"一句问候\", \"tip\": \"一条实用建议\", \"fun_fact\": \"一个冷知识\"}}\n只输出 JSON。\n环境：{context}",
+      output_schema: {
+        greeting: { type: "string", "default": "美好的一天" },
+        tip: { type: "string", "default": "多喝水" },
+        fun_fact: { type: "string", "default": "蜜蜂可以识别人脸" }
+      },
+      temperature: 0.8,
+      fallback: { greeting: "美好的一天", tip: "保持微笑", fun_fact: "章鱼有三颗心脏" }
+    },
+    layout: {
+      status_bar: { line_width: 1 },
+      body: [
+        { type: "spacer", height: 14 },
+        { type: "text", field: "greeting", font: "noto_serif_bold", font_size: 16, align: "center" },
+        { type: "spacer", height: 8 },
+        { type: "separator", style: "solid", margin_x: 24 },
+        { type: "section", title: "今日建议", icon: "tips", children: [
+          { type: "text", field: "tip", font: "noto_serif_regular", font_size: 14, align: "left", margin_x: 40 }
+        ]},
+        { type: "spacer", height: 4 },
+        { type: "separator", style: "dashed", margin_x: 24 },
+        { type: "section", title: "冷知识", icon: "book", children: [
+          { type: "text", field: "fun_fact", font: "noto_serif_light", font_size: 13, align: "left", margin_x: 40 }
+        ]}
+      ],
+      footer: { label: "MY_SECTIONS", attribution_template: "InkSight" }
+    }
+  }
+};
+
+let _editingModeId = null;
+
+async function refreshModeList() {
+  const container = document.getElementById('modeList');
+  try {
+    const res = await fetch(`${API_BASE}/api/modes`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const modes = data.modes || [];
+
+    if (modes.length === 0) {
+      container.innerHTML = '<div style="color:var(--gy);font-size:.85rem;text-align:center;padding:16px">暂无模式</div>';
+      return;
+    }
+
+    const srcLabels = { builtin: '内置', builtin_json: 'JSON内置', custom: '自定义' };
+    const srcClasses = { builtin: 'mode-src-builtin', builtin_json: 'mode-src-builtin_json', custom: 'mode-src-custom' };
+
+    container.innerHTML = modes.map(m => {
+      const srcLabel = srcLabels[m.source] || m.source;
+      const srcClass = srcClasses[m.source] || 'mode-src-builtin';
+      const isCustom = m.source === 'custom';
+      return `<div class="mode-item">
+        <div class="mode-meta">
+          <strong>${m.mode_id}</strong>
+          <span class="mode-src ${srcClass}">${srcLabel}</span>
+          <span style="color:var(--gy);font-size:.8rem;margin-left:6px">${m.display_name}</span>
+          ${m.description ? `<p>${m.description}</p>` : ''}
+        </div>
+        <div class="mode-actions">
+          ${isCustom ? `<button onclick="editCustomMode('${m.mode_id}')">编辑</button>` : ''}
+          ${isCustom ? `<button class="btn-del" onclick="deleteCustomMode('${m.mode_id}')">删除</button>` : ''}
+          <button onclick="previewMode('${m.mode_id}')">预览</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Also update the mode chips in the config form with any custom modes
+    updateModeChips(modes);
+  } catch (e) {
+    container.innerHTML = `<div style="color:var(--red);font-size:.85rem;text-align:center;padding:16px">加载失败: ${e.message}</div>`;
+  }
+}
+
+function updateModeChips(modes) {
+  const container = document.getElementById('modes');
+  const existing = new Set();
+  container.querySelectorAll('.ch').forEach(el => existing.add(el.dataset.m));
+
+  modes.forEach(m => {
+    if (!existing.has(m.mode_id)) {
+      const chip = document.createElement('span');
+      chip.className = 'ch';
+      chip.dataset.m = m.mode_id;
+      chip.dataset.tip = m.description || '';
+      chip.onclick = function() { tc(this); };
+      chip.textContent = `${m.mode_id} ${m.display_name}`;
+      container.appendChild(chip);
+    }
+  });
+}
+
+function openModeEditor(modeId) {
+  _editingModeId = modeId || null;
+  document.getElementById('modeEditorTitle').textContent = modeId ? `编辑模式: ${modeId}` : '新建自定义模式';
+  document.getElementById('modeJsonError').textContent = '';
+
+  if (!modeId) {
+    document.getElementById('modeJsonIn').value = JSON.stringify(MODE_TEMPLATES.quote, null, 2);
+  }
+
+  document.getElementById('modeEditorModal').classList.add('active');
+}
+
+function closeModeEditor() {
+  document.getElementById('modeEditorModal').classList.remove('active');
+  _editingModeId = null;
+}
+
+async function editCustomMode(modeId) {
+  try {
+    const res = await fetch(`${API_BASE}/api/modes/custom/${modeId}`);
+    if (!res.ok) throw new Error('获取失败');
+    const def = await res.json();
+    _editingModeId = modeId;
+    document.getElementById('modeEditorTitle').textContent = `编辑模式: ${modeId}`;
+    document.getElementById('modeJsonIn').value = JSON.stringify(def, null, 2);
+    document.getElementById('modeJsonError').textContent = '';
+    document.getElementById('modeEditorModal').classList.add('active');
+  } catch (e) {
+    showToast('加载失败: ' + e.message, 'error');
+  }
+}
+
+function fillModeTemplate(key) {
+  const tpl = MODE_TEMPLATES[key];
+  if (tpl) {
+    document.getElementById('modeJsonIn').value = JSON.stringify(tpl, null, 2);
+    document.getElementById('modeJsonError').textContent = '';
+  }
+}
+
+function validateModeJson() {
+  const textarea = document.getElementById('modeJsonIn');
+  const errorDiv = document.getElementById('modeJsonError');
+  try {
+    const obj = JSON.parse(textarea.value);
+    if (!obj.mode_id) { errorDiv.textContent = 'mode_id 必填'; return false; }
+    if (!obj.content || !obj.content.type) { errorDiv.textContent = 'content.type 必填'; return false; }
+    if (!obj.layout || !obj.layout.body || !obj.layout.body.length) { errorDiv.textContent = 'layout.body 必须包含至少一个块'; return false; }
+    errorDiv.textContent = '';
+    return true;
+  } catch (e) {
+    errorDiv.textContent = 'JSON 格式错误: ' + e.message;
+    return false;
+  }
+}
+
+async function saveModeDefinition() {
+  if (!validateModeJson()) { showToast('请修正 JSON 错误', 'error'); return; }
+
+  try {
+    const def = JSON.parse(document.getElementById('modeJsonIn').value);
+    const res = await fetch(`${API_BASE}/api/modes/custom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(def)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '保存失败');
+    showToast(`模式 ${data.mode_id} 保存成功`, 'success');
+    closeModeEditor();
+    refreshModeList();
+  } catch (e) {
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteCustomMode(modeId) {
+  const ok = await showConfirm(`确定删除自定义模式 "${modeId}" 吗？此操作不可恢复。`);
+  if (!ok) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/modes/custom/${modeId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('删除失败');
+    showToast(`模式 ${modeId} 已删除`, 'success');
+    refreshModeList();
+  } catch (e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+async function previewCustomMode() {
+  if (!validateModeJson()) { showToast('请修正 JSON 错误', 'error'); return; }
+
+  try {
+    const def = JSON.parse(document.getElementById('modeJsonIn').value);
+    // Save temporarily, then preview
+    const saveRes = await fetch(`${API_BASE}/api/modes/custom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(def)
+    });
+    if (!saveRes.ok) {
+      const err = await saveRes.json();
+      throw new Error(err.error || '保存失败');
+    }
+
+    const modeId = def.mode_id.toUpperCase();
+    const img = document.getElementById('previewImg');
+    document.getElementById('previewStatus').textContent = '渲染中...';
+    document.getElementById('previewModal').classList.add('active');
+
+    const start = performance.now();
+    const res = await fetch(`${API_BASE}/api/preview?persona=${modeId}&v=3.30`);
+    const elapsed = Math.round(performance.now() - start);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+    document.getElementById('previewStatus').textContent = `${modeId} · ${elapsed}ms · ${(blob.size/1024).toFixed(1)}KB`;
+    document.getElementById('previewModeSelect').innerHTML = '';
+  } catch (e) {
+    showToast('预览失败: ' + e.message, 'error');
+  }
+}
+
 // ── Initialize ───────────────────────────────────────────────
 updateModels();
+refreshModeList();
 
 const urlParams = new URLSearchParams(window.location.search);
 const macParam = urlParams.get('mac');

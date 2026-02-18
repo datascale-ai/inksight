@@ -52,13 +52,13 @@ MODE_ICON_MAP = {
     "STOIC": "book",
     "ROAST": "electric_bolt",
     "ZEN": "zen",
-    "DAILY": "book",
-    "BRIEFING": "book",
-    "ARTWALL": "book",
-    "RECIPE": "book",
-    "FITNESS": "book",
-    "POETRY": "book",
-    "COUNTDOWN": "book",
+    "DAILY": "sunny",
+    "BRIEFING": "global",
+    "ARTWALL": "art",
+    "RECIPE": "food",
+    "FITNESS": "exercise",
+    "POETRY": "star",
+    "COUNTDOWN": "flag",
 }
 
 
@@ -273,12 +273,34 @@ DEFAULT_MODES = ["STOIC"]
 DEFAULT_REFRESH_STRATEGY = "random"
 DEFAULT_REFRESH_INTERVAL = 60  # minutes
 
-# 支持的所有内容模式
-SUPPORTED_MODES = {
+# 硬编码模式列表仅作为 fallback，运行时应通过 mode_registry 获取
+_BUILTIN_MODE_IDS = {
     "STOIC", "ROAST", "ZEN", "DAILY",
     "BRIEFING", "ARTWALL", "RECIPE", "FITNESS",
     "POETRY", "COUNTDOWN",
 }
 
-# 可预缓存的基础模式（使用通用 generate_content + render 流程）
+
+def get_supported_modes() -> set[str]:
+    """Get all supported mode IDs from the registry (with fallback)."""
+    try:
+        from .mode_registry import get_registry
+        return get_registry().get_supported_ids()
+    except Exception:
+        return _BUILTIN_MODE_IDS
+
+
+def get_cacheable_modes() -> set[str]:
+    """Get cacheable mode IDs from the registry (with fallback)."""
+    try:
+        from .mode_registry import get_registry
+        return get_registry().get_cacheable_ids()
+    except Exception:
+        return {"STOIC", "ROAST", "ZEN", "DAILY"}
+
+
+# Keep legacy names for backward compat (lazy evaluation via property-like access is not
+# possible at module level, so callers that import the set directly will get the fallback.
+# Prefer calling get_supported_modes() / get_cacheable_modes() instead.)
+SUPPORTED_MODES = _BUILTIN_MODE_IDS
 CACHEABLE_MODES = {"STOIC", "ROAST", "ZEN", "DAILY"}

@@ -1,0 +1,112 @@
+{
+  "mode_id": "FITNESS",
+  "display_name": "健身计划",
+  "icon": "exercise",
+  "cacheable": false,
+  "description": "简单的居家健身训练计划",
+
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位健身教练。推荐一套简单的健身计划，用 JSON 格式输出：\n\n{{\n  \"workout_name\": \"训练名称（如：晨间拉伸、核心训练）\",\n  \"duration\": \"总时长（如：15分钟）\",\n  \"exercises\": [\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}}\n  ],\n  \"tip\": \"健康提示（30字以内）\"\n}}\n\n要求：\n1. 动作简单，适合居家训练\n2. 不需要器械\n3. 只输出 JSON，不要其他内容",
+    "output_schema": {
+      "workout_name": { "type": "string", "default": "晨间拉伸" },
+      "duration": { "type": "string", "default": "15分钟" },
+      "exercises": { "type": "array", "default": [
+        {"name": "颈部拉伸", "reps": "10次"},
+        {"name": "肩部环绕", "reps": "15次"},
+        {"name": "腰部扭转", "reps": "20次"},
+        {"name": "腿部拉伸", "reps": "30秒"},
+        {"name": "深呼吸", "reps": "5次"}
+      ]},
+      "tip": { "type": "string", "default": "运动前充分热身，避免受伤。保持规律作息，健康生活。" }
+    },
+    "temperature": 0.8,
+    "fallback": {
+      "workout_name": "晨间拉伸",
+      "duration": "15分钟",
+      "exercises": [
+        {"name": "颈部拉伸", "reps": "10次"},
+        {"name": "肩部环绕", "reps": "15次"},
+        {"name": "腰部扭转", "reps": "20次"},
+        {"name": "腿部拉伸", "reps": "30秒"},
+        {"name": "深呼吸", "reps": "5次"}
+      ],
+      "tip": "运动前充分热身，避免受伤。保持规律作息，健康生活。"
+    }
+  },
+
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "spacer", "height": 14 },
+      {
+        "type": "text",
+        "field": "workout_name",
+        "font": "noto_serif_bold",
+        "font_size": 16,
+        "align": "center"
+      },
+      {
+        "type": "text",
+        "field": "duration",
+        "font": "noto_serif_regular",
+        "font_size": 14,
+        "align": "center"
+      },
+      { "type": "spacer", "height": 2 },
+      {
+        "type": "separator",
+        "style": "solid",
+        "margin_x": 24,
+        "line_width": 1
+      },
+      {
+        "type": "icon_text",
+        "icon": "exercise",
+        "text": "训练动作",
+        "font": "noto_serif_regular",
+        "font_size": 14,
+        "margin_x": 24
+      },
+      {
+        "type": "list",
+        "field": "exercises",
+        "max_items": 8,
+        "item_template": "{name}",
+        "right_field": "reps",
+        "font": "noto_serif_regular",
+        "font_size": 13,
+        "item_spacing": 16,
+        "margin_x": 32,
+        "numbered": true
+      },
+      { "type": "spacer", "height": 4 },
+      {
+        "type": "separator",
+        "style": "solid",
+        "margin_x": 24,
+        "line_width": 1
+      },
+      {
+        "type": "section",
+        "title": "",
+        "icon": "tips",
+        "children": [
+          {
+            "type": "text",
+            "field": "tip",
+            "font": "noto_serif_light",
+            "font_size": 14,
+            "align": "left",
+            "margin_x": 40,
+            "max_lines": 3
+          }
+        ]
+      }
+    ],
+    "footer": {
+      "label": "FITNESS",
+      "attribution_template": "Stay Healthy"
+    }
+  }
+}
