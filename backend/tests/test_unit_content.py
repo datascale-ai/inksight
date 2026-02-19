@@ -23,11 +23,11 @@ class TestCleanJsonResponse:
 
     def test_fenced_json(self):
         text = '```json\n{"a":1}\n```'
-        assert _clean_json_response(text) == '{"a":1}\n'
+        assert _clean_json_response(text) == '{"a":1}'
 
     def test_fenced_no_lang(self):
         text = '```\n{"a":1}\n```'
-        assert _clean_json_response(text) == '{"a":1}\n'
+        assert _clean_json_response(text) == '{"a":1}'
 
     def test_whitespace_preserved(self):
         assert _clean_json_response("  hello  ") == "hello"
