@@ -4,7 +4,7 @@ English | [中文](README_ZH.md)
 
 > An LLM-powered smart e-ink desktop companion that delivers calm, meaningful "slow information" — your personal ink-on-paper intelligence.
 
-![Version](https://img.shields.io/badge/version-v0.9-blue)
+![Version](https://img.shields.io/badge/version-v0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)

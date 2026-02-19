@@ -4,7 +4,7 @@
 
 > 一款 LLM 驱动的智能电子墨水屏桌面伴侣，为你递送有温度的"慢信息"——纸墨之间，皆是智慧。
 
-![Version](https://img.shields.io/badge/version-v0.9-blue)
+![Version](https://img.shields.io/badge/version-v0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
