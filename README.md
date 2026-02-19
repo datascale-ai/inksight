@@ -1,27 +1,28 @@
 English | [中文](README_ZH.md)
 
-# InkSight (墨见)
+# InkSight | inco (墨鱼)
 
-> A minimalist smart e-ink desktop companion powered by LLM, delivering calm and meaningful "slow information" to your desk.
+> An LLM-powered smart e-ink desktop companion that delivers calm, meaningful "slow information" — your personal ink-on-paper intelligence.
 
 ![Version](https://img.shields.io/badge/version-v0.9-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 
-![InkSight](images/intro.jpg)
+![inco](images/intro.jpg)
 
 ---
 
 ## Overview
 
-InkSight uses a backend LLM to generate personalized content based on real-time context — weather, time of day, date, and solar terms — and displays it on a 4.2-inch e-ink screen. It supports 10 distinct content modes, from Stoic philosophy quotes to fitness plans, from tech briefings to daily recipes, bringing a thoughtful, intelligent companion to your desktop.
+**inco** (墨鱼) is a smart e-ink desktop companion built around InkSight. It uses a backend LLM to generate personalized content based on real-time context — weather, time of day, date, and solar terms — and renders it on a 4.2-inch e-ink screen. With 10 content modes ranging from Stoic philosophy to fitness plans, from tech briefings to daily recipes, inco brings a thoughtful, intelligent companion to your desk.
 
-The backend is built on the OpenAI-compatible SDK, so it works out of the box with **DeepSeek**, **Alibaba Bailian (Qwen)**, and **Moonshot (Kimi)**. Any OpenAI-compatible API provider (OpenAI, Groq, Together AI, etc.) can be used with minimal configuration.
+The backend is built on the OpenAI-compatible SDK, so it works out of the box with **DeepSeek**, **Alibaba Bailian (Qwen)**, and **Moonshot (Kimi)**. Any OpenAI-compatible API provider (OpenAI, Groq, Together AI, etc.) can be used with minimal configuration. Modes are extensible via a JSON config-driven system — create your own content modes without writing Python.
 
 **Key Features:**
 
-- **10 Content Modes** — Stoic, Roast, Zen, Daily, Briefing, ArtWall, Recipe, Fitness, Poetry, Countdown
+- **10+ Content Modes** — Stoic, Roast, Zen, Daily, Briefing, ArtWall, Recipe, Fitness, Poetry, Countdown + custom JSON modes
+- **Extensible Mode System** — Define new modes via JSON config (prompt, layout, style) without writing code
 - **4 Refresh Strategies** — Random, Sequential, Time-Bound, Smart
 - **On-Demand Refresh** — Single press for instant refresh, double press to switch mode, or trigger remotely via web
 - **Statistics Dashboard** — Device status monitoring, battery voltage trends, mode usage stats, cache hit rate
@@ -237,11 +238,18 @@ inksight/
 │   │   ├── stats_store.py  # Statistics collection and queries
 │   │   ├── context.py      # Environment context (weather/date)
 │   │   ├── content.py      # LLM content generation
+│   │   ├── json_content.py # JSON mode content generation
 │   │   ├── pipeline.py     # Unified generation pipeline
-│   │   ├── renderer.py     # Image rendering
+│   │   ├── renderer.py     # Builtin mode image rendering
+│   │   ├── json_renderer.py# JSON mode image rendering
+│   │   ├── mode_registry.py# Mode registration (builtin + JSON)
 │   │   ├── cache.py        # Caching system
 │   │   ├── schemas.py      # Pydantic request validation
-│   │   └── patterns/       # 10 content mode implementations
+│   │   ├── patterns/       # Builtin Python mode implementations
+│   │   └── modes/          # JSON mode definitions
+│   │       ├── schema/     # JSON Schema for mode validation
+│   │       ├── builtin/    # Built-in JSON modes (stoic, roast, zen, fitness, poetry)
+│   │       └── custom/     # User-defined custom JSON modes
 │   ├── scripts/            # Utility scripts
 │   │   └── setup_fonts.py  # Font download script
 │   ├── fonts/              # Font files (downloaded via script)
@@ -257,7 +265,7 @@ inksight/
 │   │   ├── display.cpp     # E-ink display logic
 │   │   ├── storage.cpp     # NVS storage
 │   │   └── portal.cpp      # Captive Portal provisioning
-│   ├── data/portal.h       # Provisioning page HTML
+│   ├── data/portal_html.h  # Provisioning page HTML
 │   └── platformio.ini      # PlatformIO configuration
 ├── web/                    # Web frontend
 │   ├── config.html         # Configuration manager
@@ -286,8 +294,8 @@ inksight/
 - [x] Enhanced Preview console (request cancellation, history, rate limiting, resolution simulation)
 - [x] Statistics dashboard (device monitoring + usage stats + chart visualization)
 - [x] RSSI signal strength reporting
+- [x] Extensible mode system (JSON config-driven custom modes)
 - [ ] Multi-resolution display support (backend rendering adaptation)
-- [ ] Extensible mode system (JSON config-driven)
 - [ ] User-provided API keys
 - [ ] One-click Vercel deployment
 - [ ] Hardware productization (PCB design)

@@ -89,8 +89,8 @@ hr.dv{border:none;border-top:1px dashed var(--bd);margin:20px 0}
 <div class="card">
 <div class="hdr">
 <div class="logo">墨</div>
-<h1>InkSight <span style="font-weight:400;font-size:.85em">墨见</span></h1>
-<p>你的桌面哲学伴侣</p>
+<h1>InkSight <span style="font-weight:400;font-size:.85em">墨鱼</span></h1>
+<p>你的智能墨水屏桌面伴侣</p>
 </div>
 
 <div class="steps">

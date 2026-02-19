@@ -1,34 +1,33 @@
 [English](README.md) | 中文
 
-# InkSight (墨见)
+# InkSight | inco (墨鱼)
 
-> A minimalist smart e-ink desktop companion powered by LLM, delivering calm and meaningful "slow information" to your desk.
-
-> 一款极简主义的智能电子墨水屏桌面摆件，通过 LLM 生成有温度的"慢信息"。
+> 一款 LLM 驱动的智能电子墨水屏桌面伴侣，为你递送有温度的"慢信息"——纸墨之间，皆是智慧。
 
 ![Version](https://img.shields.io/badge/version-v0.9-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 
-![InkSight](images/intro.jpg)
+![inco](images/intro.jpg)
 
 ---
 
 ## 项目简介
 
-InkSight 通过后端 LLM（DeepSeek / 通义千问 / Kimi）生成基于当前环境（天气、时间、日期、节气）的个性化内容，在 4.2 英寸电子墨水屏上展示。支持 10 种不同的内容模式，从哲学语录到健身计划，从科技简报到每日食谱，为你的桌面带来有温度的智能陪伴。
+**墨鱼**（inco）是基于 InkSight 构建的智能墨水屏桌面伴侣。通过后端 LLM（DeepSeek / 通义千问 / Kimi）生成基于当前环境（天气、时间、日期、节气）的个性化内容，在 4.2 英寸电子墨水屏上展示。支持 10 种内容模式，从哲学语录到健身计划，从科技简报到每日食谱，为你的桌面带来有温度的智能陪伴。模式系统支持 JSON 配置驱动扩展——无需编写 Python 即可创建自定义内容模式。
 
 **核心特点：**
 
-- **10 种内容模式** — 斯多葛哲学、毒舌吐槽、禅意、每日推荐、AI 简报、AI 画廊、食谱、健身、诗词、倒计时
+- **10+ 种内容模式** — 斯多葛哲学、毒舌吐槽、禅意、每日推荐、AI 简报、AI 画廊、食谱、健身、诗词、倒计时 + 自定义 JSON 模式
+- **模式可扩展** — 通过 JSON 配置定义新模式（提示词、布局、样式），无需编写代码
 - **4 种刷新策略** — 随机轮换、循环轮换、时段绑定、智能模式
 - **按需刷新** — 短按按钮立即刷新，双击切换下一个模式，Web 端远程触发
 - **统计仪表板** — 设备状态监控、电池电压趋势、模式使用统计、缓存命中率
 - **WiFi 配网** — Captive Portal 自动弹出配置页面，零门槛
 - **在线配置** — Web 界面管理所有设置，支持配置导入/导出、预览效果、历史配置
 - **智能缓存** — 批量预生成内容，响应时间 < 1 秒
-- **多 LLM 支持** — DeepSeek、阿里百炼、月之暗面
+- **多 LLM 支持** — DeepSeek、阿里百炼、月之暗面，及任何 OpenAI 兼容 API
 - **超低功耗** — Deep Sleep 模式，单次充电续航 3-6 个月
 
 ---
@@ -238,11 +237,18 @@ inksight/
 │   │   ├── stats_store.py  # 统计数据采集与查询
 │   │   ├── context.py      # 环境上下文 (天气/日期)
 │   │   ├── content.py      # LLM 内容生成
+│   │   ├── json_content.py # JSON 模式内容生成
 │   │   ├── pipeline.py     # 统一生成管线
-│   │   ├── renderer.py     # 图像渲染
+│   │   ├── renderer.py     # 内置模式图像渲染
+│   │   ├── json_renderer.py# JSON 模式图像渲染
+│   │   ├── mode_registry.py# 模式注册（内置 + JSON）
 │   │   ├── cache.py        # 缓存系统
 │   │   ├── schemas.py      # Pydantic 请求校验
-│   │   └── patterns/       # 10 种内容模式实现
+│   │   ├── patterns/       # 内置 Python 模式实现
+│   │   └── modes/          # JSON 模式定义
+│   │       ├── schema/     # 模式验证 JSON Schema
+│   │       ├── builtin/    # 内置 JSON 模式 (stoic, roast, zen, fitness, poetry)
+│   │       └── custom/     # 用户自定义 JSON 模式
 │   ├── scripts/            # 工具脚本
 │   │   └── setup_fonts.py  # 字体下载脚本
 │   ├── fonts/              # 字体文件 (需通过脚本下载)
@@ -258,7 +264,7 @@ inksight/
 │   │   ├── display.cpp     # 墨水屏显示逻辑
 │   │   ├── storage.cpp     # NVS 存储
 │   │   └── portal.cpp      # Captive Portal 配网
-│   ├── data/portal.h       # 配网页面 HTML
+│   ├── data/portal_html.h  # 配网页面 HTML
 │   └── platformio.ini      # PlatformIO 配置
 ├── web/                    # Web 前端
 │   ├── config.html         # 配置管理页面
@@ -287,8 +293,8 @@ inksight/
 - [x] Preview 控制台增强（请求取消、历史记录、限速、分辨率模拟）
 - [x] 统计仪表板（设备监控 + 使用统计 + 图表可视化）
 - [x] RSSI 信号强度上报
+- [x] 模式可扩展化系统（JSON 配置驱动自定义模式）
 - [ ] 支持不同屏幕分辨率（后端渲染适配）
-- [ ] 模式可扩展化系统 (JSON 配置驱动)
 - [ ] 用户自定义 API Key
 - [ ] Vercel 一键部署
 - [ ] 硬件产品化 (PCB 设计)
