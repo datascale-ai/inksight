@@ -32,6 +32,8 @@
 | `mac` | `string` | 否 | `A1:B2:C3:D4` | 设备 MAC 地址 |
 | `persona` | `string` | 否 | `鲁迅` | 强制指定角色语气 |
 | `rssi` | `int` | 否 | `-65` | WiFi 信号强度 (dBm) |
+| `w` | `int` | 否 | `400` | 屏幕宽度 (100-1600)，默认 400 |
+| `h` | `int` | 否 | `300` | 屏幕高度 (100-1200)，默认 300 |
 
 #### 响应
 
@@ -46,7 +48,11 @@
 #### 示例
 
 ```bash
+# 默认分辨率 (400x300)
 curl -X GET "https://your-url.vercel.app/api/render?v=3.20&mac=test_device" --output screen.bmp
+
+# 自定义分辨率 (800x480)
+curl -X GET "https://your-url.vercel.app/api/render?v=3.20&mac=test_device&w=800&h=480" --output screen.bmp
 ```
 
 ---

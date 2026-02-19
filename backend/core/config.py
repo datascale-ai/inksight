@@ -4,8 +4,8 @@ InkSight 配置文件
 """
 
 # ==================== 屏幕配置 ====================
-SCREEN_WIDTH = 400
-SCREEN_HEIGHT = 300
+SCREEN_WIDTH = 400   # Default; overridable per-request via w/h query params
+SCREEN_HEIGHT = 300  # Default; overridable per-request via w/h query params
 
 # 墨水屏颜色（1-bit 黑白）
 EINK_BACKGROUND = 1  # 白色

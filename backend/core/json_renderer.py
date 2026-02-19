@@ -11,9 +11,8 @@ from typing import Any
 
 from PIL import Image, ImageDraw
 
+from .config import SCREEN_WIDTH, SCREEN_HEIGHT
 from .patterns.utils import (
-    SCREEN_W,
-    SCREEN_H,
     EINK_BG,
     EINK_FG,
     draw_status_bar,
@@ -29,7 +28,6 @@ from .patterns.utils import (
 logger = logging.getLogger(__name__)
 
 STATUS_BAR_BOTTOM = 36
-FOOTER_TOP = SCREEN_H - 30
 
 
 @dataclass
@@ -38,9 +36,19 @@ class RenderContext:
     draw: ImageDraw.ImageDraw
     img: Image.Image
     content: dict
+    screen_w: int = SCREEN_WIDTH
+    screen_h: int = SCREEN_HEIGHT
     y: int = STATUS_BAR_BOTTOM
     x_offset: int = 0
-    available_width: int = SCREEN_W
+    available_width: int = SCREEN_WIDTH
+
+    def __post_init__(self):
+        if self.available_width == SCREEN_WIDTH and self.screen_w != SCREEN_WIDTH:
+            self.available_width = self.screen_w
+
+    @property
+    def footer_top(self) -> int:
+        return self.screen_h - 30
 
     def resolve(self, template: str) -> str:
         """Resolve {field} placeholders against content dict."""
@@ -57,7 +65,7 @@ class RenderContext:
 
     @property
     def remaining_height(self) -> int:
-        return FOOTER_TOP - self.y
+        return self.footer_top - self.y
 
 
 # ── Public API ───────────────────────────────────────────────
@@ -72,9 +80,11 @@ def render_json_mode(
     battery_pct: float,
     weather_code: int = -1,
     time_str: str = "",
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ) -> Image.Image:
     """Render a JSON-defined mode to a 1-bit e-ink image."""
-    img = Image.new("1", (SCREEN_W, SCREEN_H), EINK_BG)
+    img = Image.new("1", (screen_w, screen_h), EINK_BG)
     draw = ImageDraw.Draw(img)
     layout = mode_def.get("layout", {})
 
@@ -85,10 +95,17 @@ def render_json_mode(
         line_width=sb.get("line_width", 1),
         dashed=sb.get("dashed", False),
         time_str=time_str,
+        screen_w=screen_w, screen_h=screen_h,
     )
 
+    footer_top = screen_h - 30
+
     # 2. Body blocks
-    ctx = RenderContext(draw=draw, img=img, content=content, y=STATUS_BAR_BOTTOM)
+    ctx = RenderContext(
+        draw=draw, img=img, content=content,
+        screen_w=screen_w, screen_h=screen_h,
+        y=STATUS_BAR_BOTTOM,
+    )
 
     body = layout.get("body", [])
     _has_vcenter = any(
@@ -99,7 +116,7 @@ def render_json_mode(
         _render_centered_text(ctx, body[0], use_full_body=True)
     else:
         for block in body:
-            if ctx.y >= FOOTER_TOP - 10:
+            if ctx.y >= footer_top - 10:
                 break
             _render_block(ctx, block)
 
@@ -112,6 +129,7 @@ def render_json_mode(
         line_width=ft.get("line_width", 1),
         dashed=ft.get("dashed", False),
         attr_font_size=ft.get("font_size"),
+        screen_w=screen_w, screen_h=screen_h,
     )
 
     return img
@@ -156,13 +174,13 @@ def _render_centered_text(ctx: RenderContext, block: dict, *, use_full_body: boo
             font_key = "noto_serif_light"
         font = load_font(font_key, font_size)
 
-    max_w = int(SCREEN_W * max_ratio)
+    max_w = int(ctx.screen_w * max_ratio)
     lines = wrap_text(text, font, max_w)
     line_h = font_size + line_spacing
     total_h = len(lines) * line_h
 
     if use_full_body and block.get("vertical_center", True):
-        body_height = FOOTER_TOP - STATUS_BAR_BOTTOM
+        body_height = ctx.footer_top - STATUS_BAR_BOTTOM
         y_start = STATUS_BAR_BOTTOM + (body_height - total_h) // 2
     else:
         y_start = ctx.y
@@ -170,7 +188,7 @@ def _render_centered_text(ctx: RenderContext, block: dict, *, use_full_body: boo
     for i, line in enumerate(lines):
         bbox = font.getbbox(line)
         lw = bbox[2] - bbox[0]
-        x = (SCREEN_W - lw) // 2
+        x = (ctx.screen_w - lw) // 2
         ctx.draw.text((x, y_start + i * line_h), line, fill=EINK_FG, font=font)
 
     ctx.y = y_start + total_h + 4
@@ -198,19 +216,19 @@ def _render_text(ctx: RenderContext, block: dict) -> None:
     align = block.get("align", "center")
     margin_x = block.get("margin_x", 24)
     max_lines = block.get("max_lines", 3)
-    max_w = SCREEN_W - margin_x * 2
+    max_w = ctx.screen_w - margin_x * 2
 
     lines = wrap_text(text, font, max_w)
 
     for line in lines[:max_lines]:
-        if ctx.y >= FOOTER_TOP - 10:
+        if ctx.y >= ctx.footer_top - 10:
             break
         bbox = font.getbbox(line)
         lw = bbox[2] - bbox[0]
         if align == "center":
-            x = (SCREEN_W - lw) // 2
+            x = (ctx.screen_w - lw) // 2
         elif align == "right":
-            x = SCREEN_W - margin_x - lw
+            x = ctx.screen_w - margin_x - lw
         else:
             x = margin_x
         ctx.draw.text((x, ctx.y), line, fill=EINK_FG, font=font)
@@ -224,13 +242,13 @@ def _render_separator(ctx: RenderContext, block: dict) -> None:
 
     if style == "short":
         w = block.get("width", 60)
-        x0 = (SCREEN_W - w) // 2
+        x0 = (ctx.screen_w - w) // 2
         ctx.draw.line([(x0, ctx.y), (x0 + w, ctx.y)], fill=EINK_FG, width=line_width)
     elif style == "dashed":
-        draw_dashed_line(ctx.draw, (margin_x, ctx.y), (SCREEN_W - margin_x, ctx.y),
+        draw_dashed_line(ctx.draw, (margin_x, ctx.y), (ctx.screen_w - margin_x, ctx.y),
                          fill=EINK_FG, width=line_width)
     else:
-        ctx.draw.line([(margin_x, ctx.y), (SCREEN_W - margin_x, ctx.y)],
+        ctx.draw.line([(margin_x, ctx.y), (ctx.screen_w - margin_x, ctx.y)],
                       fill=EINK_FG, width=line_width)
     ctx.y += 8 + line_width
 
@@ -256,7 +274,7 @@ def _render_section(ctx: RenderContext, block: dict) -> None:
     ctx.y += title_font_size + 6
 
     for child in block.get("children", []):
-        if ctx.y >= FOOTER_TOP - 10:
+        if ctx.y >= ctx.footer_top - 10:
             break
         _render_block(ctx, child)
 
@@ -281,7 +299,7 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
     font = load_font(_pick_cjk_font(font_key), font_size)
 
     for i, item in enumerate(items[:max_items]):
-        if ctx.y >= FOOTER_TOP - 10:
+        if ctx.y >= ctx.footer_top - 10:
             break
 
         if isinstance(item, dict):
@@ -298,14 +316,14 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
             text = f"{i + 1}. {text}"
         text = text.replace("{index}", str(i + 1))
 
-        max_text_w = SCREEN_W - margin_x * 2 if not right_field else SCREEN_W - margin_x - 80
+        max_text_w = ctx.screen_w - margin_x * 2 if not right_field else ctx.screen_w - margin_x - 80
         lines = wrap_text(text, font, max_text_w)
 
         if align == "center":
             for ln in lines[:1]:
                 bbox = font.getbbox(ln)
                 lw = bbox[2] - bbox[0]
-                ctx.draw.text(((SCREEN_W - lw) // 2, ctx.y), ln, fill=EINK_FG, font=font)
+                ctx.draw.text(((ctx.screen_w - lw) // 2, ctx.y), ln, fill=EINK_FG, font=font)
         else:
             for ln in lines[:1]:
                 ctx.draw.text((margin_x, ctx.y), ln, fill=EINK_FG, font=font)
@@ -313,7 +331,7 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
         if right_field and isinstance(item, dict):
             rv = str(item.get(right_field, ""))
             if rv:
-                ctx.draw.text((SCREEN_W - 80, ctx.y), rv, fill=EINK_FG, font=font)
+                ctx.draw.text((ctx.screen_w - 80, ctx.y), rv, fill=EINK_FG, font=font)
 
         ctx.y += spacing
 
@@ -321,7 +339,7 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
 def _render_vertical_stack(ctx: RenderContext, block: dict) -> None:
     spacing = block.get("spacing", 0)
     for child in block.get("children", []):
-        if ctx.y >= FOOTER_TOP - 10:
+        if ctx.y >= ctx.footer_top - 10:
             break
         _render_block(ctx, child)
         ctx.y += spacing

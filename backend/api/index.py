@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from core.config import (
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
     DEFAULT_CITY,
     DEFAULT_MODES,
 )
@@ -166,7 +168,11 @@ async def _resolve_mode(
 # ── Main orchestrator ────────────────────────────────────────
 
 
-async def _build_image(v: float, mac: str | None, persona_override: str | None = None, rssi: int | None = None):
+async def _build_image(
+    v: float, mac: str | None, persona_override: str | None = None,
+    rssi: int | None = None,
+    screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+):
     battery_pct = calc_battery_pct(v)
 
     config = None
@@ -178,8 +184,8 @@ async def _build_image(v: float, mac: str | None, persona_override: str | None =
     # Try cache first
     cache_hit = False
     if mac and config:
-        await content_cache.check_and_regenerate_all(mac, config, v)
-        cached_img = await content_cache.get(mac, persona, config)
+        await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h)
+        cached_img = await content_cache.get(mac, persona, config, screen_w=screen_w, screen_h=screen_h)
         if cached_img:
             logger.info(f"[CACHE HIT] {mac}:{persona} - Returning cached image")
             cache_hit = True
@@ -188,19 +194,19 @@ async def _build_image(v: float, mac: str | None, persona_override: str | None =
             logger.info(f"[CACHE MISS] {mac}:{persona} - Generating fallback content")
 
     if not cache_hit:
-        # Cache miss — generate now
         city = config.get("city", DEFAULT_CITY) if config else None
         date_ctx, weather = await asyncio.gather(
             get_date_context(),
             get_weather(city=city),
         )
-        img = await generate_and_render(persona, config, date_ctx, weather, battery_pct)
+        img = await generate_and_render(
+            persona, config, date_ctx, weather, battery_pct,
+            screen_w=screen_w, screen_h=screen_h,
+        )
 
-        # Store in cache
         if mac and config:
-            await content_cache.set(mac, persona, img)
+            await content_cache.set(mac, persona, img, screen_w, screen_h)
 
-    # Update device state
     if mac:
         await update_device_state(
             mac,
@@ -235,24 +241,26 @@ async def render(
     mac: str | None = Query(default=None, description="Device MAC address"),
     persona: str | None = Query(default=None, description="Force persona"),
     rssi: int | None = Query(default=None, description="WiFi RSSI (dBm)"),
+    w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
+    h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
     start_time = time.time()
-    logger.debug(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}")
+    logger.debug(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}, size={w}x{h}")
 
     try:
-        img, resolved_persona, cache_hit = await _build_image(v, mac, persona, rssi)
+        img, resolved_persona, cache_hit = await _build_image(
+            v, mac, persona, rssi, screen_w=w, screen_h=h,
+        )
         bmp_bytes = image_to_bmp_bytes(img)
         elapsed = time.time() - start_time
         elapsed_ms = int(elapsed * 1000)
         logger.info(
-            f"[RENDER] ✓ Success in {elapsed:.2f}s - Generated BMP: {len(bmp_bytes)} bytes for {mac}:{resolved_persona}"
+            f"[RENDER] ✓ Success in {elapsed:.2f}s - Generated BMP: {len(bmp_bytes)} bytes for {mac}:{resolved_persona} ({w}x{h})"
         )
 
-        # Log stats
         if mac:
             await _log_render(mac, resolved_persona, cache_hit, elapsed_ms, v, rssi)
 
-        # Check pending refresh - set header hint for firmware
         headers = {}
         if mac:
             was_pending = await consume_pending_refresh(mac)
@@ -266,7 +274,7 @@ async def render(
         logger.exception("Exception occurred during render")
         if mac:
             await _log_render(mac, persona or "unknown", False, int(elapsed * 1000), v, rssi, status="error")
-        err_img = render_error(mac=mac or "unknown")
+        err_img = render_error(mac=mac or "unknown", screen_w=w, screen_h=h)
         return Response(
             content=image_to_bmp_bytes(err_img), media_type="image/bmp", status_code=500
         )
@@ -277,15 +285,19 @@ async def preview(
     v: float = Query(default=3.3, description="Battery voltage"),
     mac: str | None = Query(default=None, description="Device MAC address"),
     persona: str | None = Query(default=None, description="Force persona"),
+    w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
+    h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
     try:
-        img, resolved_persona, cache_hit = await _build_image(v, mac, persona)
+        img, resolved_persona, cache_hit = await _build_image(
+            v, mac, persona, screen_w=w, screen_h=h,
+        )
         png_bytes = image_to_png_bytes(img)
-        logger.info(f"[PREVIEW] Generated PNG: {len(png_bytes)} bytes, persona={resolved_persona}")
+        logger.info(f"[PREVIEW] Generated PNG: {len(png_bytes)} bytes, persona={resolved_persona} ({w}x{h})")
         return Response(content=png_bytes, media_type="image/png")
     except Exception:
         logger.exception("Exception occurred during preview")
-        err_img = render_error(mac=mac or "unknown")
+        err_img = render_error(mac=mac or "unknown", screen_w=w, screen_h=h)
         return Response(
             content=image_to_png_bytes(err_img), media_type="image/png", status_code=500
         )

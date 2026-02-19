@@ -28,6 +28,8 @@ def render_briefing(
     v2ex_items: list[dict] | None = None,
     weather_code: int = -1,
     time_str: str = "",
+    screen_w: int = SCREEN_W,
+    screen_h: int = SCREEN_H,
 ) -> Image.Image:
     """
     渲染 BRIEFING 模式
@@ -38,11 +40,12 @@ def render_briefing(
         insight: 行业洞察
         v2ex_items: V2EX 热帖列表 [{"title": str, "node": str}, ...]
     """
-    img = Image.new("1", (SCREEN_W, SCREEN_H), EINK_BG)
+    img = Image.new("1", (screen_w, screen_h), EINK_BG)
     draw = ImageDraw.Draw(img)
 
     draw_status_bar(
-        draw, img, date_str, weather_str, battery_pct, weather_code, time_str=time_str
+        draw, img, date_str, weather_str, battery_pct, weather_code,
+        time_str=time_str, screen_w=screen_w, screen_h=screen_h,
     )
 
     font_cn = load_font("noto_serif_regular", 12)
@@ -50,9 +53,9 @@ def render_briefing(
 
     y = 40
 
-    draw.text((24, y), "AI\u7b80\u62a5", fill=EINK_FG, font=font_cn)
+    draw.text((24, y), "AI简报", fill=EINK_FG, font=font_cn)
     y += 16
-    draw.line([(24, y), (SCREEN_W - 24, y)], fill=EINK_FG, width=1)
+    draw.line([(24, y), (screen_w - 24, y)], fill=EINK_FG, width=1)
     y += 20
 
     # ── Hacker News TOP 2 ──
@@ -64,7 +67,7 @@ def render_briefing(
 
     for i, item in enumerate(hn_items[:2], 1):
         title = item.get("summary") or item.get("title", "")
-        title_lines = wrap_text(f"{i}. {title}", font_cn, SCREEN_W - 56)
+        title_lines = wrap_text(f"{i}. {title}", font_cn, screen_w - 56)
         for line in title_lines[:2]:
             draw.text((32, y), line, fill=EINK_FG, font=font_cn)
             y += 15
@@ -72,38 +75,38 @@ def render_briefing(
     # ── V2EX Hot ──
     if v2ex_items:
         y += 6
-        for x in range(24, SCREEN_W - 24, 6):
-            draw.line([(x, y), (min(x + 3, SCREEN_W - 24), y)], fill=EINK_FG, width=1)
+        for x in range(24, screen_w - 24, 6):
+            draw.line([(x, y), (min(x + 3, screen_w - 24), y)], fill=EINK_FG, width=1)
         y += 10
 
-        draw.text((24, y), "V2EX \u70ed\u8bae", fill=EINK_FG, font=font_cn)
+        draw.text((24, y), "V2EX 热议", fill=EINK_FG, font=font_cn)
         y += 18
         for item in v2ex_items[:1]:
             v_title = item.get("title", "")
             node = item.get("node", "")
             prefix = f"[{node}] " if node else ""
-            v_lines = wrap_text(f"{prefix}{v_title}", font_cn, SCREEN_W - 56)
+            v_lines = wrap_text(f"{prefix}{v_title}", font_cn, screen_w - 56)
             for line in v_lines[:2]:
                 draw.text((32, y), line, fill=EINK_FG, font=font_cn)
                 y += 15
 
     y += 6
-    for x in range(24, SCREEN_W - 24, 6):
-        draw.line([(x, y), (min(x + 3, SCREEN_W - 24), y)], fill=EINK_FG, width=1)
+    for x in range(24, screen_w - 24, 6):
+        draw.line([(x, y), (min(x + 3, screen_w - 24), y)], fill=EINK_FG, width=1)
     y += 10
 
     # ── Product Hunt ──
     flag_icon = load_icon("flag", size=(20, 20))
     if flag_icon:
         img.paste(flag_icon, (20, y - 2))
-    draw.text((40, y), "Product Hunt \u4eca\u65e5\u63a8\u8350", fill=EINK_FG, font=font_cn)
+    draw.text((40, y), "Product Hunt 今日推荐", fill=EINK_FG, font=font_cn)
     y += 22
 
     if ph_item:
         name = ph_item.get("name", "N/A")
         tagline = ph_item.get("tagline", "")
         content = f"{name}: {tagline}" if tagline else name
-        content_lines = wrap_text(content, font_cn, SCREEN_W - 56)
+        content_lines = wrap_text(content, font_cn, screen_w - 56)
         for line in content_lines[:2]:
             draw.text((32, y), line, fill=EINK_FG, font=font_cn)
             y += 15
@@ -114,14 +117,16 @@ def render_briefing(
     if insight:
         draw.text((24, y), "AI Insight", fill=EINK_FG, font=font_en)
         y += 18
-        insight_lines = wrap_text(insight, font_cn, SCREEN_W - 56)
+        insight_lines = wrap_text(insight, font_cn, screen_w - 56)
         for line in insight_lines:
-            if y > SCREEN_H - 35:
+            if y > screen_h - 35:
                 break
             draw.text((32, y), line, fill=EINK_FG, font=font_cn)
             y += 15
 
-    draw_footer(draw, img, "BRIEFING", "via HN / V2EX / PH")
+    draw_footer(
+        draw, img, "BRIEFING", "via HN / V2EX / PH",
+        screen_w=screen_w, screen_h=screen_h,
+    )
 
     return img
-

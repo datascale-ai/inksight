@@ -13,9 +13,18 @@
 #define PIN_BAT_ADC    0   // Battery voltage ADC
 #define PIN_CFG_BTN    9   // GPIO9 (BOOT button) - hold to force config portal
 
-// ── Display constants (4.2" E-Paper, 400x300, 1-bit) ────────
-static const int W = 400;
-static const int H = 300;
+// ── Display constants ────────────────────────────────────────
+// Default for 4.2" E-Paper (400x300, 1-bit).
+// Override via build flags: -D EPD_WIDTH=800 -D EPD_HEIGHT=480
+#ifndef EPD_WIDTH
+#define EPD_WIDTH  400
+#endif
+#ifndef EPD_HEIGHT
+#define EPD_HEIGHT 300
+#endif
+
+static const int W = EPD_WIDTH;
+static const int H = EPD_HEIGHT;
 static const int ROW_BYTES   = W / 8;
 static const int ROW_STRIDE  = (ROW_BYTES + 3) & ~3;  // BMP row stride (4-byte aligned)
 static const int IMG_BUF_LEN = ROW_BYTES * H;

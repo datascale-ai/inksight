@@ -8,6 +8,8 @@ import logging
 from PIL import Image
 
 from .config import (
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
     DEFAULT_LLM_PROVIDER,
     DEFAULT_LLM_MODEL,
     DEFAULT_LANGUAGE,
@@ -23,6 +25,8 @@ async def generate_and_render(
     date_ctx: dict,
     weather: dict,
     battery_pct: float,
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ) -> Image.Image:
     """Generate content for a persona and render to an e-ink image.
 
@@ -41,6 +45,7 @@ async def generate_and_render(
         persona, content,
         date_str=date_str, weather_str=weather_str, battery_pct=battery_pct,
         weather_code=weather_code, time_str=time_str, date_ctx=date_ctx,
+        screen_w=screen_w, screen_h=screen_h,
     )
 
 
@@ -167,6 +172,8 @@ def _render_for_persona(
     weather_code: int = -1,
     time_str: str = "",
     date_ctx: dict | None = None,
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ) -> Image.Image:
     """Dispatch rendering to the appropriate handler."""
     from .mode_registry import get_registry
@@ -182,6 +189,7 @@ def _render_for_persona(
             jm.definition, content,
             date_str=date_str, weather_str=weather_str, battery_pct=battery_pct,
             weather_code=weather_code, time_str=time_str,
+            screen_w=screen_w, screen_h=screen_h,
         )
 
     # Builtin Python mode - use original render_mode dispatcher
@@ -189,4 +197,5 @@ def _render_for_persona(
         persona, content,
         date_str=date_str, weather_str=weather_str, battery_pct=battery_pct,
         weather_code=weather_code, time_str=time_str, date_ctx=date_ctx,
+        screen_w=screen_w, screen_h=screen_h,
     )

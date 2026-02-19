@@ -9,6 +9,8 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 from .config import (
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
     DEFAULT_CITY,
     DEFAULT_MODES,
     get_cacheable_modes,
@@ -22,8 +24,13 @@ class ContentCache:
         self._cache: dict[str, tuple[Image.Image, datetime]] = {}
         self._lock = asyncio.Lock()
 
-    def _get_cache_key(self, mac: str, persona: str) -> str:
-        return f"{mac}:{persona}"
+    def _get_cache_key(
+        self, mac: str, persona: str,
+        screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+    ) -> str:
+        if screen_w == SCREEN_WIDTH and screen_h == SCREEN_HEIGHT:
+            return f"{mac}:{persona}"
+        return f"{mac}:{persona}:{screen_w}x{screen_h}"
 
     def _get_ttl_minutes(self, config: dict) -> int:
         """Calculate cache TTL based on refresh interval and number of modes"""
@@ -32,17 +39,17 @@ class ContentCache:
         cacheable = get_cacheable_modes()
         mode_count = len([m for m in modes if m in cacheable])
 
-        # TTL = refresh_interval × mode_count (complete one cycle)
-        # Add 10% buffer to avoid edge cases
         ttl_minutes = int(refresh_interval * mode_count * 1.1)
         return ttl_minutes
 
     async def get(
-        self, mac: str, persona: str, config: dict, ttl_minutes: int | None = None
+        self, mac: str, persona: str, config: dict,
+        ttl_minutes: int | None = None,
+        screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> Optional[Image.Image]:
         """Get cached image if available and not expired"""
         async with self._lock:
-            key = self._get_cache_key(mac, persona)
+            key = self._get_cache_key(mac, persona, screen_w, screen_h)
             if key in self._cache:
                 img, timestamp = self._cache[key]
                 if ttl_minutes is None:
@@ -54,14 +61,18 @@ class ContentCache:
                     del self._cache[key]
             return None
 
-    async def set(self, mac: str, persona: str, img: Image.Image):
+    async def set(
+        self, mac: str, persona: str, img: Image.Image,
+        screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+    ):
         """Store image in cache"""
         async with self._lock:
-            key = self._get_cache_key(mac, persona)
+            key = self._get_cache_key(mac, persona, screen_w, screen_h)
             self._cache[key] = (img, datetime.now())
 
     async def check_and_regenerate_all(
-        self, mac: str, config: dict, v: float = 3.3
+        self, mac: str, config: dict, v: float = 3.3,
+        screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> bool:
         """Check if all modes are cached, if not, regenerate all modes"""
         cacheable = get_cacheable_modes()
@@ -79,7 +90,7 @@ class ContentCache:
 
         needs_regeneration = False
         for persona in modes:
-            cached = await self.get(mac, persona, config, ttl_minutes)
+            cached = await self.get(mac, persona, config, ttl_minutes, screen_w, screen_h)
             if not cached:
                 needs_regeneration = True
                 logger.debug(f"[CACHE] {mac}:{persona} missing or expired")
@@ -90,11 +101,12 @@ class ContentCache:
             return True
 
         logger.info(f"[CACHE] Regenerating all {len(modes)} modes for {mac}...")
-        await self._generate_all_modes(mac, config, modes, v)
+        await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h)
         return True
 
     async def _generate_all_modes(
-        self, mac: str, config: dict, modes: list[str], v: float
+        self, mac: str, config: dict, modes: list[str], v: float,
+        screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ):
         """Generate and cache all modes"""
         battery_pct = calc_battery_pct(v)
@@ -106,7 +118,10 @@ class ContentCache:
         )
 
         tasks = [
-            self._generate_single_mode(mac, persona, battery_pct, config, date_ctx, weather)
+            self._generate_single_mode(
+                mac, persona, battery_pct, config, date_ctx, weather,
+                screen_w, screen_h,
+            )
             for persona in modes
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -122,16 +137,19 @@ class ContentCache:
         config: dict,
         date_ctx: dict,
         weather: dict,
+        screen_w: int = SCREEN_WIDTH,
+        screen_h: int = SCREEN_HEIGHT,
     ) -> bool:
         """Generate and cache a single mode via the unified pipeline."""
         try:
             logger.info(f"[CACHE] Generating {mac}:{persona}...")
 
             img = await generate_and_render(
-                persona, config, date_ctx, weather, battery_pct
+                persona, config, date_ctx, weather, battery_pct,
+                screen_w=screen_w, screen_h=screen_h,
             )
 
-            await self.set(mac, persona, img)
+            await self.set(mac, persona, img, screen_w, screen_h)
             logger.info(f"[CACHE] ✓ {mac}:{persona}")
             return True
 

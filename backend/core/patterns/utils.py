@@ -129,6 +129,8 @@ def draw_status_bar(
     line_width: int = 1,
     dashed: bool = False,
     time_str: str = "",
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ):
     """绘制顶部状态栏"""
     font_cn = load_font("noto_serif_extralight", FONT_SIZES["status_bar"]["cn"])
@@ -142,7 +144,7 @@ def draw_status_bar(
         x += (bbox_time[2] - bbox_time[0]) + 8
     draw.text((x, y), date_str, fill=EINK_FG, font=font_cn)
 
-    wx = SCREEN_W // 2 - 28
+    wx = screen_w // 2 - 28
     weather_icon = get_weather_icon(weather_code) if weather_code >= 0 else None
     if weather_icon:
         img.paste(weather_icon, (wx, y - 1))
@@ -154,7 +156,7 @@ def draw_status_bar(
     bbox = draw.textbbox((0, 0), batt_text, font=font_en)
     batt_text_w = bbox[2] - bbox[0]
 
-    bx = SCREEN_W - 12 - batt_text_w - 6 - 26
+    bx = screen_w - 12 - batt_text_w - 6 - 26
     by = y + 1
     draw.rectangle([bx, by, bx + 22, by + 11], outline=EINK_FG, width=1)
     draw.rectangle([bx + 22, by + 3, bx + 24, by + 8], fill=EINK_FG)
@@ -165,9 +167,9 @@ def draw_status_bar(
     draw.text((bx + 28, y), batt_text, fill=EINK_FG, font=font_en)
 
     if dashed:
-        draw_dashed_line(draw, (0, 32), (SCREEN_W, 32), fill=EINK_FG, width=line_width)
+        draw_dashed_line(draw, (0, 32), (screen_w, 32), fill=EINK_FG, width=line_width)
     else:
-        draw.line([(0, 32), (SCREEN_W, 32)], fill=EINK_FG, width=line_width)
+        draw.line([(0, 32), (screen_w, 32)], fill=EINK_FG, width=line_width)
 
 
 def has_cjk(text: str) -> bool:
@@ -184,18 +186,20 @@ def draw_footer(
     dashed: bool = False,
     attr_font: str | None = None,
     attr_font_size: int | None = None,
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ):
     """绘制底部页脚"""
     if attr_font_size is None:
         attr_font_size = FONT_SIZES["footer"]["attribution"]
 
-    y_line = SCREEN_H - 30
+    y_line = screen_h - 30
     if dashed:
         draw_dashed_line(
-            draw, (0, y_line), (SCREEN_W, y_line), fill=EINK_FG, width=line_width
+            draw, (0, y_line), (screen_w, y_line), fill=EINK_FG, width=line_width
         )
     else:
-        draw.line([(0, y_line), (SCREEN_W, y_line)], fill=EINK_FG, width=line_width)
+        draw.line([(0, y_line), (screen_w, y_line)], fill=EINK_FG, width=line_width)
 
     font_label = load_font("inter_medium", FONT_SIZES["footer"]["label"])
     if attr_font:
@@ -218,7 +222,7 @@ def draw_footer(
     if attribution:
         bbox = draw.textbbox((0, 0), attribution, font=font_attr)
         draw.text(
-            (SCREEN_W - 12 - (bbox[2] - bbox[0]), y_line + 9),
+            (screen_w - 12 - (bbox[2] - bbox[0]), y_line + 9),
             attribution,
             fill=EINK_FG,
             font=font_attr,
@@ -246,18 +250,23 @@ def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[s
 
 
 def render_quote_body(
-    draw: ImageDraw.ImageDraw, text: str, font_name: str, font_size: int
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font_name: str,
+    font_size: int,
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ):
     """渲染居中的引用文本"""
     if has_cjk(text) and "Noto" not in font_name:
         font_name = "NotoSerifSC-Light.ttf"
     font = load_font_by_name(font_name, font_size)
-    lines = wrap_text(text, font, SCREEN_W - 48)
+    lines = wrap_text(text, font, screen_w - 48)
     line_h = font_size + 8
     total_h = len(lines) * line_h
-    y_start = 32 + (SCREEN_H - 32 - 30 - total_h) // 2
+    y_start = 32 + (screen_h - 32 - 30 - total_h) // 2
 
     for i, line in enumerate(lines):
         bbox = font.getbbox(line)
-        x = (SCREEN_W - (bbox[2] - bbox[0])) // 2
+        x = (screen_w - (bbox[2] - bbox[0])) // 2
         draw.text((x, y_start + i * line_h), line, fill=EINK_FG, font=font)

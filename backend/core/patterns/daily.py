@@ -37,28 +37,28 @@ def render_daily(
     season_text: str = "",
     weather_code: int = -1,
     time_str: str = "",
+    screen_w: int = SCREEN_W,
+    screen_h: int = SCREEN_H,
 ) -> Image.Image:
     """渲染 DAILY 模式：左侧日期列 + 右侧内容区"""
-    img = Image.new("1", (SCREEN_W, SCREEN_H), EINK_BG)
+    img = Image.new("1", (screen_w, screen_h), EINK_BG)
     draw = ImageDraw.Draw(img)
 
     draw_status_bar(
-        draw, img, date_str, weather_str, battery_pct, weather_code, time_str=time_str
+        draw, img, date_str, weather_str, battery_pct, weather_code,
+        time_str=time_str, screen_w=screen_w, screen_h=screen_h,
     )
 
-    # --- Layout constants ---
     TOP = 33
-    BOT = SCREEN_H - 30
+    BOT = screen_h - 30
     LEFT_W = DAILY_LAYOUT["left_column_width"]
     RIGHT_X = LEFT_W + 1
 
-    # Vertical divider
     draw.line([(LEFT_W, TOP), (LEFT_W, BOT)], fill=EINK_FG, width=1)
 
     # ==================== LEFT COLUMN ====================
     cx = LEFT_W // 2
 
-    # Load fonts
     font_year = load_font("inter_medium", FONT_SIZES["daily"]["year"])
     font_day = load_font("lora_bold", FONT_SIZES["daily"]["day"])
     font_month = load_font("noto_serif_regular", FONT_SIZES["daily"]["month"])
@@ -98,27 +98,22 @@ def render_daily(
     )
     y = TOP + (BOT - TOP - total_h) // 2
 
-    # Draw year
     w = bbox_year[2] - bbox_year[0]
     draw.text((cx - w // 2, y), year_str, fill=EINK_FG, font=font_year)
     y += h_year + gaps["year_to_day"]
 
-    # Draw day
     w = bbox_day[2] - bbox_day[0]
     draw.text((cx - w // 2, y), day_str, fill=EINK_FG, font=font_day)
     y += h_day + gaps["day_to_month"]
 
-    # Draw month
     w = bbox_month[2] - bbox_month[0]
     draw.text((cx - w // 2, y), month_cn, fill=EINK_FG, font=font_month)
     y += h_month + gaps["month_to_weekday"]
 
-    # Draw weekday
     w = bbox_wk[2] - bbox_wk[0]
     draw.text((cx - w // 2, y), weekday_cn, fill=EINK_FG, font=font_weekday)
     y += h_wk + gaps["weekday_to_progress"]
 
-    # Draw progress bar
     bar_w = DAILY_LAYOUT["progress_bar_width"]
     bar_x = cx - bar_w // 2
     draw.rectangle([bar_x, y, bar_x + bar_w, y + h_bar], outline=EINK_FG, width=1)
@@ -127,16 +122,14 @@ def render_daily(
         draw.rectangle([bar_x, y, bar_x + fill_w, y + h_bar], fill=EINK_FG)
     y += h_bar + gaps["bar_to_text"]
 
-    # Draw progress text
     w = bbox_pt[2] - bbox_pt[0]
     draw.text((cx - w // 2, y), progress_text, fill=EINK_FG, font=font_progress)
 
     # ==================== RIGHT COLUMN ====================
     rx = RIGHT_X + DAILY_LAYOUT["right_column_padding"]
-    rw = SCREEN_W - rx - 12
+    rw = screen_w - rx - 12
     ry = TOP + 8
 
-    # Load fonts for right column
     font_sec_title = load_font("noto_serif_bold", FONT_SIZES["daily"]["section_title"])
     font_quote = load_font("noto_serif_light", FONT_SIZES["daily"]["quote"])
     font_author = load_font("noto_serif_light", FONT_SIZES["daily"]["author"])
@@ -144,7 +137,6 @@ def render_daily(
     font_book_info = load_font("noto_serif_light", FONT_SIZES["daily"]["book_info"])
     font_tip = load_font("noto_serif_light", FONT_SIZES["daily"]["tip"])
 
-    # --- Section 1: 今日语录 ---
     draw.text((rx, ry), "/ 今日语录", fill=EINK_FG, font=font_sec_title)
     ry += 17
 
@@ -156,15 +148,13 @@ def render_daily(
         author_text = f"— {author}"
         bbox_a = font_author.getbbox(author_text)
         aw = bbox_a[2] - bbox_a[0]
-        draw.text((SCREEN_W - 12 - aw, ry), author_text, fill=EINK_FG, font=font_author)
+        draw.text((screen_w - 12 - aw, ry), author_text, fill=EINK_FG, font=font_author)
         ry += 17
 
-    # --- Divider ---
     ry += 2
-    draw.line([(rx, ry), (SCREEN_W - 12, ry)], fill=EINK_FG, width=1)
+    draw.line([(rx, ry), (screen_w - 12, ry)], fill=EINK_FG, width=1)
     ry += 6
 
-    # --- Section 2: 推荐阅读 ---
     draw.text((rx, ry), "/ 推荐阅读", fill=EINK_FG, font=font_sec_title)
     ry += 17
 
@@ -179,12 +169,10 @@ def render_daily(
         draw.text((rx, ry), line, fill=EINK_FG, font=font_tip)
         ry += 16
 
-    # --- Divider ---
     ry += 2
-    draw.line([(rx, ry), (SCREEN_W - 12, ry)], fill=EINK_FG, width=1)
+    draw.line([(rx, ry), (screen_w - 12, ry)], fill=EINK_FG, width=1)
     ry += 6
 
-    # --- Section 3: 小知识 ---
     draw.text((rx, ry), f"/ {tip_label}", fill=EINK_FG, font=font_sec_title)
     ry += 17
 
@@ -195,7 +183,6 @@ def render_daily(
         draw.text((rx, ry), line, fill=EINK_FG, font=font_tip)
         ry += 16
 
-    # --- Footer ---
-    draw_footer(draw, img, "DAILY", season_text)
+    draw_footer(draw, img, "DAILY", season_text, screen_w=screen_w, screen_h=screen_h)
 
     return img

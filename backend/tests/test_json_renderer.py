@@ -9,7 +9,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from PIL import Image
-from core.json_renderer import render_json_mode, RenderContext, SCREEN_W, SCREEN_H
+from core.json_renderer import render_json_mode, RenderContext
+from core.config import SCREEN_WIDTH as SCREEN_W, SCREEN_HEIGHT as SCREEN_H
 
 
 def _make_mode_def(body_blocks, content_type="static", footer=None):

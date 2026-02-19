@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 from PIL import Image
 
+from .config import SCREEN_WIDTH, SCREEN_HEIGHT
 from .patterns import (
     render_stoic,
     render_roast,
@@ -50,6 +51,8 @@ def render_mode(
     weather_code: int = -1,
     time_str: str = "",
     date_ctx: dict | None = None,
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ) -> Image.Image:
     """Unified mode rendering dispatcher.
 
@@ -65,6 +68,7 @@ def render_mode(
             Common status-bar parameters shared by all renderers.
         date_ctx: Full date context dict (needed by DAILY mode for
                   year, month_cn, weekday_cn, etc.).
+        screen_w / screen_h: Target resolution (default 400x300).
     """
     common = dict(
         date_str=date_str,
@@ -72,6 +76,8 @@ def render_mode(
         battery_pct=battery_pct,
         weather_code=weather_code,
         time_str=time_str,
+        screen_w=screen_w,
+        screen_h=screen_h,
     )
 
     if persona == "STOIC":
