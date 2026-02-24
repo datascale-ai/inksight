@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import time
 from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
+from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Response
 from fastapi.responses import HTMLResponse, JSONResponse
+import httpx
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +71,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="InkSight API", version="1.0.0", lifespan=lifespan)
+
+FIRMWARE_CHIP_FAMILY = "ESP32-C3"
+FIRMWARE_RELEASE_CACHE_TTL = int(os.getenv("FIRMWARE_RELEASE_CACHE_TTL", "120"))
+GITHUB_OWNER = os.getenv("GITHUB_OWNER", "datascale-ai")
+GITHUB_REPO = os.getenv("GITHUB_REPO", "inksight")
+GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases"
+_firmware_release_cache = {
+    "expires_at": 0.0,
+    "payload": None,
+}
+_firmware_release_cache_lock = asyncio.Lock()
 
 # Debug mode: used by firmware to enable fast refresh (1 min) for testing
 # Backend cache is always enabled regardless of this flag
@@ -146,7 +161,7 @@ async def _choose_persona_from_config(config: dict, peek_next: bool = False) -> 
 
 
 async def _resolve_mode(
-    mac: str | None, config: dict | None, persona_override: str | None
+    mac: Optional[str], config: Optional[dict], persona_override: Optional[str]
 ) -> str:
     """Determine which persona to use for this request."""
     registry = get_registry()
@@ -169,8 +184,8 @@ async def _resolve_mode(
 
 
 async def _build_image(
-    v: float, mac: str | None, persona_override: str | None = None,
-    rssi: int | None = None,
+    v: float, mac: Optional[str], persona_override: Optional[str] = None,
+    rssi: Optional[int] = None,
     screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
 ):
     battery_pct = calc_battery_pct(v)
@@ -222,7 +237,7 @@ async def _build_image(
 
 async def _log_render(
     mac: str, persona: str, cache_hit: bool, elapsed_ms: int,
-    voltage: float = 3.3, rssi: int | None = None, status: str = "success",
+    voltage: float = 3.3, rssi: Optional[int] = None, status: str = "success",
 ):
     """Log render stats and device heartbeat (fire-and-forget)."""
     try:
@@ -232,15 +247,154 @@ async def _log_render(
         logger.warning(f"[STATS] Failed to log render stats for {mac}", exc_info=True)
 
 
+def _build_firmware_manifest(version: str, download_url: str) -> dict:
+    return {
+        "name": "InkSight",
+        "version": version,
+        "builds": [
+            {
+                "chipFamily": FIRMWARE_CHIP_FAMILY,
+                "parts": [
+                    {
+                        "path": download_url,
+                        "offset": 0,
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def _pick_firmware_asset(assets: list[dict]) -> Optional[dict]:
+    preferred = [
+        a for a in assets
+        if a.get("name", "").endswith(".bin") and "inksight-firmware-" in a.get("name", "")
+    ]
+    if preferred:
+        return preferred[0]
+    fallback = [a for a in assets if a.get("name", "").endswith(".bin")]
+    return fallback[0] if fallback else None
+
+
+async def _load_firmware_releases(force_refresh: bool = False) -> dict:
+    now = time.time()
+    async with _firmware_release_cache_lock:
+        if (
+            not force_refresh
+            and _firmware_release_cache["payload"] is not None
+            and _firmware_release_cache["expires_at"] > now
+        ):
+            cached_payload = dict(_firmware_release_cache["payload"])
+            cached_payload["cached"] = True
+            return cached_payload
+
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "inksight-firmware-api",
+        }
+        github_token = os.getenv("GITHUB_TOKEN")
+        if github_token:
+            headers["Authorization"] = f"Bearer {github_token}"
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(GITHUB_RELEASES_API, headers=headers)
+            if resp.status_code >= 400:
+                message = f"GitHub releases API error: {resp.status_code}"
+                try:
+                    details = resp.json().get("message")
+                    if details:
+                        message = f"{message} - {details}"
+                except Exception:
+                    pass
+                raise RuntimeError(message)
+
+            releases = []
+            for rel in resp.json():
+                if rel.get("draft"):
+                    continue
+                asset = _pick_firmware_asset(rel.get("assets", []))
+                if not asset:
+                    continue
+
+                tag_name = rel.get("tag_name", "")
+                version = tag_name.lstrip("v") if tag_name else "unknown"
+                download_url = asset.get("browser_download_url")
+                if not download_url:
+                    continue
+
+                releases.append({
+                    "version": version,
+                    "tag": tag_name,
+                    "published_at": rel.get("published_at"),
+                    "download_url": download_url,
+                    "size_bytes": asset.get("size"),
+                    "chip_family": FIRMWARE_CHIP_FAMILY,
+                    "asset_name": asset.get("name"),
+                    "manifest": _build_firmware_manifest(version, download_url),
+                })
+
+            payload = {
+                "source": "github_releases",
+                "repo": f"{GITHUB_OWNER}/{GITHUB_REPO}",
+                "cached": False,
+                "count": len(releases),
+                "releases": releases,
+            }
+        except Exception as exc:
+            logger.warning(f"[FIRMWARE] Failed to load releases: {exc}")
+            raise
+
+        _firmware_release_cache["payload"] = payload
+        _firmware_release_cache["expires_at"] = now + FIRMWARE_RELEASE_CACHE_TTL
+        return payload
+
+
+async def _validate_firmware_url(url: str) -> dict:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("firmware URL must start with http:// or https://")
+
+    if not parsed.netloc:
+        raise ValueError("firmware URL host is missing")
+
+    if not parsed.path.lower().endswith(".bin"):
+        raise ValueError("firmware URL should point to a .bin file")
+
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        try:
+            resp = await client.head(url)
+            status_code = resp.status_code
+            headers = resp.headers
+            final_url = str(resp.url)
+        except Exception:
+            resp = await client.get(url, headers={"Range": "bytes=0-0"})
+            status_code = resp.status_code
+            headers = resp.headers
+            final_url = str(resp.url)
+
+    if status_code >= 400:
+        raise RuntimeError(f"firmware URL is not reachable: {status_code}")
+
+    return {
+        "ok": True,
+        "reachable": True,
+        "status_code": status_code,
+        "final_url": final_url,
+        "content_type": headers.get("content-type"),
+        "content_length": headers.get("content-length"),
+    }
+
+
 # ── Render endpoints ─────────────────────────────────────────
 
 
 @app.get("/api/render")
 async def render(
     v: float = Query(default=3.3, description="Battery voltage"),
-    mac: str | None = Query(default=None, description="Device MAC address"),
-    persona: str | None = Query(default=None, description="Force persona"),
-    rssi: int | None = Query(default=None, description="WiFi RSSI (dBm)"),
+    mac: Optional[str] = Query(default=None, description="Device MAC address"),
+    persona: Optional[str] = Query(default=None, description="Force persona"),
+    rssi: Optional[int] = Query(default=None, description="WiFi RSSI (dBm)"),
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
@@ -283,8 +437,8 @@ async def render(
 @app.get("/api/preview")
 async def preview(
     v: float = Query(default=3.3, description="Battery voltage"),
-    mac: str | None = Query(default=None, description="Device MAC address"),
-    persona: str | None = Query(default=None, description="Force persona"),
+    mac: Optional[str] = Query(default=None, description="Device MAC address"),
+    persona: Optional[str] = Query(default=None, description="Force persona"),
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
@@ -434,6 +588,81 @@ async def delete_custom_mode(mode_id: str):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/api/firmware/releases")
+async def firmware_releases(refresh: bool = Query(default=False)):
+    """List available firmware releases from GitHub Releases."""
+    try:
+        data = await _load_firmware_releases(force_refresh=refresh)
+        return data
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": "firmware_release_fetch_failed",
+                "message": str(exc),
+                "repo": f"{GITHUB_OWNER}/{GITHUB_REPO}",
+            },
+            status_code=503,
+        )
+
+
+@app.get("/api/firmware/releases/latest")
+async def firmware_releases_latest(refresh: bool = Query(default=False)):
+    """Get the latest recommended firmware release."""
+    try:
+        data = await _load_firmware_releases(force_refresh=refresh)
+        releases = data.get("releases", [])
+        if not releases:
+            return JSONResponse(
+                {
+                    "error": "firmware_release_not_found",
+                    "message": "No published firmware release with .bin asset found",
+                    "repo": f"{GITHUB_OWNER}/{GITHUB_REPO}",
+                },
+                status_code=404,
+            )
+        return {
+            "source": data.get("source"),
+            "repo": data.get("repo"),
+            "cached": data.get("cached", False),
+            "latest": releases[0],
+        }
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": "firmware_release_fetch_failed",
+                "message": str(exc),
+                "repo": f"{GITHUB_OWNER}/{GITHUB_REPO}",
+            },
+            status_code=503,
+        )
+
+
+@app.get("/api/firmware/validate-url")
+async def firmware_validate_url(url: str = Query(..., description="Firmware .bin URL")):
+    """Validate manual firmware URL format and reachability."""
+    try:
+        result = await _validate_firmware_url(url)
+        return result
+    except ValueError as exc:
+        return JSONResponse(
+            {
+                "error": "invalid_firmware_url",
+                "message": str(exc),
+                "url": url,
+            },
+            status_code=400,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": "firmware_url_unreachable",
+                "message": str(exc),
+                "url": url,
+            },
+            status_code=503,
+        )
 
 
 @app.get("/", response_class=HTMLResponse)

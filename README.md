@@ -131,6 +131,16 @@ Once running, visit:
 
 ### 3. Firmware Flashing
 
+**Option A: Web Flasher (recommended)**
+
+- Open the InkSight Web Flasher page in Chrome/Edge.
+- Select a firmware version from GitHub Releases.
+- Connect the ESP32-C3 board over USB and click flash.
+
+Firmware artifacts are published as `inksight-firmware-<semver>.bin` in GitHub Releases.
+
+**Option B: Local flashing with PlatformIO**
+
 ```bash
 cd firmware
 
@@ -142,6 +152,10 @@ pio device monitor
 ```
 
 Alternatively, open `firmware/src/main.cpp` in Arduino IDE to compile and upload.
+
+If you host `inksight-web` separately from the backend API, set
+`NEXT_PUBLIC_FIRMWARE_API_BASE` to point to your backend (for example:
+`https://your-backend.example.com`).
 
 ### 4. WiFi Provisioning
 
