@@ -8,19 +8,26 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dotenv import load_dotenv
-from core.content import generate_briefing_content
-from core.patterns.briefing import render_briefing
+from core.json_content import generate_json_mode_content
+from core.json_renderer import render_json_mode
+import json
 
 load_dotenv()
 
 
 async def main():
     print("Testing BRIEFING mode...")
-    
-    content = await generate_briefing_content(
+
+    mode_path = os.path.join(
+        os.path.dirname(__file__), "..", "core", "modes", "builtin", "briefing.json"
+    )
+    with open(mode_path, "r", encoding="utf-8") as f:
+        mode_def = json.load(f)
+
+    content = await generate_json_mode_content(
+        mode_def,
         llm_provider="deepseek",
         llm_model="deepseek-chat",
-        summarize=True
     )
     
     print(f"\nGenerated content:")
@@ -41,13 +48,12 @@ async def main():
     print(f"\n=== AI Insight ===")
     print(content['insight'])
     
-    img = render_briefing(
+    img = render_json_mode(
+        mode_def,
+        content,
         date_str="2月14日 周六",
         weather_str="晴 15°C",
         battery_pct=85,
-        hn_items=content["hn_items"],
-        ph_item=content["ph_item"],
-        insight=content["insight"],
         weather_code=0,
         time_str="14:30",
     )

@@ -15,7 +15,6 @@ from ..config import (
     EINK_BACKGROUND,
     EINK_FOREGROUND,
     WEATHER_ICON_MAP,
-    MODE_ICON_MAP,
     ICON_SIZES,
     FONTS,
     FONT_SIZES,
@@ -94,7 +93,22 @@ def get_weather_icon(weather_code: int) -> Image.Image | None:
 
 def get_mode_icon(mode: str) -> Image.Image | None:
     """Get footer mode icon (book, electric_bolt, etc.)."""
-    icon_name = MODE_ICON_MAP.get(mode.upper())
+    icon_name = None
+    try:
+        from ..mode_registry import get_registry
+        info = get_registry().get_mode_info(mode)
+        if info:
+            icon_name = info.icon
+    except Exception:
+        # Registry may be unavailable in some test/bootstrap paths.
+        fallback_icons = {
+            "DAILY": "sunny",
+            "BRIEFING": "global",
+            "ARTWALL": "art",
+            "RECIPE": "food",
+            "COUNTDOWN": "flag",
+        }
+        icon_name = fallback_icons.get(mode.upper())
     if icon_name:
         return load_icon(icon_name, size=ICON_SIZES["mode"])
     return None

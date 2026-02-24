@@ -1,0 +1,41 @@
+{
+  "mode_id": "BRIEFING",
+  "display_name": "科技简报",
+  "icon": "global",
+  "cacheable": false,
+  "description": "HN/PH/V2EX + 行业洞察",
+  "content": {
+    "type": "external_data",
+    "provider": "briefing",
+    "hn_limit": 2,
+    "v2ex_limit": 1,
+    "summarize": true,
+    "include_insight": true,
+    "fallback": {
+      "hn_items": [
+        { "title": "数据获取失败", "score": 0 }
+      ],
+      "ph_item": { "name": "N/A", "tagline": "" },
+      "v2ex_items": [],
+      "insight": "今日科技动态暂时无法获取，请稍后刷新。",
+      "ph_name": "N/A",
+      "ph_tagline": ""
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "section", "title": "HN Top", "icon": "global", "children": [
+        { "type": "list", "field": "hn_items", "max_items": 2, "item_template": "{title}", "right_field": "score", "font_size": 11, "item_spacing": 14, "margin_x": 36 }
+      ]},
+      { "type": "separator", "style": "short", "width": 90 },
+      { "type": "section", "title": "PH #1", "icon": "star", "children": [
+        { "type": "text", "template": "{ph_name}", "font_size": 12, "align": "left", "margin_x": 36, "max_lines": 1 },
+        { "type": "text", "template": "{ph_tagline}", "font_size": 10, "align": "left", "margin_x": 36, "max_lines": 2 }
+      ]},
+      { "type": "separator", "style": "short", "width": 90 },
+      { "type": "text", "field": "insight", "font_size": 12, "align": "left", "margin_x": 24, "max_lines": 4 }
+    ],
+    "footer": { "label": "BRIEFING", "attribution_template": "— AI Brief" }
+  }
+}

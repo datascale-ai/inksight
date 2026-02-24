@@ -667,20 +667,26 @@ async def firmware_validate_url(url: str = Query(..., description="Firmware .bin
 
 @app.get("/", response_class=HTMLResponse)
 async def preview_page():
-    html_path = Path(__file__).resolve().parent.parent.parent / "web" / "preview.html"
-    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content=_load_web_page_html("preview.html"))
 
 
 @app.get("/config", response_class=HTMLResponse)
 async def config_page():
-    html_path = Path(__file__).resolve().parent.parent.parent / "web" / "config.html"
-    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content=_load_web_page_html("config.html"))
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page():
-    html_path = Path(__file__).resolve().parent.parent.parent / "web" / "dashboard.html"
-    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content=_load_web_page_html("dashboard.html"))
+
+
+def _load_web_page_html(filename: str) -> str:
+    """Load static page from webconfig directory."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    html_path = project_root / "webconfig" / filename
+    if not html_path.exists():
+        raise FileNotFoundError(f"Static page not found in webconfig: {filename}")
+    return html_path.read_text(encoding="utf-8")
 
 
 # ── Device control endpoints ─────────────────────────────────

@@ -49,7 +49,7 @@ graph TD
 
 InkSight 当前采用双前端结构：
 
-- **`web/`（静态运维页）**：由后端直接托管与路由，提供预览、配置、统计页面（`/`、`/config`、`/dashboard`）。
+- **`webconfig/`（静态运维页）**：由后端直接托管与路由，提供预览、配置、统计页面（`/`、`/config`、`/dashboard`）。
 - **`webapp/`（Next.js 官网与刷机页）**：独立 Node.js 前端，用于官网展示、文档导航、Web 在线刷机等交互能力。
 
 在线刷机 API 由后端统一提供（`/api/firmware/*`）。`webapp` 支持两种接入方式：

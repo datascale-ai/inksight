@@ -1,0 +1,25 @@
+{
+  "mode_id": "ARTWALL",
+  "display_name": "AI 艺术",
+  "icon": "art",
+  "cacheable": false,
+  "description": "黑白版画风格 AI 作品",
+  "content": {
+    "type": "image_gen",
+    "provider": "artwall",
+    "fallback": {
+      "artwork_title": "墨韵天成",
+      "image_url": "",
+      "description": "今日艺术作品"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "text", "field": "artwork_title", "font_size": 14, "align": "center", "max_lines": 1 },
+      { "type": "image", "field": "image_url", "width": 220, "height": 150 },
+      { "type": "text", "field": "description", "font_size": 11, "align": "center", "max_lines": 2 }
+    ],
+    "footer": { "label": "ARTWALL", "attribution_template": "— Ink Art" }
+  }
+}

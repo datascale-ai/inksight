@@ -4,6 +4,8 @@
 
 > 一款 LLM 驱动的智能电子墨水屏桌面伴侣，为你递送有温度的"慢信息"——纸墨之间，皆是智慧。
 
+官网主页：[https://www.inksight.site](https://www.inksight.site)
+
 ![Version](https://img.shields.io/badge/version-v0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
@@ -83,7 +85,7 @@
 | 硬件 | ESP32-C3 + 4.2" E-Paper (400x300, 1-bit) + LiFePO4 电池 |
 | 固件 | PlatformIO / Arduino, GxEPD2, WiFiManager |
 | 后端 | Python FastAPI, Pillow, OpenAI SDK, httpx, SQLite |
-| 前端 | 静态页面（`web/`）+ Next.js 应用（`webapp/`，官网与在线刷机） |
+| 前端 | 静态页面（`webconfig/`）+ Next.js 应用（`webapp/`，官网与在线刷机） |
 
 详细架构设计请参考 [系统架构文档](docs/architecture.md)。
 
@@ -121,6 +123,10 @@ python -m uvicorn api.index:app --host 0.0.0.0 --port 8080
 ```
 
 启动后访问：
+
+| 入口 | URL | 说明 |
+|------|-----|------|
+| 在线体验 / 官网 | `https://www.inksight.site` | 公网主页（首页、文档、在线刷机） |
 
 | 页面 | URL | 说明 |
 |------|-----|------|
@@ -296,7 +302,7 @@ inksight/
 │   │   └── portal.cpp      # Captive Portal 配网
 │   ├── data/portal_html.h  # 配网页面 HTML
 │   └── platformio.ini      # PlatformIO 配置
-├── web/                    # Web 前端
+├── webconfig/              # Web 配置前端
 │   ├── config.html         # 配置管理页面
 │   ├── preview.html        # 预览控制台
 │   └── dashboard.html      # 统计仪表板

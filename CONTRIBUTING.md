@@ -93,7 +93,7 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0 --port 8000
 - `backend/` — Python FastAPI 后端，包含渲染和 LLM 集成
 - `backend/core/patterns/` — 各内容模式的实现，添加新模式请参考现有实现
 - `firmware/` — ESP32-C3 固件代码
-- `web/` — Web 配置页面和预览控制台
+- `webconfig/` — Web 配置页面和预览控制台
 - `docs/` — 项目文档
 
 ## 添加新的内容模式
