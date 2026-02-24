@@ -4,13 +4,13 @@
 
 | 组件 | 选型型号 | 关键参数 | 作用 | 参考价格 |
 |------|---------|---------|------|---------|
-| MCU | ESP32-C3 SuperMini | RISC-V, WiFi, 超低功耗 | 主控 | ~$3 |
-| Display | 4.2" E-Paper Module | SPI 接口, 400x300, SSD1683 驱动 | 显示 | ~$15 |
-| Power | 18650 LiFePO4 | 3.2V 标称电压, 1500mAh+ | 供电 (直驱) | ~$5 |
-| Charger | TP5000 模块 | 支持 3.6V 截止电压 (需跳线) | 电池充电 | ~$2 |
-| Case | PCB Sandwich / 3D 打印 | FR4 沉金工艺, M3 铜柱 | 结构支撑 | ~$5 |
+| MCU | ESP32-C3 SuperMini | RISC-V, WiFi, 超低功耗 | 主控 | ~20 元 |
+| Display | 4.2" E-Paper Module | SPI 接口, 400x300, SSD1683 驱动 | 显示 | ~110 元 |
+| Power | 18650 LiFePO4 | 3.2V 标称电压, 1500mAh+ | 供电 (直驱) | ~35 元 |
+| Charger | TP5000 模块 | 支持 3.6V 截止电压 (需跳线) | 电池充电 | ~15 元 |
+| Case | PCB Sandwich / 3D 打印 | FR4 沉金工艺, M3 铜柱 | 结构支撑 | ~35 元 |
 
-**总 BOM 成本:** < $30
+**总 BOM 成本:** 约 220 元以内
 
 ## 2. 引脚映射 (Pin Map)
 

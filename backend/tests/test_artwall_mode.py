@@ -8,16 +8,24 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dotenv import load_dotenv
-from core.content import generate_artwall_content
-from core.patterns.artwall import render_artwall
+from core.json_content import generate_json_mode_content
+from core.json_renderer import render_json_mode
+import json
 
 load_dotenv()
 
 
 async def main():
     print("Testing ARTWALL mode...")
-    
-    content = await generate_artwall_content(
+
+    mode_path = os.path.join(
+        os.path.dirname(__file__), "..", "core", "modes", "builtin", "artwall.json"
+    )
+    with open(mode_path, "r", encoding="utf-8") as f:
+        mode_def = json.load(f)
+
+    content = await generate_json_mode_content(
+        mode_def,
         date_str="2月14日",
         weather_str="晴 15°C",
         festival="情人节",
@@ -30,14 +38,12 @@ async def main():
     print(f"  Image URL: {content.get('image_url', 'N/A')[:50]}...")
     print(f"  Description: {content['description']}")
     
-    img = render_artwall(
+    img = render_json_mode(
+        mode_def,
+        content,
         date_str="2月14日 周六",
         weather_str="晴 15°C",
         battery_pct=85,
-        artwork_title=content["artwork_title"],
-        image_url=content.get("image_url", ""),
-        description=content["description"],
-        model_name=content.get("model_name", "qwen-image-max"),
         weather_code=0,
         time_str="14:30",
     )
