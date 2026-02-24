@@ -83,7 +83,7 @@
 | 硬件 | ESP32-C3 + 4.2" E-Paper (400x300, 1-bit) + LiFePO4 电池 |
 | 固件 | PlatformIO / Arduino, GxEPD2, WiFiManager |
 | 后端 | Python FastAPI, Pillow, OpenAI SDK, httpx, SQLite |
-| 前端 | HTML / CSS / JavaScript (配置页面 & 预览控制台 & 统计仪表板) |
+| 前端 | 静态页面（`web/`）+ Next.js 应用（`webapp/`，官网与在线刷机） |
 
 详细架构设计请参考 [系统架构文档](docs/architecture.md)。
 
@@ -128,6 +128,21 @@ python -m uvicorn api.index:app --host 0.0.0.0 --port 8080
 | 配置管理 | `http://localhost:8080/config` | 管理设备配置 |
 | 统计仪表板 | `http://localhost:8080/dashboard` | 设备状态与使用统计 |
 
+### 2.5 Web 应用（官网 + 在线刷机）
+
+```bash
+cd webapp
+npm install
+npm run dev
+```
+
+默认访问：`http://localhost:3000`
+
+环境变量说明：
+
+- `INKSIGHT_BACKEND_API_BASE`（服务端代理目标，默认 `http://127.0.0.1:8080`）
+- `NEXT_PUBLIC_FIRMWARE_API_BASE`（可选，浏览器侧 API 基地址；不配置时走同域 `/api/firmware/*`）
+
 ### 3. 固件烧录
 
 **方式 A：Web 在线刷机（推荐）**
@@ -152,9 +167,10 @@ pio device monitor
 
 或使用 Arduino IDE 打开 `firmware/src/main.cpp` 进行编译上传。
 
-如果 `inksight-web` 与后端 API 分开部署，请在前端配置
-`NEXT_PUBLIC_FIRMWARE_API_BASE` 指向后端地址（例如：
-`https://your-backend.example.com`）。
+如果 `webapp` 与后端 API 分开部署，请设置
+`NEXT_PUBLIC_FIRMWARE_API_BASE` 指向后端地址（例如
+`https://your-backend.example.com`）。若不配置，`webapp` 会使用内置的
+Next.js API 路由，将 `/api/firmware/*` 代理到 `INKSIGHT_BACKEND_API_BASE`。
 
 ### 4. 配网
 
@@ -284,6 +300,11 @@ inksight/
 │   ├── config.html         # 配置管理页面
 │   ├── preview.html        # 预览控制台
 │   └── dashboard.html      # 统计仪表板
+├── webapp/                 # Next.js 官网 + 在线刷机前端
+│   ├── app/                # App Router 页面与 API 路由
+│   ├── components/         # UI 组件
+│   ├── public/             # 静态资源
+│   └── package.json        # Node.js 依赖与脚本
 └── docs/                   # 项目文档
     ├── architecture.md     # 系统架构
     ├── api.md              # API 接口文档

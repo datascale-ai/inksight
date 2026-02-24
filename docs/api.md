@@ -143,6 +143,19 @@ curl -X GET "https://your-url.vercel.app/api/render?v=3.20&mac=test_device&w=800
 
 ---
 
+### 2.8.1 Web Flasher 调用链说明
+
+`webapp` 在线刷机页使用以下调用链：
+
+1. 前端页面请求 `GET /api/firmware/releases` 或 `GET /api/firmware/releases/latest`。
+2. 若设置 `NEXT_PUBLIC_FIRMWARE_API_BASE`，浏览器直接请求后端 API。
+3. 若未设置，前端请求同域 Next.js API Route，由其代理到 `INKSIGHT_BACKEND_API_BASE`。
+4. 用户切换“手动 URL”时，前端调用 `GET /api/firmware/validate-url` 做可达性校验。
+
+该设计保证了前后端分离部署与同域部署两种模式都可用。
+
+---
+
 ### 2.9 健康检查
 
 - **URL:** `GET /api/health`
