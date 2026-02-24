@@ -55,20 +55,6 @@ LLM_CONFIGS = {
 }
 
 PROMPTS = {
-    "STOIC": (
-        "你是一位斯多葛哲学导师。根据以下环境信息，生成一句简短的斯多葛哲学语录，"
-        "风格庄重、内省，适合刻在石碑上。只输出语录本身和作者，用 | 分隔。\n"
-        "环境：{context}"
-    ),
-    "ROAST": (
-        "你是一个毒舌 AI 助手，擅长黑色幽默和反讽。根据以下环境信息，生成一句犀利的吐槽短句，"
-        "让人破防但又忍不住笑。只输出短句本身，不要加引号。\n"
-        "环境：{context}"
-    ),
-    "ZEN": (
-        "你是一位禅宗大师。只输出一个最能代表当下状态的汉字，不要任何其他内容。\n"
-        "环境：{context}"
-    ),
     "DAILY": (
         "你是一位博学的每日推荐助手。根据以下环境信息，生成一份每日推荐内容，用 JSON 格式输出，包含：\n"
         "1. quote: 一句语录（中文，20字以内，来源不限：哲学、文学、科学、历史、电影等均可）\n"
@@ -79,16 +65,6 @@ PROMPTS = {
         "6. tip: 一条有趣的冷知识或实用小贴士（30字以内，话题不限）\n"
         "7. season_text: 当前节气或季节的一句话描述（10字以内）\n"
         "要求：内容丰富多样，每次推荐不同的内容，避免重复。只输出 JSON，不要其他内容。\n"
-        "环境：{context}"
-    ),
-    "POETRY": (
-        "你是一位古典文学专家。根据以下环境信息，推荐一首与当前季节、天气或节日相关的中国古诗词。\n"
-        '用 JSON 格式输出：{{"title": "诗名", "author": "朝代·作者", "lines": ["诗句1", "诗句2", ...], "note": "一句话赏析（20字以内）"}}\n'
-        "要求：\n"
-        "1. 选择经典诗词，涵盖唐诗、宋词、元曲等\n"
-        "2. 每次推荐不同的诗词，避免重复\n"
-        "3. 诗句完整呈现，每句单独一个元素\n"
-        "4. 只输出 JSON，不要其他内容\n"
         "环境：{context}"
     ),
 }
@@ -255,7 +231,11 @@ async def generate_content(
         upcoming_holiday,
         days_until_holiday,
     )
-    prompt = PROMPTS.get(persona, PROMPTS["STOIC"]).format(context=context)
+    prompt_template = PROMPTS.get(persona)
+    if not prompt_template:
+        logger.warning(f"[LLM] No prompt template for persona={persona}, returning fallback")
+        return _fallback_content(persona)
+    prompt = prompt_template.format(context=context)
 
     style = _build_style_instructions(character_tones, language, content_tone)
     if style:
@@ -272,16 +252,7 @@ async def generate_content(
         logger.error(f"[LLM] ✗ FAILED - {type(e).__name__}: {e}")
         return _fallback_content(persona)
 
-    if persona == "STOIC":
-        parts = text.split("|")
-        quote = parts[0].strip().strip('"').strip("\u201c").strip("\u201d")
-        author = parts[1].strip() if len(parts) > 1 else "Unknown"
-        return {"quote": quote, "author": author}
-    elif persona == "ROAST":
-        return {"quote": text}
-    elif persona == "ZEN":
-        return {"word": text[:1]}
-    elif persona == "DAILY":
+    if persona == "DAILY":
         try:
             cleaned = _clean_json_response(text)
             data = json.loads(cleaned)
@@ -303,16 +274,12 @@ async def generate_content(
 
 
 def _fallback_content(persona: str) -> dict:
-    if persona == "STOIC":
-        return {
-            "quote": "The impediment to action advances action. What stands in the way becomes the way.",
-            "author": "Marcus Aurelius",
-        }
-    elif persona == "ROAST":
-        return {"quote": "服务器也累了，和你一样需要休息。"}
-    elif persona == "ZEN":
-        return {"word": "静"}
-    elif persona == "DAILY":
+    """Fallback content for Python builtin modes when LLM calls fail.
+
+    JSON-defined modes (STOIC, ROAST, ZEN, FITNESS, POETRY) have their own
+    fallback data in their JSON definitions — see core/modes/builtin/*.json.
+    """
+    if persona == "DAILY":
         return {
             "quote": "阻碍行动的障碍，本身就是行动的路。",
             "author": "马可·奥勒留",
@@ -322,7 +289,7 @@ def _fallback_content(persona: str) -> dict:
             "tip": "冬季干燥，记得多喝水，保持室内适当湿度。",
             "season_text": "立春已过，万物生长。",
         }
-    elif persona == "BRIEFING":
+    if persona == "BRIEFING":
         return {
             "hn_items": [
                 {"title": "Hacker News API 暂时不可用", "score": 0},
@@ -333,14 +300,7 @@ def _fallback_content(persona: str) -> dict:
             "v2ex_items": [],
             "insight": "今日科技动态暂时无法获取，请稍后刷新。",
         }
-    elif persona == "POETRY":
-        return {
-            "title": "静夜思",
-            "author": "唐·李白",
-            "lines": ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"],
-            "note": "千古思乡名篇",
-        }
-    elif persona == "COUNTDOWN":
+    if persona == "COUNTDOWN":
         return {"events": []}
     return {"quote": "...", "author": ""}
 
@@ -593,11 +553,15 @@ async def summarize_briefing_content(
 
 
 async def generate_briefing_content(
+    ctx=None,
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
     summarize: bool = True,
 ) -> dict:
     """生成 BRIEFING 模式的完整内容"""
+    if ctx is not None:
+        llm_provider = ctx.llm_provider
+        llm_model = ctx.llm_model
     import asyncio as _asyncio
 
     logger.info("[BRIEFING] Starting content generation...")
@@ -633,61 +597,17 @@ async def generate_briefing_content(
     return result
 
 
-# ── Poetry mode ──────────────────────────────────────────────
-
-
-async def generate_poetry_content(
-    date_str: str = "",
-    weather_str: str = "",
-    festival: str = "",
-    character_tones: list[str] | None = None,
-    language: str | None = None,
-    content_tone: str | None = None,
-    llm_provider: str = "deepseek",
-    llm_model: str = "deepseek-chat",
-    **kwargs,
-) -> dict:
-    """生成 POETRY 模式的内容"""
-    logger.info("[POETRY] Starting content generation...")
-
-    context = _build_context_str(date_str, weather_str, festival)
-    prompt = PROMPTS["POETRY"].format(context=context)
-
-    style = _build_style_instructions(character_tones, language, content_tone)
-    if style:
-        prompt += style
-
-    try:
-        text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8)
-        cleaned = _clean_json_response(text)
-        data = json.loads(cleaned)
-        logger.info(f"[POETRY] Generated: {data.get('title', '')}")
-
-        return {
-            "title": data.get("title", "静夜思"),
-            "author": data.get("author", "唐·李白"),
-            "lines": data.get("lines", ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"]),
-            "note": data.get("note", "千古思乡名篇"),
-        }
-
-    except Exception as e:
-        logger.error(f"[POETRY] Failed: {e}")
-        return {
-            "title": "静夜思",
-            "author": "唐·李白",
-            "lines": ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"],
-            "note": "千古思乡名篇",
-        }
-
-
 # ── Countdown mode ───────────────────────────────────────────
 
 
 async def generate_countdown_content(
+    ctx=None,
     config: dict | None = None,
     **kwargs,
 ) -> dict:
     """生成 COUNTDOWN 模式的内容 — 纯日期计算，无需 LLM"""
+    if ctx is not None:
+        config = ctx.config
     logger.info("[COUNTDOWN] Computing countdown events...")
 
     cfg = config or {}
@@ -742,6 +662,7 @@ async def generate_countdown_content(
 
 
 async def generate_artwall_content(
+    ctx=None,
     date_str: str = "",
     weather_str: str = "",
     festival: str = "",
@@ -749,6 +670,12 @@ async def generate_artwall_content(
     llm_model: str = "qwen-image-max",
 ) -> dict:
     """生成 ARTWALL 模式的内容 - 使用文生图模型"""
+    if ctx is not None:
+        date_str = ctx.date_str
+        weather_str = ctx.weather_str
+        festival = ctx.festival
+        llm_provider = ctx.llm_provider
+        llm_model = ctx.llm_model
     logger.info("[ARTWALL] Starting content generation...")
 
     context_parts = []
@@ -771,11 +698,16 @@ async def generate_artwall_content(
 3. 意境深远，留有想象空间
 4. 只输出标题，不要其他内容"""
 
+    artwork_title = "墨韵天成"
     try:
-        artwork_title = await _call_llm("deepseek", "deepseek-chat", title_prompt)
-        artwork_title = artwork_title.strip('"').strip("「」")
+        title_text = await _call_llm("deepseek", "deepseek-chat", title_prompt)
+        artwork_title = title_text.strip('"').strip("「」") or artwork_title
         logger.info(f"[ARTWALL] Generated title: {artwork_title}")
+    except Exception as e:
+        # 标题模型失败时继续执行文生图，避免整条 ARTWALL 流程直接降级为空图
+        logger.warning(f"[ARTWALL] Title generation failed, use fallback title: {e}")
 
+    try:
         image_prompt = f"""
 绘画风格：极简黑白线条艺术，现代矢量简笔画，墨水屏二值化风格。
 核心要求：线条干净流畅肯定，禁止任何水墨晕染、毛笔笔触、焦墨枯笔。
@@ -851,7 +783,7 @@ async def generate_artwall_content(
     except Exception as e:
         logger.exception("[ARTWALL] Failed to generate artwall content")
         return {
-            "artwork_title": "墨韵天成",
+            "artwork_title": artwork_title,
             "image_url": "",
             "description": "今日艺术作品",
             "prompt": "",
@@ -862,10 +794,14 @@ async def generate_artwall_content(
 
 
 async def generate_recipe_content(
+    ctx=None,
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
 ) -> dict:
     """生成 RECIPE 模式的内容 - 早中晚三餐方案"""
+    if ctx is not None:
+        llm_provider = ctx.llm_provider
+        llm_model = ctx.llm_model
     logger.info("[RECIPE] Starting content generation...")
 
     month = datetime.datetime.now().month
@@ -942,69 +878,3 @@ async def generate_recipe_content(
         }
 
 
-# ── Fitness mode ─────────────────────────────────────────────
-
-
-async def generate_fitness_content(
-    llm_provider: str = "deepseek",
-    llm_model: str = "deepseek-chat",
-) -> dict:
-    """生成 FITNESS 模式的内容"""
-    logger.info("[FITNESS] Starting content generation...")
-
-    prompt = """你是一位健身教练。推荐一套简单的健身计划，用 JSON 格式输出：
-
-{
-  "workout_name": "训练名称（如：晨间拉伸、核心训练）",
-  "duration": "总时长（如：15分钟）",
-  "exercises": [
-    {"name": "动作名称", "reps": "次数/时长"},
-    {"name": "动作名称", "reps": "次数/时长"},
-    {"name": "动作名称", "reps": "次数/时长"},
-    {"name": "动作名称", "reps": "次数/时长"},
-    {"name": "动作名称", "reps": "次数/时长"}
-  ],
-  "tip": "健康提示（30字以内）"
-}
-
-要求：
-1. 动作简单，适合居家训练
-2. 不需要器械
-3. 只输出 JSON，不要其他内容"""
-
-    try:
-        text = await _call_llm(llm_provider, llm_model, prompt)
-        cleaned = _clean_json_response(text)
-        data = json.loads(cleaned)
-        logger.info(f"[FITNESS] Generated: {data.get('workout_name', '')}")
-
-        return {
-            "workout_name": data.get("workout_name", "晨间拉伸"),
-            "duration": data.get("duration", "15分钟"),
-            "exercises": data.get(
-                "exercises",
-                [
-                    {"name": "颈部拉伸", "reps": "10次"},
-                    {"name": "肩部环绕", "reps": "15次"},
-                    {"name": "腰部扭转", "reps": "20次"},
-                    {"name": "腿部拉伸", "reps": "30秒"},
-                    {"name": "深呼吸", "reps": "5次"},
-                ],
-            ),
-            "tip": data.get("tip", "运动前充分热身，避免受伤。保持规律作息，健康生活。"),
-        }
-
-    except Exception as e:
-        logger.error(f"[FITNESS] Failed: {e}")
-        return {
-            "workout_name": "晨间拉伸",
-            "duration": "15分钟",
-            "exercises": [
-                {"name": "颈部拉伸", "reps": "10次"},
-                {"name": "肩部环绕", "reps": "15次"},
-                {"name": "腰部扭转", "reps": "20次"},
-                {"name": "腿部拉伸", "reps": "30秒"},
-                {"name": "深呼吸", "reps": "5次"},
-            ],
-            "tip": "运动前充分热身，避免受伤。保持规律作息，健康生活。",
-        }

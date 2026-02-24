@@ -1,0 +1,79 @@
+{
+  "mode_id": "DAILY",
+  "display_name": "每日推荐",
+  "icon": "sunny",
+  "cacheable": true,
+  "description": "语录、书籍推荐和小知识",
+  "content": {
+    "type": "composite",
+    "steps": [
+      {
+        "type": "computed",
+        "provider": "daily_meta",
+        "fallback": {
+          "year": 2026,
+          "day": 1,
+          "month_cn": "一月",
+          "weekday_cn": "周一",
+          "day_of_year": 1,
+          "days_in_year": 365
+        }
+      },
+      {
+        "type": "llm_json",
+        "prompt_template": "你是一位博学的每日推荐助手。根据以下环境信息，生成一份每日推荐内容，用 JSON 格式输出，包含：\n1. quote: 一句语录（中文，20字以内）\n2. author: 语录作者\n3. book_title: 推荐一本书（书名号）\n4. book_author: 书的作者 + \" 著\"\n5. book_desc: 一句话描述这本书（25字以内）\n6. tip: 一条冷知识或实用小贴士（30字以内）\n7. season_text: 当前节气或季节的一句话描述（10字以内）\n只输出 JSON。\n环境：{context}",
+        "output_schema": {
+          "quote": { "type": "string", "default": "阻碍行动的障碍，本身就是行动的路。" },
+          "author": { "type": "string", "default": "马可·奥勒留" },
+          "book_title": { "type": "string", "default": "《沉思录》" },
+          "book_author": { "type": "string", "default": "马可·奥勒留 著" },
+          "book_desc": { "type": "string", "default": "罗马帝王的自省笔记。" },
+          "tip": { "type": "string", "default": "冬季干燥，记得多喝水。" },
+          "season_text": { "type": "string", "default": "立春已过，万物生长。" }
+        },
+        "fallback": {
+          "quote": "阻碍行动的障碍，本身就是行动的路。",
+          "author": "马可·奥勒留",
+          "book_title": "《沉思录》",
+          "book_author": "马可·奥勒留 著",
+          "book_desc": "罗马帝王的自省笔记。",
+          "tip": "冬季干燥，记得多喝水。",
+          "season_text": "立春已过，万物生长。"
+        }
+      }
+    ],
+    "fallback": {}
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      {
+        "type": "two_column",
+        "left_width": 116,
+        "gap": 10,
+        "left": [
+          { "type": "text", "field": "year", "font_size": 12, "align": "center", "margin_x": 8 },
+          { "type": "big_number", "field": "day", "font_size": 46, "align": "center" },
+          { "type": "text", "field": "month_cn", "font_size": 14, "align": "center", "margin_x": 8 },
+          { "type": "text", "field": "weekday_cn", "font_size": 12, "align": "center", "margin_x": 8 },
+          { "type": "progress_bar", "field": "day_of_year", "max_field": "days_in_year", "width": 80, "margin_x": 8 },
+          { "type": "text", "field": "season_text", "font_size": 10, "align": "center", "margin_x": 8, "max_lines": 2 }
+        ],
+        "right": [
+          { "type": "text", "field": "quote", "font_size": 14, "align": "left", "margin_x": 6, "max_lines": 4 },
+          { "type": "text", "template": "— {author}", "font_size": 11, "align": "right", "margin_x": 6, "max_lines": 1 },
+          { "type": "separator", "style": "short", "width": 80 },
+          { "type": "text", "field": "book_title", "font_size": 13, "align": "left", "margin_x": 6, "max_lines": 2 },
+          { "type": "text", "field": "book_author", "font_size": 11, "align": "left", "margin_x": 6, "max_lines": 1 },
+          { "type": "text", "field": "book_desc", "font_size": 11, "align": "left", "margin_x": 6, "max_lines": 2 },
+          { "type": "separator", "style": "short", "width": 80 },
+          { "type": "text", "field": "tip", "font_size": 11, "align": "left", "margin_x": 6, "max_lines": 2 }
+        ]
+      }
+    ],
+    "footer": {
+      "label": "DAILY",
+      "attribution_template": "— InkSight"
+    }
+  }
+}

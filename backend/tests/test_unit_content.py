@@ -74,20 +74,6 @@ class TestBuildStyleInstructions:
 
 
 class TestFallbackContent:
-    def test_stoic_fallback(self):
-        c = _fallback_content("STOIC")
-        assert "quote" in c
-        assert "author" in c
-
-    def test_roast_fallback(self):
-        c = _fallback_content("ROAST")
-        assert "quote" in c
-
-    def test_zen_fallback(self):
-        c = _fallback_content("ZEN")
-        assert "word" in c
-        assert len(c["word"]) == 1
-
     def test_daily_fallback(self):
         c = _fallback_content("DAILY")
         assert "quote" in c
@@ -109,40 +95,15 @@ class TestGenerateContent:
     """Test generate_content with mocked LLM calls."""
 
     @pytest.mark.asyncio
-    async def test_stoic_mode(self):
+    async def test_unknown_persona_uses_fallback(self):
         with patch("core.content._call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = "真正的障碍是通向行动的道路。| 马可·奥勒留"
             result = await generate_content(
                 persona="STOIC",
                 date_str="2月16日",
                 weather_str="12°C",
             )
+            mock_llm.assert_not_called()
             assert "quote" in result
-            assert "author" in result
-            assert "马可·奥勒留" in result["author"]
-            mock_llm.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_roast_mode(self):
-        with patch("core.content._call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = "你的代码和你的发型一样——不可维护。"
-            result = await generate_content(
-                persona="ROAST",
-                date_str="2月16日",
-                weather_str="12°C",
-            )
-            assert "quote" in result
-
-    @pytest.mark.asyncio
-    async def test_zen_mode(self):
-        with patch("core.content._call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = "静"
-            result = await generate_content(
-                persona="ZEN",
-                date_str="2月16日",
-                weather_str="12°C",
-            )
-            assert result["word"] == "静"
 
     @pytest.mark.asyncio
     async def test_daily_mode(self):
@@ -170,7 +131,7 @@ class TestGenerateContent:
         with patch("core.content._call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.side_effect = Exception("API timeout")
             result = await generate_content(
-                persona="STOIC",
+                persona="DAILY",
                 date_str="2月16日",
                 weather_str="12°C",
             )

@@ -4,6 +4,8 @@ English | [中文](README_ZH.md)
 
 > An LLM-powered smart e-ink desktop companion that delivers calm, meaningful "slow information" — your personal ink-on-paper intelligence.
 
+Official Website: [https://www.inksight.site](https://www.inksight.site)
+
 ![Version](https://img.shields.io/badge/version-v0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
@@ -84,7 +86,7 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 | Hardware | ESP32-C3 + 4.2" E-Paper (400x300, 1-bit) + LiFePO4 battery |
 | Firmware | PlatformIO / Arduino, GxEPD2, WiFiManager |
 | Backend | Python FastAPI, Pillow, OpenAI SDK, httpx, SQLite |
-| Frontend | Static HTML pages (`web/`) + Next.js web app (`webapp/`, website + flasher) |
+| Frontend | Static HTML pages (`webconfig/`) + Next.js web app (`webapp/`, website + flasher) |
 
 For detailed architecture design, see the [Architecture Documentation](docs/architecture.md) (Chinese).
 
@@ -122,6 +124,10 @@ python -m uvicorn api.index:app --host 0.0.0.0 --port 8080
 ```
 
 Once running, visit:
+
+| Entry | URL | Description |
+|------|-----|-------------|
+| Live Demo / Official Website | `https://www.inksight.site` | Public website (homepage, docs, online flasher) |
 
 | Page | URL | Description |
 |------|-----|-------------|
@@ -298,7 +304,7 @@ inksight/
 │   │   └── portal.cpp      # Captive Portal provisioning
 │   ├── data/portal_html.h  # Provisioning page HTML
 │   └── platformio.ini      # PlatformIO configuration
-├── web/                    # Web frontend
+├── webconfig/              # Web config frontend
 │   ├── config.html         # Configuration manager
 │   ├── preview.html        # Preview console
 │   └── dashboard.html      # Statistics dashboard

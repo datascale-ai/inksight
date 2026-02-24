@@ -47,21 +47,6 @@ WEATHER_ICON_MAP = {
 }
 
 
-# ==================== 模式图标映射 ====================
-MODE_ICON_MAP = {
-    "STOIC": "book",
-    "ROAST": "electric_bolt",
-    "ZEN": "zen",
-    "DAILY": "sunny",
-    "BRIEFING": "global",
-    "ARTWALL": "art",
-    "RECIPE": "food",
-    "FITNESS": "exercise",
-    "POETRY": "star",
-    "COUNTDOWN": "flag",
-}
-
-
 # ==================== 字体配置 ====================
 FONTS = {
     # 中文字体
@@ -234,13 +219,11 @@ DAILY_LAYOUT = {
     "right_column_padding": 14,
 }
 
-# 字体大小配置
+# 字体大小配置 (共用组件 + 仍为 Python 模式的布局)
+# STOIC/ROAST/ZEN/FITNESS/POETRY 已迁移到 JSON，字体配置在 modes/builtin/*.json 中
 FONT_SIZES = {
     "status_bar": {"cn": 11, "en": 11},
     "footer": {"label": 10, "attribution": 12},
-    "stoic": {"quote": 16},
-    "roast": {"quote": 15},
-    "zen": {"word": 48},
     "daily": {
         "year": 12,
         "day": 53,
@@ -297,10 +280,3 @@ def get_cacheable_modes() -> set[str]:
         return get_registry().get_cacheable_ids()
     except Exception:
         return {"STOIC", "ROAST", "ZEN", "DAILY"}
-
-
-# Keep legacy names for backward compat (lazy evaluation via property-like access is not
-# possible at module level, so callers that import the set directly will get the fallback.
-# Prefer calling get_supported_modes() / get_cacheable_modes() instead.)
-SUPPORTED_MODES = _BUILTIN_MODE_IDS
-CACHEABLE_MODES = {"STOIC", "ROAST", "ZEN", "DAILY"}

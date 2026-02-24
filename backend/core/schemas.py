@@ -8,7 +8,7 @@ import re
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
-from .config import SUPPORTED_MODES
+from .config import get_supported_modes
 
 # MAC 地址格式：AA:BB:CC:DD:EE:FF
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
@@ -72,11 +72,12 @@ class ConfigRequest(BaseModel):
     @field_validator("modes")
     @classmethod
     def validate_modes(cls, v: list[str]) -> list[str]:
+        supported = get_supported_modes()
         cleaned = []
         for mode in v:
             m = mode.upper().strip()
-            if m not in SUPPORTED_MODES:
-                raise ValueError(f"不支持的模式: {mode}，可选: {SUPPORTED_MODES}")
+            if m not in supported:
+                raise ValueError(f"不支持的模式: {mode}，可选: {supported}")
             cleaned.append(m)
         return cleaned
 

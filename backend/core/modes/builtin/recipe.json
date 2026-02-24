@@ -1,0 +1,44 @@
+{
+  "mode_id": "RECIPE",
+  "display_name": "今日食谱",
+  "icon": "food",
+  "cacheable": false,
+  "description": "时令三餐方案",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位营养师。根据当前季节推荐一套荤素搭配的早中晚三餐方案。\n输出 JSON：{{\"season\":\"季节\",\"breakfast\":\"早餐\",\"lunch\":{{\"meat\":\"\",\"veg\":\"\",\"staple\":\"\"}},\"dinner\":{{\"meat\":\"\",\"veg\":\"\",\"staple\":\"\"}},\"nutrition\":\"营养标注\"}}\n环境：{context}",
+    "output_schema": {
+      "season": { "type": "string", "default": "立春·二月" },
+      "breakfast": { "type": "string", "default": "燕麦牛奶粥·茶叶蛋·凉拌黑木耳" },
+      "lunch": { "type": "object", "default": { "meat": "番茄炖牛腩", "veg": "清炒芥兰", "staple": "白米饭" } },
+      "dinner": { "type": "object", "default": { "meat": "清蒸鲈鱼", "veg": "蒜蓉西兰花", "staple": "紫菜蛋花汤" } },
+      "nutrition": { "type": "string", "default": "蛋白质✓ 膳食纤维✓ 维生素C✓ 铁✓" }
+    },
+    "fallback": {
+      "season": "立春·二月",
+      "breakfast": "燕麦牛奶粥·茶叶蛋·凉拌黑木耳",
+      "lunch": { "meat": "番茄炖牛腩", "veg": "清炒芥兰", "staple": "白米饭" },
+      "dinner": { "meat": "清蒸鲈鱼", "veg": "蒜蓉西兰花", "staple": "紫菜蛋花汤" },
+      "nutrition": "蛋白质✓ 膳食纤维✓ 维生素C✓ 铁✓"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "text", "field": "season", "font_size": 14, "align": "center" },
+      { "type": "separator", "style": "solid", "margin_x": 20 },
+      { "type": "group", "title": "早餐", "children": [
+        { "type": "text", "field": "breakfast", "font_size": 12, "align": "left", "margin_x": 28, "max_lines": 2 }
+      ]},
+      { "type": "group", "title": "午餐", "children": [
+        { "type": "key_value", "field": "lunch", "label": "菜品", "font_size": 12 }
+      ]},
+      { "type": "group", "title": "晚餐", "children": [
+        { "type": "key_value", "field": "dinner", "label": "菜品", "font_size": 12 }
+      ]},
+      { "type": "separator", "style": "solid", "margin_x": 20 },
+      { "type": "text", "field": "nutrition", "font_size": 11, "align": "left", "margin_x": 24, "max_lines": 2 }
+    ],
+    "footer": { "label": "RECIPE", "attribution_template": "— Eat Well" }
+  }
+}

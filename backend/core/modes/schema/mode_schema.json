@@ -44,8 +44,17 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["llm", "llm_json", "static"],
-          "description": "llm: text output parsed by format rules; llm_json: JSON output; static: config-driven data"
+          "enum": ["llm", "llm_json", "static", "external_data", "image_gen", "computed", "composite"],
+          "description": "llm/llm_json/static plus external_data/image_gen/computed/composite"
+        },
+        "provider": {
+          "type": "string",
+          "description": "provider name for external_data/image_gen/computed"
+        },
+        "steps": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "composite content generation steps"
         },
         "prompt_template": {
           "type": "string",
@@ -148,7 +157,14 @@
         { "$ref": "#/definitions/vertical_stack_block" },
         { "$ref": "#/definitions/conditional_block" },
         { "$ref": "#/definitions/spacer_block" },
-        { "$ref": "#/definitions/icon_text_block" }
+        { "$ref": "#/definitions/icon_text_block" },
+        { "$ref": "#/definitions/two_column_block" },
+        { "$ref": "#/definitions/image_block" },
+        { "$ref": "#/definitions/progress_bar_block" },
+        { "$ref": "#/definitions/big_number_block" },
+        { "$ref": "#/definitions/icon_list_block" },
+        { "$ref": "#/definitions/key_value_block" },
+        { "$ref": "#/definitions/group_block" }
       ]
     },
     "centered_text_block": {
@@ -281,6 +297,81 @@
         "font_size": { "type": "integer", "default": 14 },
         "icon_size": { "type": "integer", "default": 12 },
         "margin_x": { "type": "integer", "default": 24 }
+      }
+    },
+    "two_column_block": {
+      "type": "object",
+      "required": ["type", "left", "right"],
+      "properties": {
+        "type": { "const": "two_column" },
+        "left_width": { "type": "integer", "default": 120 },
+        "gap": { "type": "integer", "default": 8 },
+        "left": { "type": "array", "items": { "$ref": "#/definitions/block" } },
+        "right": { "type": "array", "items": { "$ref": "#/definitions/block" } }
+      }
+    },
+    "image_block": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "image" },
+        "field": { "type": "string" },
+        "x": { "type": "integer", "default": 0 },
+        "y": { "type": "integer", "default": 0 },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" }
+      }
+    },
+    "progress_bar_block": {
+      "type": "object",
+      "required": ["type", "field", "max_field"],
+      "properties": {
+        "type": { "const": "progress_bar" },
+        "field": { "type": "string" },
+        "max_field": { "type": "string" },
+        "width": { "type": "integer", "default": 80 },
+        "height": { "type": "integer", "default": 6 },
+        "margin_x": { "type": "integer", "default": 24 }
+      }
+    },
+    "big_number_block": {
+      "type": "object",
+      "required": ["type", "field"],
+      "properties": {
+        "type": { "const": "big_number" },
+        "field": { "type": "string" },
+        "font_size": { "type": "integer", "default": 42 },
+        "align": { "type": "string", "enum": ["left", "center", "right"], "default": "center" }
+      }
+    },
+    "icon_list_block": {
+      "type": "object",
+      "required": ["type", "field"],
+      "properties": {
+        "type": { "const": "icon_list" },
+        "field": { "type": "string" },
+        "icon_field": { "type": "string" },
+        "text_field": { "type": "string" },
+        "max_items": { "type": "integer", "default": 6 }
+      }
+    },
+    "key_value_block": {
+      "type": "object",
+      "required": ["type", "field"],
+      "properties": {
+        "type": { "const": "key_value" },
+        "field": { "type": "string" },
+        "label": { "type": "string" },
+        "font_size": { "type": "integer", "default": 12 }
+      }
+    },
+    "group_block": {
+      "type": "object",
+      "required": ["type", "title", "children"],
+      "properties": {
+        "type": { "const": "group" },
+        "title": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/block" } }
       }
     }
   }

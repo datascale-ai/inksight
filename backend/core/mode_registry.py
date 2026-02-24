@@ -8,13 +8,31 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-ContentFn = Callable[..., Awaitable[dict]]
+@dataclass
+class ContentContext:
+    """统一的 Python 内置模式内容生成上下文。"""
+    config: dict
+    date_ctx: dict
+    weather_str: str
+    date_str: str
+    festival: str = ""
+    daily_word: str = ""
+    upcoming_holiday: str = ""
+    days_until_holiday: int = 0
+    llm_provider: str = "deepseek"
+    llm_model: str = "deepseek-chat"
+    language: str = "zh"
+    content_tone: str = "neutral"
+    character_tones: list[str] = field(default_factory=list)
+
+
+ContentFn = Callable[[ContentContext], Awaitable[dict]]
 RenderFn = Callable[..., Image.Image]
 
 MODES_DIR = os.path.join(os.path.dirname(__file__), "modes")
@@ -209,7 +227,7 @@ def _validate_mode_def(definition: dict) -> bool:
     if not isinstance(content, dict):
         return False
     ctype = content.get("type", "")
-    if ctype not in ("llm", "llm_json", "static"):
+    if ctype not in ("llm", "llm_json", "static", "external_data", "image_gen", "computed", "composite"):
         return False
     if ctype in ("llm", "llm_json") and not content.get("prompt_template"):
         return False
@@ -254,48 +272,8 @@ def _init_registry(registry: ModeRegistry) -> None:
 
 
 def _register_builtin_python_modes(registry: ModeRegistry) -> None:
-    """Register the 5 complex builtin modes that remain as Python code."""
-    from .content import (
-        generate_artwall_content,
-        generate_briefing_content,
-        generate_countdown_content,
-        generate_recipe_content,
-    )
-    from .patterns import (
-        render_artwall,
-        render_briefing,
-        render_countdown,
-        render_daily,
-        render_recipe,
-    )
-
-    # DAILY keeps Python impl due to complex two-column calendar layout.
-    # Its content generation is handled by the standard generate_content() path.
-    from .content import generate_content as _gen_content
-
-    async def _daily_content(**kwargs: Any) -> dict:
-        return await _gen_content(persona="DAILY", **kwargs)
-
-    registry.register_builtin(
-        "DAILY", _daily_content, render_daily,
-        display_name="每日推荐", icon="sunny", cacheable=True,
-    )
-    registry.register_builtin(
-        "BRIEFING", generate_briefing_content, render_briefing,
-        display_name="科技简报", icon="global", cacheable=False,
-    )
-    registry.register_builtin(
-        "ARTWALL", generate_artwall_content, render_artwall,
-        display_name="AI 艺术", icon="art", cacheable=False,
-    )
-    registry.register_builtin(
-        "RECIPE", generate_recipe_content, render_recipe,
-        display_name="今日食谱", icon="food", cacheable=False,
-    )
-    registry.register_builtin(
-        "COUNTDOWN", generate_countdown_content, render_countdown,
-        display_name="倒计时", icon="flag", cacheable=False,
-    )
+    """All built-in modes are now JSON-defined; keep hook for future use."""
+    return None
 
 
 def reset_registry() -> None:
