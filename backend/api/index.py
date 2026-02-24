@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
+from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Response
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -160,7 +161,7 @@ async def _choose_persona_from_config(config: dict, peek_next: bool = False) -> 
 
 
 async def _resolve_mode(
-    mac: str | None, config: dict | None, persona_override: str | None
+    mac: Optional[str], config: Optional[dict], persona_override: Optional[str]
 ) -> str:
     """Determine which persona to use for this request."""
     registry = get_registry()
@@ -183,8 +184,8 @@ async def _resolve_mode(
 
 
 async def _build_image(
-    v: float, mac: str | None, persona_override: str | None = None,
-    rssi: int | None = None,
+    v: float, mac: Optional[str], persona_override: Optional[str] = None,
+    rssi: Optional[int] = None,
     screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
 ):
     battery_pct = calc_battery_pct(v)
@@ -236,7 +237,7 @@ async def _build_image(
 
 async def _log_render(
     mac: str, persona: str, cache_hit: bool, elapsed_ms: int,
-    voltage: float = 3.3, rssi: int | None = None, status: str = "success",
+    voltage: float = 3.3, rssi: Optional[int] = None, status: str = "success",
 ):
     """Log render stats and device heartbeat (fire-and-forget)."""
     try:
@@ -264,7 +265,7 @@ def _build_firmware_manifest(version: str, download_url: str) -> dict:
     }
 
 
-def _pick_firmware_asset(assets: list[dict]) -> dict | None:
+def _pick_firmware_asset(assets: list[dict]) -> Optional[dict]:
     preferred = [
         a for a in assets
         if a.get("name", "").endswith(".bin") and "inksight-firmware-" in a.get("name", "")
@@ -391,9 +392,9 @@ async def _validate_firmware_url(url: str) -> dict:
 @app.get("/api/render")
 async def render(
     v: float = Query(default=3.3, description="Battery voltage"),
-    mac: str | None = Query(default=None, description="Device MAC address"),
-    persona: str | None = Query(default=None, description="Force persona"),
-    rssi: int | None = Query(default=None, description="WiFi RSSI (dBm)"),
+    mac: Optional[str] = Query(default=None, description="Device MAC address"),
+    persona: Optional[str] = Query(default=None, description="Force persona"),
+    rssi: Optional[int] = Query(default=None, description="WiFi RSSI (dBm)"),
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
@@ -436,8 +437,8 @@ async def render(
 @app.get("/api/preview")
 async def preview(
     v: float = Query(default=3.3, description="Battery voltage"),
-    mac: str | None = Query(default=None, description="Device MAC address"),
-    persona: str | None = Query(default=None, description="Force persona"),
+    mac: Optional[str] = Query(default=None, description="Device MAC address"),
+    persona: Optional[str] = Query(default=None, description="Force persona"),
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
