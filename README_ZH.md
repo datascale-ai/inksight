@@ -130,6 +130,16 @@ python -m uvicorn api.index:app --host 0.0.0.0 --port 8080
 
 ### 3. 固件烧录
 
+**方式 A：Web 在线刷机（推荐）**
+
+- 使用 Chrome/Edge 打开 InkSight Web Flasher 页面。
+- 从 GitHub Releases 选择固件版本。
+- 通过 USB 连接 ESP32-C3，点击刷写即可。
+
+固件发布产物命名为 `inksight-firmware-<semver>.bin`，统一上传到 GitHub Releases。
+
+**方式 B：PlatformIO 本地烧录**
+
 ```bash
 cd firmware
 
@@ -141,6 +151,10 @@ pio device monitor
 ```
 
 或使用 Arduino IDE 打开 `firmware/src/main.cpp` 进行编译上传。
+
+如果 `inksight-web` 与后端 API 分开部署，请在前端配置
+`NEXT_PUBLIC_FIRMWARE_API_BASE` 指向后端地址（例如：
+`https://your-backend.example.com`）。
 
 ### 4. 配网
 

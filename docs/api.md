@@ -119,7 +119,31 @@ curl -X GET "https://your-url.vercel.app/api/render?v=3.20&mac=test_device&w=800
 
 ---
 
-### 2.6 健康检查
+### 2.6 固件版本列表（Web 在线刷机）
+
+- **URL:** `GET /api/firmware/releases`
+- **参数:** `refresh`（可选，`true` 时强制刷新缓存）
+- **说明:** 从 GitHub Releases 拉取可用固件版本（仅包含带 `.bin` 产物的 release）
+
+---
+
+### 2.7 最新固件（Web 在线刷机）
+
+- **URL:** `GET /api/firmware/releases/latest`
+- **参数:** `refresh`（可选，`true` 时强制刷新缓存）
+- **说明:** 返回推荐刷写的最新版本，前端可直接用于默认选择
+
+---
+
+### 2.8 手动固件 URL 校验（Web 在线刷机）
+
+- **URL:** `GET /api/firmware/validate-url`
+- **参数:** `url`（必填，`.bin` 固件下载地址）
+- **说明:** 对手动输入的固件 URL 做格式校验与可达性预检查
+
+---
+
+### 2.9 健康检查
 
 - **URL:** `GET /api/health`
 - **响应:**
