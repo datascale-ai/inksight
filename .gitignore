@@ -226,6 +226,16 @@ __marimo__/
 # PlatformIO build artifacts
 .pio/
 
+# Next.js webapp artifacts
+webapp/node_modules/
+webapp/.next/
+webapp/out/
+webapp/build/
+webapp/coverage/
+webapp/.env*
+webapp/.vercel/
+webapp/*.tsbuildinfo
+
 # Internal documents (not for public release)
 需求文档.md
 API 接口文档.md

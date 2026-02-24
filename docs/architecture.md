@@ -45,6 +45,18 @@ graph TD
 - **框架:** FastAPI
 - **核心依赖:** Pillow (图像渲染), httpx (HTTP 客户端), openai (LLM SDK)
 
+## 前端形态 (Frontend)
+
+InkSight 当前采用双前端结构：
+
+- **`web/`（静态运维页）**：由后端直接托管与路由，提供预览、配置、统计页面（`/`、`/config`、`/dashboard`）。
+- **`webapp/`（Next.js 官网与刷机页）**：独立 Node.js 前端，用于官网展示、文档导航、Web 在线刷机等交互能力。
+
+在线刷机 API 由后端统一提供（`/api/firmware/*`）。`webapp` 支持两种接入方式：
+
+1. 浏览器直连后端：配置 `NEXT_PUBLIC_FIRMWARE_API_BASE`。
+2. 同域代理：使用 Next.js API Route 转发到 `INKSIGHT_BACKEND_API_BASE`。
+
 ### 图像渲染管线 (Rendering Pipeline)
 
 1. **Input:** 接收 HTTP 请求，解析参数（电压、MAC 地址）。

@@ -84,7 +84,7 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 | Hardware | ESP32-C3 + 4.2" E-Paper (400x300, 1-bit) + LiFePO4 battery |
 | Firmware | PlatformIO / Arduino, GxEPD2, WiFiManager |
 | Backend | Python FastAPI, Pillow, OpenAI SDK, httpx, SQLite |
-| Frontend | HTML / CSS / JavaScript (Config page, Preview console, Stats dashboard) |
+| Frontend | Static HTML pages (`web/`) + Next.js web app (`webapp/`, website + flasher) |
 
 For detailed architecture design, see the [Architecture Documentation](docs/architecture.md) (Chinese).
 
@@ -129,6 +129,21 @@ Once running, visit:
 | Config Manager | `http://localhost:8080/config` | Manage device configuration |
 | Stats Dashboard | `http://localhost:8080/dashboard` | Device status and usage statistics |
 
+### 2.5 Web App (website + flasher)
+
+```bash
+cd webapp
+npm install
+npm run dev
+```
+
+Default URL: `http://localhost:3000`
+
+Environment variables:
+
+- `INKSIGHT_BACKEND_API_BASE` (server-side proxy target, default `http://127.0.0.1:8080`)
+- `NEXT_PUBLIC_FIRMWARE_API_BASE` (optional browser-side API base; if omitted, use same-origin `/api/firmware/*`)
+
 ### 3. Firmware Flashing
 
 **Option A: Web Flasher (recommended)**
@@ -153,9 +168,11 @@ pio device monitor
 
 Alternatively, open `firmware/src/main.cpp` in Arduino IDE to compile and upload.
 
-If you host `inksight-web` separately from the backend API, set
-`NEXT_PUBLIC_FIRMWARE_API_BASE` to point to your backend (for example:
-`https://your-backend.example.com`).
+If you deploy `webapp` separately from the backend API, set
+`NEXT_PUBLIC_FIRMWARE_API_BASE` to point to your backend (for example
+`https://your-backend.example.com`). If not set, `webapp` uses its built-in
+Next.js API routes to proxy `/api/firmware/*` requests to
+`INKSIGHT_BACKEND_API_BASE`.
 
 ### 4. WiFi Provisioning
 
@@ -285,6 +302,11 @@ inksight/
 │   ├── config.html         # Configuration manager
 │   ├── preview.html        # Preview console
 │   └── dashboard.html      # Statistics dashboard
+├── webapp/                 # Next.js website + Web Flasher frontend
+│   ├── app/                # App Router pages and API routes
+│   ├── components/         # UI components
+│   ├── public/             # Static assets
+│   └── package.json        # Node.js dependencies and scripts
 └── docs/                   # Documentation
     ├── architecture.md     # System architecture
     ├── api.md              # API reference
