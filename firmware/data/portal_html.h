@@ -160,9 +160,9 @@ hr.dv{border:none;border-top:1px dashed var(--bd);margin:20px 0}
 <span class="ch" style="background:#f0fdf4;border-color:#86efac;color:#15803d;font-size:.7rem" onclick="applyPreset('all')">全功能体验</span>
 </div>
 <div class="cg" id="modeC">
-<span class="ch sel" data-m="STOIC" onclick="tc(this)"><b>STOIC</b> <span class="ch-desc">每日哲学箴言</span></span>
-<span class="ch sel" data-m="ROAST" onclick="tc(this)"><b>ROAST</b> <span class="ch-desc">犀利吐槽短句</span></span>
-<span class="ch" data-m="ZEN" onclick="tc(this)"><b>ZEN</b> <span class="ch-desc">一字禅</span></span>
+<span class="ch sel" data-m="STOIC" onclick="tc(this)"><b>STOIC</b> <span class="ch-desc">哲学箴言+当代解读</span></span>
+<span class="ch sel" data-m="ROAST" onclick="tc(this)"><b>ROAST</b> <span class="ch-desc">精准情境吐槽</span></span>
+<span class="ch" data-m="ZEN" onclick="tc(this)"><b>ZEN</b> <span class="ch-desc">一字禅+意境</span></span>
 <span class="ch sel" data-m="DAILY" onclick="tc(this)"><b>DAILY</b> <span class="ch-desc">语录·书荐·冷知识</span></span>
 <span class="ch" data-m="BRIEFING" onclick="tc(this)"><b>BRIEFING</b> <span class="ch-desc">科技热榜简报</span></span>
 <span class="ch" data-m="ARTWALL" onclick="tc(this)"><b>ARTWALL</b> <span class="ch-desc">AI 黑白艺术画</span></span>
@@ -170,6 +170,15 @@ hr.dv{border:none;border-top:1px dashed var(--bd);margin:20px 0}
 <span class="ch" data-m="FITNESS" onclick="tc(this)"><b>FITNESS</b> <span class="ch-desc">居家训练计划</span></span>
 <span class="ch" data-m="POETRY" onclick="tc(this)"><b>POETRY</b> <span class="ch-desc">每日古诗词</span></span>
 <span class="ch" data-m="COUNTDOWN" onclick="tc(this)"><b>COUNTDOWN</b> <span class="ch-desc">重要日倒计时</span></span>
+<span class="ch" data-m="ALMANAC" onclick="tc(this)"><b>ALMANAC</b> <span class="ch-desc">老黄历·宜忌·节气</span></span>
+<span class="ch" data-m="LETTER" onclick="tc(this)"><b>LETTER</b> <span class="ch-desc">来自时空的慢信</span></span>
+<span class="ch" data-m="THISDAY" onclick="tc(this)"><b>THISDAY</b> <span class="ch-desc">历史上的今天</span></span>
+<span class="ch" data-m="RIDDLE" onclick="tc(this)"><b>RIDDLE</b> <span class="ch-desc">谜语·脑筋急转弯</span></span>
+<span class="ch" data-m="QUESTION" onclick="tc(this)"><b>QUESTION</b> <span class="ch-desc">每日一问</span></span>
+<span class="ch" data-m="BIAS" onclick="tc(this)"><b>BIAS</b> <span class="ch-desc">认知偏差学习</span></span>
+<span class="ch" data-m="STORY" onclick="tc(this)"><b>STORY</b> <span class="ch-desc">微型小说</span></span>
+<span class="ch" data-m="LIFEBAR" onclick="tc(this)"><b>LIFEBAR</b> <span class="ch-desc">人生进度条</span></span>
+<span class="ch" data-m="CHALLENGE" onclick="tc(this)"><b>CHALLENGE</b> <span class="ch-desc">5分钟微挑战</span></span>
 </div>
 </div>
 
@@ -411,9 +420,9 @@ if(arr.indexOf(c.dataset.m)>=0)c.classList.add('sel');else c.classList.remove('s
 });
 }
 function applyPreset(name){
-if(name==='relax'){setModes(['ZEN','DAILY','POETRY']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=4;document.getElementById('riM').value=0;}
-else if(name==='news'){setModes(['BRIEFING','DAILY']);sp(document.querySelector('#rStrat .pi[data-v="cycle"]'));document.getElementById('riH').value=2;document.getElementById('riM').value=0;}
-else if(name==='all'){setModes(['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=1;document.getElementById('riM').value=0;}
+if(name==='relax'){setModes(['ZEN','DAILY','POETRY','LETTER','STORY']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=4;document.getElementById('riM').value=0;}
+else if(name==='news'){setModes(['BRIEFING','DAILY','THISDAY','BIAS']);sp(document.querySelector('#rStrat .pi[data-v="cycle"]'));document.getElementById('riH').value=2;document.getElementById('riM').value=0;}
+else if(name==='all'){setModes(['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=1;document.getElementById('riM').value=0;}
 }
 
 var llmModels={

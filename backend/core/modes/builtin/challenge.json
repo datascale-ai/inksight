@@ -1,0 +1,51 @@
+{
+  "mode_id": "CHALLENGE",
+  "display_name": "微挑战",
+  "icon": "flag",
+  "cacheable": true,
+  "description": "每天一个5分钟可完成的小挑战",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位生活教练。设计一个今天可以完成的微挑战，只需5分钟，但能带来新鲜感或小小的成就感。\n用 JSON 输出：\n{{\"challenge\": \"挑战内容（25字以内，具体可执行）\", \"why\": \"为什么值得做（20字以内）\", \"difficulty\": \"难度（1-3颗星，用★表示）\", \"time\": \"预计耗时（如：3分钟）\"}}\n要求：\n1. 具体、可操作、不需要特殊工具\n2. 与当前天气/时间段相关更佳（如雨天的挑战、午休的挑战）\n3. 覆盖社交、创造、运动、感官、思维等维度\n只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "challenge": { "type": "string", "default": "给一个半年没联系的朋友发条问候" },
+      "why": { "type": "string", "default": "维系关系不需要理由" },
+      "difficulty": { "type": "string", "default": "★" },
+      "time": { "type": "string", "default": "2分钟" }
+    },
+    "temperature": 0.9,
+    "fallback": {
+      "challenge": "给一个半年没联系的朋友发条问候",
+      "why": "维系关系不需要理由",
+      "difficulty": "★",
+      "time": "2分钟"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "template": "今日微挑战", "font": "noto_serif_bold", "font_size": 14, "align": "center" },
+      { "type": "text", "template": "{difficulty}  ·  {time}", "font_size": 11, "align": "center" },
+      { "type": "spacer", "height": 8 },
+      { "type": "separator", "style": "short", "width": 60 },
+      {
+        "type": "centered_text",
+        "field": "challenge",
+        "font": "noto_serif_bold",
+        "font_size": 18,
+        "max_width_ratio": 0.8,
+        "vertical_center": false,
+        "line_spacing": 10
+      },
+      { "type": "spacer", "height": 16 },
+      { "type": "separator", "style": "dashed", "margin_x": 50 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "why", "font": "noto_serif_light", "font_size": 11, "align": "center", "max_lines": 2 }
+    ],
+    "footer": {
+      "label": "CHALLENGE",
+      "attribution_template": "— Just Do It"
+    }
+  }
+}

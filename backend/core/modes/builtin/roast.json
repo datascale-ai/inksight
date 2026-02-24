@@ -3,14 +3,14 @@
   "display_name": "毒舌吐槽",
   "icon": "electric_bolt",
   "cacheable": true,
-  "description": "犀利的中文吐槽，缓解压力",
+  "description": "精准情境吐槽，缓解压力",
 
   "content": {
     "type": "llm",
-    "prompt_template": "你是一个毒舌 AI 助手，擅长黑色幽默和反讽。根据以下环境信息，生成一句犀利的吐槽短句，让人破防但又忍不住笑。只输出短句本身，不要加引号。\n环境：{context}",
+    "prompt_template": "你是一个毒舌 AI，擅长黑色幽默和反讽。你必须精确针对以下环境信息中的某一个具体细节进行吐槽，不要泛泛而谈。\n比如：如果是周一，吐槽周一的痛苦；如果在下雨，吐槽淋雨的人；如果是深夜，吐槽还不睡的人；如果天很热，吐槽热到融化。\n吐槽要像一个损友在你旁边说的话，不要像网络段子。语气亲切但扎心，让人破防又忍不住笑。\n只输出短句本身，不要加引号，不要加前缀。\n环境：{context}",
     "output_format": "raw",
     "output_fields": ["quote"],
-    "temperature": 0.8,
+    "temperature": 0.85,
     "fallback": {
       "quote": "服务器也累了，和你一样需要休息。"
     }

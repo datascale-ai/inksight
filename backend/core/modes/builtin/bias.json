@@ -1,0 +1,51 @@
+{
+  "mode_id": "BIAS",
+  "display_name": "认知偏差",
+  "icon": "tips",
+  "cacheable": true,
+  "description": "每天认识一个认知偏差",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位认知心理学教授。介绍一个认知偏差或心理学效应。\n用 JSON 输出：\n{{\"name_cn\": \"中文名（如：幸存者偏差）\", \"name_en\": \"英文名（如：Survivorship Bias）\", \"definition\": \"一句话定义（25字以内）\", \"example\": \"一个贴近日常生活的例子（40字以内）\", \"antidote\": \"如何避免（20字以内）\"}}\n要求：选择不同的偏差，覆盖决策、记忆、社交、消费等领域。例子要贴近生活，让人会心一笑。只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "name_cn": { "type": "string", "default": "幸存者偏差" },
+      "name_en": { "type": "string", "default": "Survivorship Bias" },
+      "definition": { "type": "string", "default": "只看到成功案例，忽略了失败的大多数" },
+      "example": { "type": "string", "default": "\"大学辍学也能成功\" —— 你没看到辍学后找不到工作的那些人。" },
+      "antidote": { "type": "string", "default": "主动寻找反面证据" }
+    },
+    "temperature": 0.8,
+    "fallback": {
+      "name_cn": "幸存者偏差",
+      "name_en": "Survivorship Bias",
+      "definition": "只看到成功案例，忽略了失败的大多数",
+      "example": "\"大学辍学也能成功\" —— 你没看到辍学后找不到工作的那些人。",
+      "antidote": "主动寻找反面证据"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "field": "name_cn", "font": "noto_serif_bold", "font_size": 18, "align": "center" },
+      { "type": "text", "field": "name_en", "font_size": 11, "align": "center" },
+      { "type": "spacer", "height": 6 },
+      { "type": "separator", "style": "short", "width": 70 },
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "field": "definition", "font_size": 14, "align": "center", "margin_x": 28, "max_lines": 2 },
+      { "type": "spacer", "height": 10 },
+      { "type": "group", "title": "日常举例", "children": [
+        { "type": "text", "field": "example", "font_size": 12, "align": "left", "margin_x": 32, "max_lines": 3 }
+      ]},
+      { "type": "spacer", "height": 6 },
+      { "type": "separator", "style": "dashed", "margin_x": 40 },
+      { "type": "spacer", "height": 4 },
+      { "type": "icon_text", "icon": "tips", "text": "解药", "font_size": 12, "margin_x": 24 },
+      { "type": "text", "field": "antidote", "font_size": 12, "align": "left", "margin_x": 40, "max_lines": 2 }
+    ],
+    "footer": {
+      "label": "BIAS",
+      "attribution_template": "— Know Thyself"
+    }
+  }
+}

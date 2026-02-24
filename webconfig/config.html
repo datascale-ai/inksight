@@ -131,6 +131,7 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div class="fg">
 <label class="lbl">设备 MAC 地址</label>
 <input type="text" class="inp" id="macIn" placeholder="例如: 88:56:A6:7B:C7:0C">
+<div id="deviceList" style="margin-top:6px"></div>
 <div style="font-size:.75rem;color:var(--gy);margin-top:4px">在设备屏幕底部或初始配置页面可以找到，也可以通过 URL 参数传递</div>
 </div>
 
@@ -162,16 +163,25 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div class="fg">
 <label class="lbl">内容模式（多选）</label>
 <div class="cg" id="modes">
-<span class="ch" data-m="STOIC" onclick="tc(this)">STOIC 斯多葛</span>
-<span class="ch" data-m="ROAST" onclick="tc(this)">ROAST 毒舌</span>
-<span class="ch" data-m="ZEN" onclick="tc(this)">ZEN 禅意</span>
-<span class="ch" data-m="DAILY" onclick="tc(this)">DAILY 每日</span>
-<span class="ch" data-m="BRIEFING" onclick="tc(this)">BRIEFING 简报</span>
-<span class="ch" data-m="ARTWALL" onclick="tc(this)">ARTWALL 画廊</span>
-<span class="ch" data-m="RECIPE" onclick="tc(this)">RECIPE 食谱</span>
-<span class="ch" data-m="FITNESS" onclick="tc(this)">FITNESS 健身</span>
-<span class="ch" data-m="POETRY" onclick="tc(this)">POETRY 诗词</span>
-<span class="ch" data-m="COUNTDOWN" onclick="tc(this)">COUNTDOWN 倒计时</span>
+<span class="ch" data-m="STOIC" data-tip="哲学箴言+当代解读" onclick="tc(this)">STOIC 斯多葛</span>
+<span class="ch" data-m="ROAST" data-tip="精准情境吐槽" onclick="tc(this)">ROAST 毒舌</span>
+<span class="ch" data-m="ZEN" data-tip="一字禅+意境出处" onclick="tc(this)">ZEN 禅意</span>
+<span class="ch" data-m="DAILY" data-tip="语录·书荐·冷知识" onclick="tc(this)">DAILY 每日</span>
+<span class="ch" data-m="BRIEFING" data-tip="科技热榜简报" onclick="tc(this)">BRIEFING 简报</span>
+<span class="ch" data-m="ARTWALL" data-tip="AI黑白艺术画" onclick="tc(this)">ARTWALL 画廊</span>
+<span class="ch" data-m="RECIPE" data-tip="早中晚三餐建议" onclick="tc(this)">RECIPE 食谱</span>
+<span class="ch" data-m="FITNESS" data-tip="居家训练计划" onclick="tc(this)">FITNESS 健身</span>
+<span class="ch" data-m="POETRY" data-tip="每日古诗词" onclick="tc(this)">POETRY 诗词</span>
+<span class="ch" data-m="COUNTDOWN" data-tip="重要日倒计时" onclick="tc(this)">COUNTDOWN 倒计时</span>
+<span class="ch" data-m="ALMANAC" data-tip="老黄历·宜忌·节气" onclick="tc(this)">ALMANAC 老黄历</span>
+<span class="ch" data-m="LETTER" data-tip="来自时空的慢信" onclick="tc(this)">LETTER 慢信</span>
+<span class="ch" data-m="THISDAY" data-tip="历史上的今天" onclick="tc(this)">THISDAY 今日历史</span>
+<span class="ch" data-m="RIDDLE" data-tip="谜语·脑筋急转弯" onclick="tc(this)">RIDDLE 猜谜</span>
+<span class="ch" data-m="QUESTION" data-tip="发人深省的每日一问" onclick="tc(this)">QUESTION 每日一问</span>
+<span class="ch" data-m="BIAS" data-tip="认知偏差科普" onclick="tc(this)">BIAS 认知偏差</span>
+<span class="ch" data-m="STORY" data-tip="三幕微型小说" onclick="tc(this)">STORY 微故事</span>
+<span class="ch" data-m="LIFEBAR" data-tip="人生进度可视化" onclick="tc(this)">LIFEBAR 进度条</span>
+<span class="ch" data-m="CHALLENGE" data-tip="5分钟微挑战" onclick="tc(this)">CHALLENGE 微挑战</span>
 </div>
 </div>
 
@@ -276,6 +286,17 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <button class="btn" onclick="saveConfig()" style="flex:1">保存配置</button>
 <button class="btn btn-outline" onclick="openPreviewModal()" style="flex:1">预览效果</button>
 </div>
+
+<div id="inlinePreview" style="display:none;margin-top:16px;border:1px solid var(--bd);border-radius:12px;padding:16px;background:var(--bg)">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+<label class="lbl" style="margin:0">实时预览</label>
+<div class="cg" id="inlinePreviewModes" style="gap:4px"></div>
+</div>
+<div style="text-align:center">
+<img id="inlinePreviewImg" style="max-width:100%;border:2px solid #d4d4d4;border-radius:6px;background:#f5f5f5" alt="Preview">
+<div id="inlinePreviewStatus" style="font-size:.72rem;color:var(--gy);margin-top:6px"></div>
+</div>
+</div>
 </div>
 </div>
 
@@ -340,7 +361,7 @@ const strategyDescs = {
   smart: '根据时间段自动匹配最佳模式（早餐建议/科技简报/运动计划等）'
 };
 
-const ALL_MODES = ['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN'];
+const ALL_MODES = ['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE'];
 
 // ── Toast notifications ──────────────────────────────────────
 
@@ -1086,9 +1107,73 @@ async function previewCustomMode() {
   }
 }
 
+// ── Device auto-discovery ────────────────────────────────────
+
+async function loadDeviceList() {
+  try {
+    const res = await fetch(`${API_BASE}/api/stats/overview`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const devices = data.devices || [];
+    if (devices.length === 0) return;
+
+    const container = document.getElementById('deviceList');
+    container.innerHTML = '<div style="font-size:.72rem;color:var(--gy);margin-bottom:4px">已发现设备：</div>' +
+      '<div class="cg" style="gap:4px">' +
+      devices.map(d => {
+        const shortMac = d.mac.replace(/:/g, '').slice(-6);
+        const ago = timeSince(d.last_seen);
+        return `<span class="ch" style="font-size:.72rem;padding:4px 10px" onclick="selectDevice('${d.mac}')" title="最近活跃: ${ago}前">${shortMac} <span style="opacity:.6">(${d.total_renders})</span></span>`;
+      }).join('') +
+      '</div>';
+  } catch (e) {}
+}
+
+function selectDevice(mac) {
+  document.getElementById('macIn').value = mac;
+  loadConfig();
+}
+
+function timeSince(isoStr) {
+  const ms = Date.now() - new Date(isoStr).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + '秒';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + '分钟';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + '小时';
+  return Math.floor(h / 24) + '天';
+}
+
+// ── Inline preview ──────────────────────────────────────────
+
+async function showInlinePreview(mode) {
+  const panel = document.getElementById('inlinePreview');
+  panel.style.display = 'block';
+  const status = document.getElementById('inlinePreviewStatus');
+  const img = document.getElementById('inlinePreviewImg');
+  status.textContent = `渲染 ${mode} 中...`;
+
+  try {
+    const start = performance.now();
+    const mac = document.getElementById('macIn').value.trim();
+    let url = `${API_BASE}/api/preview?persona=${mode}&v=3.30`;
+    if (mac) url += `&mac=${encodeURIComponent(mac)}`;
+    const res = await fetch(url);
+    const elapsed = Math.round(performance.now() - start);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+    status.textContent = `${mode} · ${elapsed}ms · ${(blob.size/1024).toFixed(1)}KB`;
+  } catch (e) {
+    status.textContent = '渲染失败: ' + e.message;
+  }
+}
+
 // ── Initialize ───────────────────────────────────────────────
 updateModels();
 refreshModeList();
+loadDeviceList();
 
 const urlParams = new URLSearchParams(window.location.search);
 const macParam = urlParams.get('mac');

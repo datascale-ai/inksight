@@ -67,9 +67,17 @@ async def init_db():
                 last_persona TEXT DEFAULT '',
                 last_refresh_at TEXT DEFAULT '',
                 pending_refresh INTEGER DEFAULT 0,
+                pending_mode TEXT DEFAULT '',
                 updated_at TEXT NOT NULL
             )
         """)
+
+        # Migration: add pending_mode column if missing
+        try:
+            await db.execute("ALTER TABLE device_state ADD COLUMN pending_mode TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
 
         await db.commit()
 
@@ -237,7 +245,7 @@ async def update_device_state(mac: str, **kwargs):
             (mac, now, now),
         )
         for key, value in kwargs.items():
-            if key in ("last_persona", "last_refresh_at", "pending_refresh", "cycle_index"):
+            if key in ("last_persona", "last_refresh_at", "pending_refresh", "cycle_index", "pending_mode"):
                 await db.execute(
                     f"UPDATE device_state SET {key} = ? WHERE mac = ?",
                     (value, mac),

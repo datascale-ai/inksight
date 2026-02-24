@@ -193,6 +193,28 @@ void updateTimeDisplay() {
     epdPartialDisplay(partBuf, TIME_RGN_X0, TIME_RGN_Y0, TIME_RGN_X1, TIME_RGN_Y1);
 }
 
+// ── Mode preview screen (double-click transition) ───────────
+
+void showModePreview(const char *modeName) {
+    memset(imgBuf, 0xFF, IMG_BUF_LEN);
+
+    int len = strlen(modeName);
+    int scale = 3;
+    int nameX = (W - textWidth(len, scale)) / 2;
+    int nameY = H / 2 - 30;
+    drawText(modeName, nameX, nameY, scale);
+
+    const char *loading = "loading...";
+    int loadScale = 2;
+    int loadLen = strlen(loading);
+    int loadX = (W - textWidth(loadLen, loadScale)) / 2;
+    int loadY = H / 2 + 20;
+    drawText(loading, loadX, loadY, loadScale);
+
+    epdDisplayFast(imgBuf);
+    Serial.printf("Mode preview shown: %s\n", modeName);
+}
+
 // ── Smart display with hybrid refresh strategy ──────────────
 // Uses fast refresh (0xC7 + temperature LUT, ~1.5s, minimal flash) most of the time.
 // Performs a full refresh (0xF7, clears ghosting) every FULL_REFRESH_INTERVAL cycles.

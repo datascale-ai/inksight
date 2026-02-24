@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
+from PIL import Image
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,6 +61,11 @@ from core.stats_store import (
     get_device_stats,
     get_stats_overview,
     get_render_history,
+    save_render_content,
+    get_content_history,
+    add_favorite,
+    get_favorites,
+    get_latest_render_content,
 )
 
 
@@ -161,23 +167,76 @@ async def _choose_persona_from_config(config: dict, peek_next: bool = False) -> 
 
 
 async def _resolve_mode(
-    mac: Optional[str], config: Optional[dict], persona_override: Optional[str]
+    mac: Optional[str], config: Optional[dict], persona_override: Optional[str],
+    force_next: bool = False,
 ) -> str:
-    """Determine which persona to use for this request."""
+    """Determine which persona to use for this request.
+
+    Args:
+        force_next: If True, advance to the next mode in the enabled list
+                    (triggered by device double-click).
+    """
     registry = get_registry()
+
+    # Check for pending_mode (remote switch via API)
+    if mac and not persona_override:
+        pending = await _consume_pending_mode(mac)
+        if pending and registry.is_supported(pending.upper()):
+            logger.debug(f"[REQUEST] Using pending_mode: {pending}")
+            return pending.upper()
+
     if persona_override and registry.is_supported(persona_override.upper()):
         persona = persona_override.upper()
         logger.debug(f"[REQUEST] Using override persona: {persona}")
     elif config:
-        persona = await _choose_persona_from_config(config)
+        if force_next:
+            persona = await _advance_to_next_mode(mac, config)
+        else:
+            persona = await _choose_persona_from_config(config)
         mac_key = config.get("mac", "default")
         logger.debug(
-            f"[REQUEST] Chosen persona: {persona}, mac_key={mac_key}"
+            f"[REQUEST] Chosen persona: {persona}, mac_key={mac_key}, force_next={force_next}"
         )
     else:
         persona = random.choice(["STOIC", "ROAST", "ZEN", "DAILY"])
         logger.debug(f"[REQUEST] No config, random persona: {persona}")
     return persona
+
+
+async def _advance_to_next_mode(mac: Optional[str], config: dict) -> str:
+    """Pick the next mode after the current one in the enabled list."""
+    modes = config.get("modes", DEFAULT_MODES)
+    if not modes:
+        return "STOIC"
+
+    state = await get_device_state(mac) if mac else None
+    current = state.get("last_persona", "") if state else ""
+
+    if current in modes:
+        idx = (modes.index(current) + 1) % len(modes)
+    else:
+        idx = 0
+
+    persona = modes[idx]
+
+    # Also update cycle_index to keep in sync
+    if mac:
+        await set_cycle_index(mac, idx + 1)
+
+    return persona
+
+
+async def _consume_pending_mode(mac: str) -> Optional[str]:
+    """Check and clear pending_mode. Returns mode name or None."""
+    try:
+        state = await get_device_state(mac)
+        if state and state.get("pending_mode"):
+            mode = state["pending_mode"]
+            await update_device_state(mac, pending_mode="")
+            return mode
+    except Exception:
+        logger.warning(f"[PENDING_MODE] Failed to consume for {mac}", exc_info=True)
+    return None
 
 
 # ── Main orchestrator ────────────────────────────────────────
@@ -187,6 +246,7 @@ async def _build_image(
     v: float, mac: Optional[str], persona_override: Optional[str] = None,
     rssi: Optional[int] = None,
     screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+    force_next: bool = False,
 ):
     battery_pct = calc_battery_pct(v)
 
@@ -194,7 +254,7 @@ async def _build_image(
     if mac:
         config = await get_active_config(mac)
 
-    persona = await _resolve_mode(mac, config, persona_override)
+    persona = await _resolve_mode(mac, config, persona_override, force_next=force_next)
 
     # Try cache first
     cache_hit = False
@@ -208,13 +268,14 @@ async def _build_image(
         else:
             logger.info(f"[CACHE MISS] {mac}:{persona} - Generating fallback content")
 
+    content_data = None
     if not cache_hit:
         city = config.get("city", DEFAULT_CITY) if config else None
         date_ctx, weather = await asyncio.gather(
             get_date_context(),
             get_weather(city=city),
         )
-        img = await generate_and_render(
+        img, content_data = await generate_and_render(
             persona, config, date_ctx, weather, battery_pct,
             screen_w=screen_w, screen_h=screen_h,
         )
@@ -228,6 +289,13 @@ async def _build_image(
             last_persona=persona,
             last_refresh_at=datetime.now().isoformat(),
         )
+
+    # Save content history
+    if mac and content_data:
+        try:
+            await save_render_content(mac, persona, content_data)
+        except Exception:
+            logger.warning(f"[CONTENT] Failed to save content for {mac}:{persona}", exc_info=True)
 
     return img, persona, cache_hit
 
@@ -397,13 +465,15 @@ async def render(
     rssi: Optional[int] = Query(default=None, description="WiFi RSSI (dBm)"),
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
+    next_mode: Optional[int] = Query(default=None, alias="next", description="1 = advance to next mode (double-click)"),
 ):
     start_time = time.time()
-    logger.debug(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}, size={w}x{h}")
+    force_next = (next_mode == 1)
+    logger.debug(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}, next={force_next}, size={w}x{h}")
 
     try:
         img, resolved_persona, cache_hit = await _build_image(
-            v, mac, persona, rssi, screen_w=w, screen_h=h,
+            v, mac, persona, rssi, screen_w=w, screen_h=h, force_next=force_next,
         )
         bmp_bytes = image_to_bmp_bytes(img)
         elapsed = time.time() - start_time
@@ -709,6 +779,55 @@ async def device_state(mac: str):
     return state
 
 
+@app.post("/api/device/{mac}/switch")
+async def switch_mode(mac: str, body: dict):
+    """Set a pending mode for the device to use on next refresh."""
+    mode = body.get("mode", "").upper()
+    registry = get_registry()
+    if not mode or not registry.is_supported(mode):
+        return JSONResponse({"error": f"unsupported mode: {mode}"}, status_code=400)
+    await update_device_state(mac, pending_mode=mode, pending_refresh=1)
+    logger.info(f"[DEVICE] Pending mode switch to {mode} for {mac}")
+    return {"ok": True, "message": f"Mode switch to {mode} queued"}
+
+
+@app.post("/api/device/{mac}/favorite")
+async def favorite_content(mac: str):
+    """Favorite the most recently rendered content for this device."""
+    latest = await get_latest_render_content(mac)
+    if not latest:
+        state = await get_device_state(mac)
+        mode_id = state.get("last_persona", "UNKNOWN") if state else "UNKNOWN"
+        await add_favorite(mac, mode_id, None)
+    else:
+        import json
+        await add_favorite(mac, latest["mode_id"], json.dumps(latest["content"], ensure_ascii=False))
+    logger.info(f"[DEVICE] Content favorited for {mac}")
+    return {"ok": True, "message": "Content favorited"}
+
+
+@app.get("/api/device/{mac}/favorites")
+async def list_favorites(
+    mac: str,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Get favorites for a device."""
+    favorites = await get_favorites(mac, limit)
+    return {"mac": mac, "favorites": favorites}
+
+
+@app.get("/api/device/{mac}/history")
+async def content_history(
+    mac: str,
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    mode: Optional[str] = Query(default=None, description="Filter by mode"),
+):
+    """Get content history for a device."""
+    history = await get_content_history(mac, limit, offset, mode)
+    return {"mac": mac, "history": history}
+
+
 # ── Stats endpoints ──────────────────────────────────────────
 
 
@@ -733,3 +852,91 @@ async def stats_renders(
     """Render history for a device with pagination."""
     renders = await get_render_history(mac, limit, offset)
     return {"mac": mac, "renders": renders}
+
+
+# ── QR code and share endpoints ──────────────────────────────
+
+
+@app.get("/api/device/{mac}/qr")
+async def device_qr(
+    mac: str,
+    base_url: Optional[str] = Query(default=None, description="Override base URL for remote page"),
+):
+    """Generate a QR code BMP for device binding (scan to open remote control)."""
+    import qrcode
+    from io import BytesIO
+
+    remote_base = base_url or "https://www.inksight.site"
+    url = f"{remote_base}/remote?mac={mac}"
+
+    qr = qrcode.QRCode(version=1, box_size=4, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("1")
+
+    qr_w, qr_h = qr_img.size
+    canvas = Image.new("1", (SCREEN_WIDTH, SCREEN_HEIGHT), 1)
+
+    x_offset = (SCREEN_WIDTH - qr_w) // 2
+    y_offset = (SCREEN_HEIGHT - qr_h) // 2 - 20
+    canvas.paste(qr_img, (x_offset, max(y_offset, 30)))
+
+    bmp_bytes = image_to_bmp_bytes(canvas)
+    return Response(content=bmp_bytes, media_type="image/bmp")
+
+
+@app.get("/api/device/{mac}/share")
+async def share_image(
+    mac: str,
+    w: int = Query(default=800, ge=400, le=1600),
+    h: int = Query(default=450, ge=300, le=900),
+):
+    """Generate a shareable image (16:9) with InkSight watermark."""
+    latest = await get_latest_render_content(mac)
+    if not latest:
+        return JSONResponse({"error": "no content to share"}, status_code=404)
+
+    state = await get_device_state(mac)
+    persona = latest["mode_id"]
+    content = latest["content"]
+
+    from PIL import ImageDraw, ImageFont
+    import os
+
+    img = Image.new("L", (w, h), 255)
+    draw = ImageDraw.Draw(img)
+
+    font_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
+    try:
+        title_font = ImageFont.truetype(os.path.join(font_dir, "NotoSerifSC-Bold.ttf"), 24)
+        body_font = ImageFont.truetype(os.path.join(font_dir, "NotoSerifSC-Regular.ttf"), 18)
+        small_font = ImageFont.truetype(os.path.join(font_dir, "NotoSerifSC-Regular.ttf"), 12)
+    except Exception:
+        title_font = ImageFont.load_default()
+        body_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+    draw.rectangle([(0, 0), (w - 1, h - 1)], outline=0, width=2)
+
+    draw.text((40, 30), persona, fill=0, font=title_font)
+
+    y = 80
+    main_text = ""
+    for key in ("quote", "question", "challenge", "body", "word", "opening", "event_title", "name_cn"):
+        if key in content:
+            main_text = str(content[key])
+            break
+    if not main_text:
+        main_text = str(list(content.values())[0]) if content else "InkSight"
+
+    for line in main_text[:200].split("\n"):
+        draw.text((40, y), line, fill=0, font=body_font)
+        y += 28
+
+    draw.line([(40, h - 50), (w - 40, h - 50)], fill=180, width=1)
+    draw.text((40, h - 40), "InkSight | inco", fill=128, font=small_font)
+    draw.text((w - 180, h - 40), "www.inksight.site", fill=128, font=small_font)
+
+    img_1bit = img.convert("1")
+    png_bytes = image_to_png_bytes(img_1bit)
+    return Response(content=png_bytes, media_type="image/png")

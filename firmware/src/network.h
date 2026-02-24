@@ -14,7 +14,11 @@ bool connectWiFi();
 // ── HTTP ────────────────────────────────────────────────────
 
 // Fetch BMP image from backend and store in imgBuf. Returns true on success.
-bool fetchBMP();
+// If nextMode is true, appends &next=1 to request the next mode in sequence.
+bool fetchBMP(bool nextMode = false);
+
+// POST favorite (triple-click) to backend. Returns true on success.
+bool postFavorite();
 
 // POST device config JSON to backend /api/config endpoint.
 void postConfigToBackend();

@@ -12,6 +12,7 @@
 #define PIN_EPD_BUSY   10  // Busy signal
 #define PIN_BAT_ADC    0   // Battery voltage ADC
 #define PIN_CFG_BTN    9   // GPIO9 (BOOT button) - hold to force config portal
+#define PIN_LED        3   // Status LED (optional, connect LED+resistor to GPIO3)
 
 // ── Display constants ────────────────────────────────────────
 // Default for 4.2" E-Paper (400x300, 1-bit).
@@ -42,6 +43,7 @@ static const int   HTTP_TIMEOUT    = 30000;   // ms
 static const int   CFG_BTN_HOLD_MS = 2000;    // Long press duration to trigger config mode
 static const int   SHORT_PRESS_MIN_MS = 50;   // Minimum short press duration (debounce)
 static const int   DOUBLE_CLICK_MS = 500;     // Max interval between clicks for double-click
+static const int   TRIPLE_CLICK_MS = 500;     // Max interval for third click (favorite)
 static const int   MAX_RETRY_COUNT = 5;       // Max retries before deep sleep
 static const int   RETRY_DELAY_SEC = 10;      // Delay between retries (seconds)
 

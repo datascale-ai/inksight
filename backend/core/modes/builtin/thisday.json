@@ -1,0 +1,47 @@
+{
+  "mode_id": "THISDAY",
+  "display_name": "历史上的今天",
+  "icon": "global",
+  "cacheable": true,
+  "description": "同一天发生过的重大历史事件",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位历史学家。今天的日期信息如下，请选择历史上同一天（同月同日）发生的一件最有趣或最重要的事件。\n用 JSON 输出：\n{{\"year\": \"事件发生年份（如：1969）\", \"event_title\": \"事件标题（15字以内）\", \"event_desc\": \"事件描述（50字以内，生动有画面感）\", \"years_ago\": \"距今多少年（如：57年前）\", \"significance\": \"一句话评价这件事的意义（20字以内）\"}}\n要求：选择真实历史事件，涵盖科学、文化、政治、体育各领域，避免敏感政治话题。每次推荐不同的事件。只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "year": { "type": "string", "default": "1969" },
+      "event_title": { "type": "string", "default": "人类首次登月" },
+      "event_desc": { "type": "string", "default": "阿波罗11号宇航员阿姆斯特朗踏上月球表面，说出了那句著名的话。" },
+      "years_ago": { "type": "string", "default": "57年前" },
+      "significance": { "type": "string", "default": "人类太空探索的里程碑" }
+    },
+    "temperature": 0.85,
+    "fallback": {
+      "year": "1969",
+      "event_title": "人类首次登月",
+      "event_desc": "阿波罗11号宇航员阿姆斯特朗踏上月球表面，说出了那句著名的话。",
+      "years_ago": "57年前",
+      "significance": "人类太空探索的里程碑"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "field": "years_ago", "font_size": 11, "align": "center" },
+      { "type": "big_number", "field": "year", "font_size": 38, "align": "center" },
+      { "type": "separator", "style": "short", "width": 70 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "event_title", "font": "noto_serif_bold", "font_size": 16, "align": "center" },
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "field": "event_desc", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 4 },
+      { "type": "spacer", "height": 10 },
+      { "type": "separator", "style": "dashed", "margin_x": 40 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "significance", "font": "noto_serif_light", "font_size": 11, "align": "center", "max_lines": 2 }
+    ],
+    "footer": {
+      "label": "THIS DAY",
+      "attribution_template": "— History"
+    }
+  }
+}

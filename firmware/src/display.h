@@ -21,4 +21,7 @@ void updateTimeDisplay();
 // Smart display: uses no-flash partial refresh normally, full refresh every N cycles
 void smartDisplay(const uint8_t *image);
 
+// Show mode name preview screen (displayed briefly on double-click before loading)
+void showModePreview(const char *modeName);
+
 #endif // INKSIGHT_DISPLAY_H
