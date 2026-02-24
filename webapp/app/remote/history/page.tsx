@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Star, Filter } from "lucide-react";
 
@@ -44,7 +44,7 @@ function getContentPreview(content: Record<string, unknown>): string {
   return "";
 }
 
-export default function HistoryPage() {
+function HistoryContent() {
   const searchParams = useSearchParams();
   const mac = searchParams.get("mac") || "";
   const [tab, setTab] = useState<"history" | "favorites">("history");
@@ -55,38 +55,33 @@ export default function HistoryPage() {
 
   const apiBase = typeof window !== "undefined" ? window.location.origin : "";
 
-  const loadHistory = useCallback(async () => {
-    if (!mac) return;
-    setLoading(true);
-    try {
-      let url = `${apiBase}/api/device/${mac}/history?limit=50`;
-      if (modeFilter) url += `&mode=${modeFilter}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data.history || []);
-      }
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, [mac, modeFilter, apiBase]);
-
-  const loadFavorites = useCallback(async () => {
-    if (!mac) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${apiBase}/api/device/${mac}/favorites?limit=50`);
-      if (res.ok) {
-        const data = await res.json();
-        setFavorites(data.favorites || []);
-      }
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, [mac, apiBase]);
-
   useEffect(() => {
-    if (tab === "history") loadHistory();
-    else loadFavorites();
-  }, [tab, loadHistory, loadFavorites]);
+    if (!mac) return;
+    let cancelled = false;
+    async function fetchData() {
+      setLoading(true);
+      try {
+        if (tab === "history") {
+          let url = `${apiBase}/api/device/${mac}/history?limit=50`;
+          if (modeFilter) url += `&mode=${modeFilter}`;
+          const res = await fetch(url);
+          if (!cancelled && res.ok) {
+            const data = await res.json();
+            setHistory(data.history || []);
+          }
+        } else {
+          const res = await fetch(`${apiBase}/api/device/${mac}/favorites?limit=50`);
+          if (!cancelled && res.ok) {
+            const data = await res.json();
+            setFavorites(data.favorites || []);
+          }
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
+    }
+    fetchData();
+    return () => { cancelled = true; };
+  }, [tab, mac, modeFilter, apiBase]);
 
   if (!mac) {
     return (
@@ -238,5 +233,13 @@ export default function HistoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[60vh]"><p className="text-gray-400 text-sm">加载中...</p></div>}>
+      <HistoryContent />
+    </Suspense>
   );
 }

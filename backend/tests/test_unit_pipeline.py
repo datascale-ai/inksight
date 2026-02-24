@@ -134,10 +134,11 @@ class TestGenerateAndRender:
         ):
             mock_gc.return_value = {"quote": "Test", "author": "Author"}
 
-            result = await generate_and_render(
+            result_img, result_content = await generate_and_render(
                 "STOIC", sample_config, sample_date_ctx, sample_weather, 85.0
             )
-            assert result is mock_img
+            assert result_img is mock_img
+            assert result_content == {"quote": "Test", "author": "Author"}
             mock_gc.assert_called_once()
             mock_rm.assert_called_once()
 
@@ -152,7 +153,7 @@ class TestGenerateAndRender:
         ):
             mock_gc.return_value = {"quote": "Test", "author": "Author"}
 
-            result = await generate_and_render(
+            result_img, _ = await generate_and_render(
                 "STOIC", None, sample_date_ctx, sample_weather, 85.0
             )
-            assert result is mock_img
+            assert result_img is mock_img

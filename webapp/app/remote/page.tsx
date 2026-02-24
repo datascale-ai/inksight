@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   RefreshCw,
@@ -27,7 +27,7 @@ const MODE_LABELS: Record<string, string> = {
   CHALLENGE: "微挑战",
 };
 
-export default function RemotePage() {
+function RemoteContent() {
   const searchParams = useSearchParams();
   const [mac, setMac] = useState(searchParams.get("mac") || "");
   const [macInput, setMacInput] = useState(mac);
@@ -39,29 +39,32 @@ export default function RemotePage() {
 
   const apiBase = typeof window !== "undefined" ? window.location.origin : "";
 
-  const loadDeviceState = useCallback(async () => {
-    if (!mac) return;
-    try {
-      const stateRes = await fetch(`${apiBase}/api/device/${mac}/state`);
-      if (stateRes.ok) {
-        const state = await stateRes.json();
-        setCurrentMode(state.last_persona || "");
-        setConnected(true);
-      }
-
-      const configRes = await fetch(`${apiBase}/api/config/${mac}`);
-      if (configRes.ok) {
-        const config = await configRes.json();
-        setModes(config.modes || ALL_MODES);
-      }
-    } catch {
-      setConnected(false);
-    }
-  }, [mac, apiBase]);
-
   useEffect(() => {
-    if (mac) loadDeviceState();
-  }, [mac, loadDeviceState]);
+    if (!mac) return;
+    let cancelled = false;
+    async function fetchDeviceState() {
+      try {
+        const stateRes = await fetch(`${apiBase}/api/device/${mac}/state`);
+        if (cancelled) return;
+        if (stateRes.ok) {
+          const state = await stateRes.json();
+          setCurrentMode(state.last_persona || "");
+          setConnected(true);
+        }
+
+        const configRes = await fetch(`${apiBase}/api/config/${mac}`);
+        if (cancelled) return;
+        if (configRes.ok) {
+          const config = await configRes.json();
+          setModes(config.modes || ALL_MODES);
+        }
+      } catch {
+        if (!cancelled) setConnected(false);
+      }
+    }
+    fetchDeviceState();
+    return () => { cancelled = true; };
+  }, [mac, apiBase]);
 
   const showFeedback = (msg: string) => {
     setFeedback(msg);
@@ -169,7 +172,7 @@ export default function RemotePage() {
           </p>
         </div>
         <button
-          onClick={loadDeviceState}
+          onClick={() => window.location.reload()}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
         >
           <RefreshCw className="w-4 h-4 text-gray-500" />
@@ -250,5 +253,13 @@ export default function RemotePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function RemotePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[60vh]"><p className="text-gray-400 text-sm">加载中...</p></div>}>
+      <RemoteContent />
+    </Suspense>
   );
 }
