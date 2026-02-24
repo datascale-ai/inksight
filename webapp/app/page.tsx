@@ -104,7 +104,7 @@ const specs = [
   },
   {
     icon: DollarSign,
-    label: "BOM < $30",
+    label: "BOM < 220 元",
     desc: "开源硬件，人人都能制作",
   },
 ];
@@ -251,7 +251,7 @@ export default function Home() {
               硬件参数
             </h2>
             <p className="text-white/60">
-              总 BOM 成本不到 $30，人人都能拥有
+              总 BOM 成本约 220 元以内，人人都能拥有
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">

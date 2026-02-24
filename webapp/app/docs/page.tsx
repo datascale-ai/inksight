@@ -23,18 +23,18 @@ export default function DocsPage() {
 
       <p>
         你需要准备以下硬件，全部可以在淘宝或 AliExpress 上购买到，总成本不超过
-        $30：
+        220 元：
       </p>
 
       {/* Unordered List */}
       <ul>
         <li>
           <strong>ESP32-C3 SuperMini 开发板</strong> — RISC-V 架构，内置
-          WiFi，超低功耗，约 $3
+          WiFi，超低功耗，约 20 元
         </li>
         <li>
           <strong>4.2 英寸电子墨水屏 (SPI 接口)</strong> — 400&times;300
-          分辨率，SSD1683 驱动，约 $15
+          分辨率，SSD1683 驱动，约 110 元
         </li>
         <li>
           <strong>USB-C 数据线</strong> — 用于供电和固件烧录（确保支持数据传输）
