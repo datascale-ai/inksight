@@ -17,14 +17,15 @@ Official Website: [https://www.inksight.site](https://www.inksight.site)
 
 ## Overview
 
-**inco** (墨鱼) is a smart e-ink desktop companion built around InkSight. It uses a backend LLM to generate personalized content based on real-time context — weather, time of day, date, and solar terms — and renders it on a 4.2-inch e-ink screen. With 10 content modes ranging from Stoic philosophy to fitness plans, from tech briefings to daily recipes, inco brings a thoughtful, intelligent companion to your desk.
+**inco** (墨鱼) is a smart e-ink desktop companion built around InkSight. It uses a backend LLM to generate personalized content based on real-time context — weather, time of day, date, and solar terms — and renders it on a 4.2-inch e-ink screen. It ships with 10 core content modes for everyday use and 22 built-in modes in total, bringing a thoughtful, intelligent companion to your desk.
 
 The backend is built on the OpenAI-compatible SDK, so it works out of the box with **DeepSeek**, **Alibaba Bailian (Qwen)**, and **Moonshot (Kimi)**. Any OpenAI-compatible API provider (OpenAI, Groq, Together AI, etc.) can be used with minimal configuration. Modes are extensible via a JSON config-driven system — create your own content modes without writing Python.
 
 **Key Features:**
 
-- **19 Content Modes** — Stoic, Roast, Zen, Daily, Briefing, ArtWall, Recipe, Fitness, Poetry, Countdown, Almanac, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge + custom JSON modes
+- **10 Core Modes + 22 Built-in Modes Total** — Core: Daily, Weather, Zen, Briefing, Stoic, Poetry, ArtWall, Almanac, Recipe, Countdown; plus utility and extended modes, and custom JSON modes
 - **Extensible Mode System** — Define new modes via JSON config (prompt, layout, style) without writing code
+- **Built-in Mode Editor** — Create/edit custom JSON modes with templates and preview in web config
 - **4 Refresh Strategies** — Random, Sequential, Time-Bound, Smart
 - **On-Demand Refresh** — Single press for instant refresh, double press to switch mode, or trigger remotely via web
 - **Statistics Dashboard** — Device status monitoring, battery voltage trends, mode usage stats, cache hit rate
@@ -52,6 +53,9 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 | **FITNESS** — Fitness Plan | Simple home workout routines with exercise lists and health tips |
 | **POETRY** — Daily Poetry | Curated classical Chinese poetry, celebrating the beauty of language |
 | **COUNTDOWN** — Countdown | Countdown / count-up timers for important dates and anniversaries |
+| **WEATHER** — Weather Dashboard | Real-time weather snapshot with practical day planning hints |
+| **MEMO** — Memo | Display your custom short note on the e-ink screen |
+| **HABIT** — Habit Tracker | Track daily habits and completion progress at a glance |
 | **ALMANAC** — Chinese Almanac | Lunar calendar dates, auspicious/inauspicious activities, solar terms, health tips |
 | **LETTER** — Slow Letter | A short letter from someone across time and space — warm, literary, with character |
 | **THISDAY** — This Day in History | A major historical event that happened on this date |
@@ -294,7 +298,7 @@ inksight/
 │   │   ├── patterns/       # Builtin Python mode implementations
 │   │   └── modes/          # JSON mode definitions
 │   │       ├── schema/     # JSON Schema for mode validation
-│   │       ├── builtin/    # Built-in JSON modes (stoic, roast, zen, fitness, poetry)
+│   │       ├── builtin/    # 22 built-in JSON modes
 │   │       └── custom/     # User-defined custom JSON modes
 │   ├── scripts/            # Utility scripts
 │   │   └── setup_fonts.py  # Font download script
@@ -337,7 +341,7 @@ inksight/
 - [x] Sequential / Random refresh strategies
 - [x] Time-Bound + Smart refresh strategies
 - [x] Smart caching (cycle index persists across reboots)
-- [x] 19 content modes (Almanac, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge + original 10)
+- [x] 22 content modes (including Weather, Memo, Habit, Almanac, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge)
 - [x] Multi-LLM provider support
 - [x] On-demand refresh (button press / double press + web remote trigger)
 - [x] Config import/export + live preview
