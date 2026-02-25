@@ -1,0 +1,44 @@
+{
+  "mode_id": "LETTER",
+  "display_name": "慢信",
+  "icon": "book",
+  "cacheable": true,
+  "description": "来自不同时空的一封短信",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你要模拟写一封简短的信。信的作者可以是：来自未来的某人、某个历史时代的普通人、某座城市的陌生旅人、某个虚构角色。\n用 JSON 输出：\n{{\"sender\": \"寄信人身份（如：1920年代的上海裁缝）\", \"greeting\": \"称呼（如：致桌前的朋友）\", \"body\": \"信件正文（60-80字，有画面感，有情感，温暖但不煽情）\", \"closing\": \"结尾落款（如：祝安好）\", \"postscript\": \"附言（15字以内，俏皮或意味深长）\"}}\n要求：文学性强，有角色感，每次不同身份。与当前天气/季节有微妙呼应。不要鸡汤，不要说教。只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "sender": { "type": "string", "default": "一个冬日午后的旅人" },
+      "greeting": { "type": "string", "default": "致桌前的朋友" },
+      "body": { "type": "string", "default": "窗外下着小雪，我在一家旧书店里找到了一本没有封面的书。书里夹着一片银杏叶，不知道是谁留下的。我想，有些美好的东西，就是这样不经意地传递下去的。" },
+      "closing": { "type": "string", "default": "祝你今天也有一个小小的发现" },
+      "postscript": { "type": "string", "default": "P.S. 记得喝杯热的" }
+    },
+    "temperature": 0.92,
+    "fallback": {
+      "sender": "一个冬日午后的旅人",
+      "greeting": "致桌前的朋友",
+      "body": "窗外下着小雪，我在一家旧书店里找到了一本没有封面的书。书里夹着一片银杏叶，不知道是谁留下的。我想，有些美好的东西，就是这样不经意地传递下去的。",
+      "closing": "祝你今天也有一个小小的发现",
+      "postscript": "P.S. 记得喝杯热的"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": true },
+    "body": [
+      { "type": "spacer", "height": 10 },
+      { "type": "text", "field": "greeting", "font": "noto_serif_light", "font_size": 12, "align": "left", "margin_x": 32 },
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "field": "body", "font": "noto_serif_regular", "font_size": 13, "align": "left", "margin_x": 32, "max_lines": 6 },
+      { "type": "spacer", "height": 10 },
+      { "type": "text", "field": "closing", "font": "noto_serif_light", "font_size": 12, "align": "right", "margin_x": 32 },
+      { "type": "separator", "style": "short", "width": 40 },
+      { "type": "text", "field": "postscript", "font": "noto_serif_light", "font_size": 10, "align": "left", "margin_x": 32, "max_lines": 1 }
+    ],
+    "footer": {
+      "label": "LETTER",
+      "attribution_template": "— {sender}",
+      "dashed": true
+    }
+  }
+}

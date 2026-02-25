@@ -37,9 +37,30 @@ async def init_stats_db():
                 created_at TEXT NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS render_content (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mac TEXT NOT NULL,
+                mode_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                is_favorite INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS content_favorites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mac TEXT NOT NULL,
+                mode_id TEXT NOT NULL,
+                content_snapshot TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_render_logs_mac ON render_logs(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_render_logs_created ON render_logs(created_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_heartbeats_mac ON device_heartbeats(mac)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_render_content_mac ON render_content(mac)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_favorites_mac ON content_favorites(mac)")
         await db.commit()
 
 
@@ -228,3 +249,133 @@ async def get_render_history(mac: str, limit: int = 50, offset: int = 0) -> list
             }
             for row in await cursor.fetchall()
         ]
+
+
+# ── Content history ──────────────────────────────────────────
+
+
+async def save_render_content(mac: str, mode_id: str, content: dict):
+    """Save rendered content snapshot for history."""
+    import json
+    now = datetime.now().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO render_content (mac, mode_id, content, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (mac, mode_id, json.dumps(content, ensure_ascii=False), now),
+        )
+        # Keep only latest 200 per device
+        await db.execute(
+            """DELETE FROM render_content
+               WHERE mac = ? AND id NOT IN (
+                   SELECT id FROM render_content WHERE mac = ?
+                   ORDER BY created_at DESC LIMIT 200
+               )""",
+            (mac, mac),
+        )
+        await db.commit()
+
+
+async def get_content_history(
+    mac: str, limit: int = 30, offset: int = 0, mode: str | None = None
+) -> list[dict]:
+    """Get content history for a device with optional mode filter."""
+    import json
+    async with aiosqlite.connect(DB_PATH) as db:
+        if mode:
+            cursor = await db.execute(
+                """SELECT id, mode_id, content, is_favorite, created_at
+                   FROM render_content WHERE mac = ? AND mode_id = ?
+                   ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+                (mac, mode.upper(), limit, offset),
+            )
+        else:
+            cursor = await db.execute(
+                """SELECT id, mode_id, content, is_favorite, created_at
+                   FROM render_content WHERE mac = ?
+                   ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+                (mac, limit, offset),
+            )
+        results = []
+        for row in await cursor.fetchall():
+            try:
+                content = json.loads(row[2])
+            except (json.JSONDecodeError, TypeError):
+                content = {}
+            results.append({
+                "id": row[0],
+                "mode_id": row[1],
+                "content": content,
+                "is_favorite": bool(row[3]),
+                "time": row[4],
+            })
+        return results
+
+
+# ── Favorites ────────────────────────────────────────────────
+
+
+async def add_favorite(mac: str, mode_id: str, content_snapshot: str | None = None):
+    """Add current content to favorites."""
+    now = datetime.now().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO content_favorites (mac, mode_id, content_snapshot, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (mac, mode_id, content_snapshot, now),
+        )
+        # Also mark in render_content if the latest entry matches
+        await db.execute(
+            """UPDATE render_content SET is_favorite = 1
+               WHERE id = (
+                   SELECT id FROM render_content
+                   WHERE mac = ? AND mode_id = ?
+                   ORDER BY created_at DESC LIMIT 1
+               )""",
+            (mac, mode_id),
+        )
+        await db.commit()
+
+
+async def get_favorites(mac: str, limit: int = 30) -> list[dict]:
+    """Get favorites for a device."""
+    import json
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT id, mode_id, content_snapshot, created_at
+               FROM content_favorites WHERE mac = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (mac, limit),
+        )
+        results = []
+        for row in await cursor.fetchall():
+            try:
+                content = json.loads(row[2]) if row[2] else {}
+            except (json.JSONDecodeError, TypeError):
+                content = {}
+            results.append({
+                "id": row[0],
+                "mode_id": row[1],
+                "content": content,
+                "time": row[3],
+            })
+        return results
+
+
+async def get_latest_render_content(mac: str) -> dict | None:
+    """Get the most recent render content for a device (used for favorites)."""
+    import json
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT mode_id, content FROM render_content
+               WHERE mac = ? ORDER BY created_at DESC LIMIT 1""",
+            (mac,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            content = json.loads(row[1])
+        except (json.JSONDecodeError, TypeError):
+            content = {}
+        return {"mode_id": row[0], "content": content}

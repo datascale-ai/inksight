@@ -143,6 +143,27 @@ canvas{display:block;width:100%}
         </table>
       </div>
     </div>
+
+    <!-- Content history -->
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>内容历史</span>
+        <select id="historyModeFilter" onchange="loadContentHistory()" style="font-size:.72rem;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:#fff">
+          <option value="">全部模式</option>
+        </select>
+      </div>
+      <div class="card-body" id="contentHistoryBody">
+        <div class="empty-state" style="padding:16px">加载设备数据后显示</div>
+      </div>
+    </div>
+
+    <!-- Favorites -->
+    <div class="card">
+      <div class="card-header">收藏墙</div>
+      <div class="card-body" id="favoritesBody">
+        <div class="empty-state" style="padding:16px">加载设备数据后显示</div>
+      </div>
+    </div>
   </div>
 
   <div id="emptyState" class="empty-state" style="display:none">
@@ -210,6 +231,9 @@ async function loadStats() {
 
     // Mode frequency bars
     renderModeFrequency(d.mode_frequency || {}, d.total_renders || 1);
+
+    // Populate mode filter for content history
+    populateModeFilter(d.mode_frequency || {});
 
     // Voltage chart
     renderVoltageChart(hb || []);
@@ -406,6 +430,101 @@ async function loadRenderHistory(mac) {
     console.error('Failed to load render history', e);
   }
 }
+
+// ── Content history ──────────────────────────────────────────
+
+async function loadContentHistory() {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) return;
+  const mode = document.getElementById('historyModeFilter').value;
+  const container = document.getElementById('contentHistoryBody');
+
+  try {
+    let url = `${API_BASE}/api/device/${mac}/history?limit=20`;
+    if (mode) url += `&mode=${mode}`;
+    const res = await fetch(url);
+    if (!res.ok) { container.innerHTML = '<div class="empty-state">加载失败</div>'; return; }
+    const data = await res.json();
+    const history = data.history || [];
+
+    if (history.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:16px">暂无内容历史</div>';
+      return;
+    }
+
+    container.innerHTML = history.map(h => {
+      const time = new Date(h.time).toLocaleString('zh-CN');
+      const content = h.content || {};
+      const preview = Object.values(content).slice(0, 2).map(v =>
+        typeof v === 'string' ? v.substring(0, 60) : JSON.stringify(v).substring(0, 60)
+      ).join(' · ');
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="badge" style="background:#e5e7eb;color:#374151">${h.mode_id}</span>
+          <span style="font-size:.7rem;color:var(--text2)">${time}</span>
+          ${h.is_favorite ? '<span style="color:#eab308;font-size:.9rem">★</span>' : ''}
+        </div>
+        <div style="font-size:.78rem;color:var(--text2);margin-top:4px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview || '(内容为空)'}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
+  }
+}
+
+async function loadFavorites() {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) return;
+  const container = document.getElementById('favoritesBody');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/device/${mac}/favorites?limit=20`);
+    if (!res.ok) { container.innerHTML = '<div class="empty-state">加载失败</div>'; return; }
+    const data = await res.json();
+    const favorites = data.favorites || [];
+
+    if (favorites.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:16px">暂无收藏<br><span style="font-size:.72rem">三击设备按钮可收藏当前内容</span></div>';
+      return;
+    }
+
+    container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">' +
+      favorites.map(f => {
+        const time = new Date(f.time).toLocaleString('zh-CN');
+        const content = f.content || {};
+        const preview = Object.values(content).slice(0, 1).map(v =>
+          typeof v === 'string' ? v.substring(0, 80) : ''
+        ).join('');
+        return `<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:#fafaf7">
+          <div style="font-size:.72rem;font-weight:600;color:var(--text2);margin-bottom:4px">${f.mode_id} · <span style="color:#eab308">★</span></div>
+          <div style="font-size:.78rem;line-height:1.5;color:var(--text)">${preview || '(内容)'}</div>
+          <div style="font-size:.65rem;color:var(--text2);margin-top:4px">${time}</div>
+        </div>`;
+      }).join('') +
+      '</div>';
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
+  }
+}
+
+function populateModeFilter(modes) {
+  const select = document.getElementById('historyModeFilter');
+  select.innerHTML = '<option value="">全部模式</option>';
+  Object.keys(modes || {}).forEach(m => {
+    select.innerHTML += `<option value="${m}">${m}</option>`;
+  });
+}
+
+// Patch loadStats to also load content history and favorites
+const _origLoadStats = loadStats;
+loadStats = async function() {
+  await _origLoadStats();
+  const mac = document.getElementById('macIn').value.trim();
+  if (mac) {
+    loadContentHistory();
+    loadFavorites();
+  }
+};
 
 // Init
 loadOverview();

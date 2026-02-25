@@ -21,6 +21,15 @@ import {
   Timer,
   Sparkles,
   CircleDot,
+  Calendar,
+  Mail,
+  Globe,
+  HelpCircle,
+  MessageCircleQuestion,
+  Lightbulb,
+  PenTool,
+  BarChart3,
+  Target,
 } from "lucide-react";
 
 const modes = [
@@ -83,6 +92,60 @@ const modes = [
     label: "倒计时",
     desc: "重要日期倒计时/正计日，纪念日提醒",
     icon: Timer,
+  },
+  {
+    name: "ALMANAC",
+    label: "老黄历",
+    desc: "农历日期、宜忌、节气、养生提示",
+    icon: Calendar,
+  },
+  {
+    name: "LETTER",
+    label: "慢信",
+    desc: "来自不同时空的一封温暖短信",
+    icon: Mail,
+  },
+  {
+    name: "THISDAY",
+    label: "历史上的今天",
+    desc: "同一天发生过的重大历史事件",
+    icon: Globe,
+  },
+  {
+    name: "RIDDLE",
+    label: "每日一谜",
+    desc: "谜语、脑筋急转弯、趣味知识题",
+    icon: HelpCircle,
+  },
+  {
+    name: "QUESTION",
+    label: "每日一问",
+    desc: "一个值得思考的开放式问题",
+    icon: MessageCircleQuestion,
+  },
+  {
+    name: "BIAS",
+    label: "认知偏差",
+    desc: "每天认识一个认知偏差或心理学效应",
+    icon: Lightbulb,
+  },
+  {
+    name: "STORY",
+    label: "微故事",
+    desc: "一个完整的三段式微型小说",
+    icon: PenTool,
+  },
+  {
+    name: "LIFEBAR",
+    label: "人生进度条",
+    desc: "年/月/周/人生的进度可视化",
+    icon: BarChart3,
+  },
+  {
+    name: "CHALLENGE",
+    label: "微挑战",
+    desc: "每天一个5分钟可完成的小挑战",
+    icon: Target,
   },
 ];
 

@@ -23,7 +23,7 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 
 **Key Features:**
 
-- **10+ Content Modes** — Stoic, Roast, Zen, Daily, Briefing, ArtWall, Recipe, Fitness, Poetry, Countdown + custom JSON modes
+- **19 Content Modes** — Stoic, Roast, Zen, Daily, Briefing, ArtWall, Recipe, Fitness, Poetry, Countdown, Almanac, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge + custom JSON modes
 - **Extensible Mode System** — Define new modes via JSON config (prompt, layout, style) without writing code
 - **4 Refresh Strategies** — Random, Sequential, Time-Bound, Smart
 - **On-Demand Refresh** — Single press for instant refresh, double press to switch mode, or trigger remotely via web
@@ -52,6 +52,15 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 | **FITNESS** — Fitness Plan | Simple home workout routines with exercise lists and health tips |
 | **POETRY** — Daily Poetry | Curated classical Chinese poetry, celebrating the beauty of language |
 | **COUNTDOWN** — Countdown | Countdown / count-up timers for important dates and anniversaries |
+| **ALMANAC** — Chinese Almanac | Lunar calendar dates, auspicious/inauspicious activities, solar terms, health tips |
+| **LETTER** — Slow Letter | A short letter from someone across time and space — warm, literary, with character |
+| **THISDAY** — This Day in History | A major historical event that happened on this date |
+| **RIDDLE** — Daily Riddle | Riddles, brain teasers, and fun trivia questions |
+| **QUESTION** — Daily Question | A thought-provoking open-ended question worth 3 minutes of reflection |
+| **BIAS** — Cognitive Bias | Learn one cognitive bias or psychological effect each day |
+| **STORY** — Micro Story | A complete three-act flash fiction piece with a twist ending |
+| **LIFEBAR** — Life Progress Bar | Visual progress bars for year / month / week / lifetime |
+| **CHALLENGE** — Micro Challenge | A 5-minute daily challenge for novelty and small wins |
 
 ---
 
@@ -328,7 +337,7 @@ inksight/
 - [x] Sequential / Random refresh strategies
 - [x] Time-Bound + Smart refresh strategies
 - [x] Smart caching (cycle index persists across reboots)
-- [x] 10 content modes (including Poetry and Countdown)
+- [x] 19 content modes (Almanac, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge + original 10)
 - [x] Multi-LLM provider support
 - [x] On-demand refresh (button press / double press + web remote trigger)
 - [x] Config import/export + live preview

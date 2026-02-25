@@ -126,6 +126,38 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             "days_in_year": date_ctx.get("days_in_year"),
         })
         return result
+    if provider == "lifebar":
+        import calendar
+        from datetime import datetime
+        now = datetime.now()
+        date_ctx = kwargs.get("date_ctx", {}) or {}
+        cfg = kwargs.get("config") or {}
+
+        day_of_year = date_ctx.get("day_of_year") or now.timetuple().tm_yday
+        days_in_year = date_ctx.get("days_in_year") or 365
+        year_pct = round(day_of_year / days_in_year * 100, 1)
+
+        days_in_month = calendar.monthrange(now.year, now.month)[1]
+        month_pct = round(now.day / days_in_month * 100, 1)
+
+        weekday_num = now.weekday() + 1
+        week_pct = round(weekday_num / 7 * 100, 1)
+
+        birth_year = int(cfg.get("birth_year", 0)) or 1995
+        life_expect = int(cfg.get("life_expect", 0)) or 80
+        age = now.year - birth_year
+        life_pct = min(round(age / life_expect * 100, 1), 100.0)
+
+        return {
+            "year_pct": year_pct, "year_label": f"{now.year} 年已过",
+            "month_pct": month_pct, "month_label": f"{now.month}月",
+            "week_pct": week_pct, "week_label": "本周",
+            "life_pct": life_pct, "life_label": "人生",
+            "day_of_year": day_of_year, "days_in_year": days_in_year,
+            "day": now.day, "days_in_month": days_in_month,
+            "weekday_num": weekday_num, "week_total": 7,
+            "age": age, "life_expect": life_expect,
+        }
     return dict(fallback)
 
 

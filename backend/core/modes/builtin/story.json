@@ -1,0 +1,46 @@
+{
+  "mode_id": "STORY",
+  "display_name": "微故事",
+  "icon": "book",
+  "cacheable": true,
+  "description": "一个完整的三段式微型小说",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位微型小说大师。写一个能在30秒内读完的三段式微故事。\n用 JSON 输出：\n{{\"title\": \"标题（5字以内）\", \"opening\": \"开头（25字以内，设定场景和人物）\", \"twist\": \"转折（30字以内，出人意料的展开）\", \"ending\": \"结尾（20字以内，留有余味的收束）\", \"genre\": \"类型（悬疑/温情/科幻/荒诞）\"}}\n要求：\n1. 结尾要有反转或余韵，不要平铺直叙\n2. 与当前天气/时间段有微妙的呼应\n3. 不要大团圆，要有文学性\n4. 像闪小说（flash fiction），不像寓言或鸡汤\n只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "title": { "type": "string", "default": "末班车" },
+      "opening": { "type": "string", "default": "她每天都坐末班地铁，座位对面总是同一个男人在看书。" },
+      "twist": { "type": "string", "default": "有一天她终于鼓起勇气搭话，男人抬头，手里的书封面是她写的小说。" },
+      "ending": { "type": "string", "default": "小说的最后一章写的是：她从未搭话。" },
+      "genre": { "type": "string", "default": "温情" }
+    },
+    "temperature": 0.92,
+    "fallback": {
+      "title": "末班车",
+      "opening": "她每天都坐末班地铁，座位对面总是同一个男人在看书。",
+      "twist": "有一天她终于鼓起勇气搭话，男人抬头，手里的书封面是她写的小说。",
+      "ending": "小说的最后一章写的是：她从未搭话。",
+      "genre": "温情"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": true },
+    "body": [
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "genre", "font_size": 9, "align": "center" },
+      { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 16, "align": "center" },
+      { "type": "separator", "style": "short", "width": 50 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "opening", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 3 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "twist", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 3 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "ending", "font": "noto_serif_light", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 3 }
+    ],
+    "footer": {
+      "label": "STORY",
+      "attribution_template": "— Micro Fiction",
+      "dashed": true
+    }
+  }
+}

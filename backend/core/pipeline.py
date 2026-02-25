@@ -27,11 +27,14 @@ async def generate_and_render(
     battery_pct: float,
     screen_w: int = SCREEN_WIDTH,
     screen_h: int = SCREEN_HEIGHT,
-) -> Image.Image:
+) -> tuple[Image.Image, dict]:
     """Generate content for a persona and render to an e-ink image.
 
     Dispatches to either a builtin Python mode or a JSON-defined mode
     via the mode registry.
+
+    Returns:
+        Tuple of (rendered image, content dict).
     """
     date_str = date_ctx["date_str"]
     time_str = date_ctx.get("time_str", "")
@@ -41,12 +44,13 @@ async def generate_and_render(
 
     content = await _generate_content_for_persona(persona, cfg, date_ctx, weather_str)
 
-    return _render_for_persona(
+    img = _render_for_persona(
         persona, content,
         date_str=date_str, weather_str=weather_str, battery_pct=battery_pct,
         weather_code=weather_code, time_str=time_str, date_ctx=date_ctx,
         screen_w=screen_w, screen_h=screen_h,
     )
+    return img, content
 
 
 async def _generate_content_for_persona(

@@ -1,0 +1,53 @@
+{
+  "mode_id": "RIDDLE",
+  "display_name": "每日一谜",
+  "icon": "tips",
+  "cacheable": true,
+  "description": "谜语、脑筋急转弯、趣味知识题",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位谜语大师。根据环境信息，出一道有趣的谜题（可以是谜语、脑筋急转弯、冷知识问答三选一）。\n用 JSON 输出：\n{{\"category\": \"类型（谜语/脑筋急转弯/冷知识）\", \"question\": \"谜面或问题（40字以内）\", \"hint\": \"提示（10字以内）\", \"answer\": \"谜底或答案（15字以内）\"}}\n要求：有趣，有意思，难度适中，老少皆宜。只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "category": { "type": "string", "default": "谜语" },
+      "question": { "type": "string", "default": "两个胖子（打一城市名）" },
+      "hint": { "type": "string", "default": "想想体重" },
+      "answer": { "type": "string", "default": "合肥" }
+    },
+    "temperature": 0.9,
+    "fallback": {
+      "category": "谜语",
+      "question": "两个胖子（打一城市名）",
+      "hint": "想想体重",
+      "answer": "合肥"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "spacer", "height": 10 },
+      { "type": "text", "field": "category", "font_size": 11, "align": "center" },
+      { "type": "spacer", "height": 10 },
+      { "type": "separator", "style": "short", "width": 60 },
+      { "type": "spacer", "height": 16 },
+      {
+        "type": "centered_text",
+        "field": "question",
+        "font": "noto_serif_bold",
+        "font_size": 18,
+        "max_width_ratio": 0.82,
+        "vertical_center": false,
+        "line_spacing": 10
+      },
+      { "type": "spacer", "height": 12 },
+      { "type": "text", "template": "提示：{hint}", "font": "noto_serif_light", "font_size": 11, "align": "center" },
+      { "type": "spacer", "height": 20 },
+      { "type": "separator", "style": "dashed", "margin_x": 60 },
+      { "type": "spacer", "height": 8 },
+      { "type": "text", "field": "answer", "font_size": 12, "align": "center" }
+    ],
+    "footer": {
+      "label": "RIDDLE",
+      "attribution_template": "— Think About It"
+    }
+  }
+}

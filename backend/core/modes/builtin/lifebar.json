@@ -1,0 +1,56 @@
+{
+  "mode_id": "LIFEBAR",
+  "display_name": "人生进度条",
+  "icon": "flag",
+  "cacheable": false,
+  "description": "年/月/周/人生的进度可视化",
+  "content": {
+    "type": "computed",
+    "provider": "lifebar",
+    "fallback": {
+      "year_pct": 15.6, "year_label": "2026 年已过",
+      "month_pct": 83.3, "month_label": "2月",
+      "week_pct": 57.1, "week_label": "本周",
+      "life_pct": 38.8, "life_label": "人生",
+      "day_of_year": 57, "days_in_year": 365,
+      "day": 25, "days_in_month": 28,
+      "weekday_num": 4, "week_total": 7,
+      "age": 31, "life_expect": 80
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      { "type": "spacer", "height": 12 },
+      { "type": "text", "field": "year_label", "font_size": 12, "align": "left", "margin_x": 32 },
+      { "type": "text", "template": "{year_pct}%", "font": "lora_bold", "font_size": 28, "align": "left", "margin_x": 32 },
+      { "type": "progress_bar", "field": "day_of_year", "max_field": "days_in_year", "width": 336, "height": 8, "margin_x": 32 },
+      { "type": "spacer", "height": 14 },
+      {
+        "type": "two_column",
+        "left_width": 180,
+        "gap": 10,
+        "left": [
+          { "type": "text", "field": "month_label", "font_size": 11, "align": "left", "margin_x": 32 },
+          { "type": "text", "template": "{month_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 32 },
+          { "type": "progress_bar", "field": "day", "max_field": "days_in_month", "width": 140, "height": 6, "margin_x": 32 }
+        ],
+        "right": [
+          { "type": "text", "field": "week_label", "font_size": 11, "align": "left", "margin_x": 8 },
+          { "type": "text", "template": "{week_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 8 },
+          { "type": "progress_bar", "field": "weekday_num", "max_field": "week_total", "width": 140, "height": 6, "margin_x": 8 }
+        ]
+      },
+      { "type": "spacer", "height": 14 },
+      { "type": "separator", "style": "dashed", "margin_x": 32 },
+      { "type": "spacer", "height": 6 },
+      { "type": "text", "field": "life_label", "font_size": 11, "align": "left", "margin_x": 32 },
+      { "type": "text", "template": "{life_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 32 },
+      { "type": "progress_bar", "field": "age", "max_field": "life_expect", "width": 336, "height": 8, "margin_x": 32 }
+    ],
+    "footer": {
+      "label": "LIFEBAR",
+      "attribution_template": "— Time Flies"
+    }
+  }
+}

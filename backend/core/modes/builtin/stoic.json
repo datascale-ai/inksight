@@ -3,18 +3,21 @@
   "display_name": "斯多葛哲学",
   "icon": "book",
   "cacheable": true,
-  "description": "庄重、内省的哲学语录",
+  "description": "庄重、内省的哲学语录，附当代解读",
 
   "content": {
-    "type": "llm",
-    "prompt_template": "你是一位斯多葛哲学导师。根据以下环境信息，生成一句简短的斯多葛哲学语录，风格庄重、内省，适合刻在石碑上。只输出语录本身和作者，用 | 分隔。\n环境：{context}",
-    "output_format": "text_split",
-    "output_separator": "|",
-    "output_fields": ["quote", "author"],
+    "type": "llm_json",
+    "prompt_template": "你是一位斯多葛哲学导师。根据以下环境信息，选择一个与当下情境最相关的斯多葛核心概念（如：二分法、amor fati、memento mori、无常、内在城堡、理性激情、宇宙公民等），用一句原文语录 + 一句当代解读的形式呈现。\n用 JSON 输出：\n{{\"quote\": \"语录原文（中文或英文均可，40字以内）\", \"author\": \"作者（如：马可·奥勒留）\", \"interpretation\": \"当代解读（20字以内，把古代智慧翻译成今天的语境，像朋友在跟你说话）\"}}\n要求：\n1. 语录必须来自真实的斯多葛文献（《沉思录》《论幸福生活》《手册》等）\n2. 当代解读要接地气\n3. 每次选择不同的概念，不要重复\n只输出 JSON。\n环境：{context}",
+    "output_schema": {
+      "quote": { "type": "string", "default": "The impediment to action advances action. What stands in the way becomes the way." },
+      "author": { "type": "string", "default": "Marcus Aurelius" },
+      "interpretation": { "type": "string", "default": "挡路的石头，本身就是路。" }
+    },
     "temperature": 0.8,
     "fallback": {
       "quote": "The impediment to action advances action. What stands in the way becomes the way.",
-      "author": "Marcus Aurelius"
+      "author": "Marcus Aurelius",
+      "interpretation": "挡路的石头，本身就是路。"
     }
   },
 
@@ -25,9 +28,20 @@
         "type": "centered_text",
         "field": "quote",
         "font_name": "Lora-Regular.ttf",
-        "font_size": 16,
-        "max_width_ratio": 0.88,
-        "vertical_center": true
+        "font_size": 15,
+        "max_width_ratio": 0.85,
+        "vertical_center": false
+      },
+      { "type": "spacer", "height": 8 },
+      { "type": "separator", "style": "short", "width": 50 },
+      { "type": "spacer", "height": 6 },
+      {
+        "type": "text",
+        "field": "interpretation",
+        "font": "noto_serif_light",
+        "font_size": 12,
+        "align": "center",
+        "max_lines": 2
       }
     ],
     "footer": {

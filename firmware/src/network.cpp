@@ -62,13 +62,16 @@ static bool readExact(WiFiClient *s, uint8_t *buf, int len) {
 
 // ── Fetch BMP from backend ──────────────────────────────────
 
-bool fetchBMP() {
+bool fetchBMP(bool nextMode) {
     float v = readBatteryVoltage();
     String mac = WiFi.macAddress();
     int rssi = WiFi.RSSI();
     String url = cfgServer + "/api/render?v=" + String(v, 2)
                + "&mac=" + mac + "&rssi=" + String(rssi)
                + "&w=" + String(W) + "&h=" + String(H);
+    if (nextMode) {
+        url += "&next=1";
+    }
     Serial.printf("GET %s (RSSI=%d)\n", url.c_str(), rssi);
 
     WiFiClient client;
@@ -165,6 +168,25 @@ void postConfigToBackend() {
     int code = http.POST(body);
     Serial.printf("POST /api/config -> %d\n", code);
     http.end();
+}
+
+// ── Post favorite to backend ────────────────────────────────
+
+bool postFavorite() {
+    String mac = WiFi.macAddress();
+    String url = cfgServer + "/api/device/" + mac + "/favorite";
+    Serial.printf("POST %s\n", url.c_str());
+
+    HTTPClient http;
+    WiFiClient client;
+    http.begin(client, url);
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(HTTP_TIMEOUT);
+
+    int code = http.POST("{}");
+    Serial.printf("POST /api/device/.../favorite -> %d\n", code);
+    http.end();
+    return (code >= 200 && code < 300);
 }
 
 // ── NTP time sync ───────────────────────────────────────────
