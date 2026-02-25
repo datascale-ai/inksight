@@ -163,18 +163,26 @@ def _row_to_dict(row, columns) -> dict:
     d = dict(zip(columns, row))
     d["modes"] = [m for m in d["modes"].split(",") if m]
     d["character_tones"] = [t for t in d["character_tones"].split(",") if t]
-    # Parse countdown_events from JSON string
-    ce = d.get("countdown_events", "[]")
+    # Parse JSON list fields from DB TEXT columns and normalize to arrays.
+    # This avoids leaking raw JSON strings (for example "[]") to web clients.
+    ce_raw = d.get("countdown_events", "[]")
     try:
-        d["countdownEvents"] = json.loads(ce) if isinstance(ce, str) else ce
+        ce = json.loads(ce_raw) if isinstance(ce_raw, str) else ce_raw
     except (json.JSONDecodeError, TypeError):
-        d["countdownEvents"] = []
-    # Parse time_slot_rules from JSON string
-    tsr = d.get("time_slot_rules", "[]")
+        ce = []
+    if not isinstance(ce, list):
+        ce = []
+    d["countdown_events"] = ce
+    d["countdownEvents"] = ce
+
+    tsr_raw = d.get("time_slot_rules", "[]")
     try:
-        d["time_slot_rules"] = json.loads(tsr) if isinstance(tsr, str) else tsr
+        tsr = json.loads(tsr_raw) if isinstance(tsr_raw, str) else tsr_raw
     except (json.JSONDecodeError, TypeError):
-        d["time_slot_rules"] = []
+        tsr = []
+    if not isinstance(tsr, list):
+        tsr = []
+    d["time_slot_rules"] = tsr
     # Add mac field for cycle index tracking
     if "mac" not in d:
         d["mac"] = d.get("mac", "default")
