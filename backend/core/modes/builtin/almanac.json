@@ -21,23 +21,21 @@
       },
       {
         "type": "llm_json",
-        "prompt_template": "你是一位精通中国传统历法的老先生。根据环境信息，生成今日黄历内容。\n用 JSON 输出：\n{{\"lunar_date\": \"农历日期（如：乙巳年 腊月廿三）\", \"solar_term\": \"当前节气或最近节气（如：大寒）\", \"yi\": \"今日宜（3项，用顿号分隔，如：读书、远行、会友）\", \"ji\": \"今日忌（2项，用顿号分隔，如：动土、诉讼）\", \"element\": \"五行（如：金）\", \"direction\": \"吉方（如：东南）\", \"health_tip\": \"节气养生一句话（15字以内）\"}}\n只输出 JSON。\n环境：{context}",
+        "prompt_template": "你是一位精通中国传统历法的老先生。根据环境信息，生成今日黄历内容。\n用 JSON 输出：\n{{\"lunar_date\": \"农历日期（如：腊月廿三）\", \"solar_term\": \"当前节气或最近节气（如：大寒）\", \"yi\": \"今日宜（3项，用顿号分隔，如：读书、远行、会友）\", \"ji\": \"今日忌（2项，用顿号分隔，如：动土、诉讼）\", \"direction\": \"吉方（如：东南）\", \"health_tip\": \"节气养生一句话（15字以内）\"}}\n只输出 JSON。\n环境：{context}",
         "output_schema": {
-          "lunar_date": { "type": "string", "default": "乙巳年 正月初一" },
+          "lunar_date": { "type": "string", "default": "正月初一" },
           "solar_term": { "type": "string", "default": "立春" },
           "yi": { "type": "string", "default": "读书、远行、会友" },
           "ji": { "type": "string", "default": "动土、诉讼" },
-          "element": { "type": "string", "default": "金" },
           "direction": { "type": "string", "default": "东南" },
           "health_tip": { "type": "string", "default": "春捂秋冻，适当增衣" }
         },
         "temperature": 0.6,
         "fallback": {
-          "lunar_date": "乙巳年 正月初一",
+          "lunar_date": "正月初一",
           "solar_term": "立春",
           "yi": "读书、远行、会友",
           "ji": "动土、诉讼",
-          "element": "金",
           "direction": "东南",
           "health_tip": "春捂秋冻，适当增衣"
         }
@@ -50,29 +48,30 @@
     "body": [
       {
         "type": "two_column",
-        "left_width": 130,
-        "gap": 8,
+        "left_width": 120,
+        "gap": 10,
         "left": [
-          { "type": "text", "field": "lunar_date", "font": "noto_serif_bold", "font_size": 11, "align": "center", "margin_x": 4 },
-          { "type": "big_number", "field": "day", "font_size": 52, "align": "center" },
-          { "type": "text", "field": "month_cn", "font_size": 14, "align": "center", "margin_x": 4 },
-          { "type": "text", "field": "weekday_cn", "font_size": 12, "align": "center", "margin_x": 4 },
-          { "type": "separator", "style": "short", "width": 60 },
-          { "type": "text", "field": "solar_term", "font": "noto_serif_bold", "font_size": 16, "align": "center", "margin_x": 4 }
+          { "type": "text", "field": "lunar_date", "font_size": 12, "align": "center", "margin_x": 8 },
+          { "type": "big_number", "field": "day", "font_size": 48, "align": "center" },
+          { "type": "text", "field": "month_cn", "font_size": 14, "align": "center", "margin_x": 8 },
+          { "type": "text", "field": "weekday_cn", "font_size": 12, "align": "center", "margin_x": 8 },
+          { "type": "separator", "style": "short", "width": 50 },
+          { "type": "text", "field": "solar_term", "font": "noto_serif_bold", "font_size": 16, "align": "center", "margin_x": 8 }
         ],
         "right": [
+          { "type": "spacer", "height": 4 },
+          { "type": "group", "title": "宜", "title_font_size": 14, "margin_x": 8, "children": [
+            { "type": "text", "field": "yi", "font_size": 13, "align": "left", "margin_x": 8, "max_lines": 2 }
+          ]},
           { "type": "spacer", "height": 6 },
-          { "type": "group", "title": "宜", "children": [
-            { "type": "text", "field": "yi", "font_size": 13, "align": "left", "margin_x": 12, "max_lines": 2 }
+          { "type": "group", "title": "忌", "title_font_size": 14, "margin_x": 8, "children": [
+            { "type": "text", "field": "ji", "font_size": 13, "align": "left", "margin_x": 8, "max_lines": 2 }
           ]},
           { "type": "spacer", "height": 4 },
-          { "type": "group", "title": "忌", "children": [
-            { "type": "text", "field": "ji", "font_size": 13, "align": "left", "margin_x": 12, "max_lines": 2 }
-          ]},
-          { "type": "separator", "style": "short", "width": 80 },
-          { "type": "text", "template": "五行 {element}  吉方 {direction}", "font_size": 11, "align": "left", "margin_x": 12 },
-          { "type": "separator", "style": "dashed", "margin_x": 12 },
-          { "type": "text", "field": "health_tip", "font": "noto_serif_light", "font_size": 11, "align": "left", "margin_x": 12, "max_lines": 2 }
+          { "type": "separator", "style": "dashed", "margin_x": 8 },
+          { "type": "spacer", "height": 4 },
+          { "type": "text", "template": "吉方 {direction}", "font_size": 12, "align": "left", "margin_x": 8 },
+          { "type": "text", "field": "health_tip", "font": "noto_serif_light", "font_size": 11, "align": "left", "margin_x": 8, "max_lines": 2 }
         ]
       }
     ],

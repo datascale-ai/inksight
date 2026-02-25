@@ -1,0 +1,33 @@
+{
+  "mode_id": "MEMO",
+  "display_name": "便签留言",
+  "icon": "note",
+  "cacheable": false,
+  "description": "在墨水屏上显示自定义留言",
+  "content": {
+    "type": "computed",
+    "provider": "memo",
+    "fallback": {"memo_text": "在配置页面设置你的便签内容"},
+    "fallback_pool": [
+      {"memo_text": "在配置页面设置你的便签内容"},
+      {"memo_text": "今天也要元气满满"},
+      {"memo_text": "专注当下，做好眼前事"},
+      {"memo_text": "记得多喝水"},
+      {"memo_text": "休息一下，眺望远方"}
+    ]
+  },
+  "layout": {
+    "status_bar": {"line_width": 1, "dashed": false},
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "memo_text",
+        "font_name": "NotoSerifSC-Light.ttf",
+        "font_size": 18,
+        "vertical_center": true,
+        "max_width_ratio": 0.85
+      }
+    ],
+    "footer": {"label": "MEMO"}
+  }
+}

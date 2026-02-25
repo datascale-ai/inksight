@@ -153,7 +153,7 @@ class TestGenerateAndRender:
         ):
             mock_gc.return_value = {"quote": "Test", "author": "Author"}
 
-            result_img, _ = await generate_and_render(
+            result_img, result_content = await generate_and_render(
                 "STOIC", None, sample_date_ctx, sample_weather, 85.0
             )
             assert result_img is mock_img

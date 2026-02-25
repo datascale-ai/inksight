@@ -4,8 +4,10 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import random
 import re
 from typing import Any
 
@@ -13,6 +15,35 @@ from .config import DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL
 from .content import _build_context_str, _build_style_instructions, _call_llm, _clean_json_response
 
 logger = logging.getLogger(__name__)
+
+DEDUP_MAX_RETRIES = 2
+
+
+def _get_fallback(content_cfg: dict) -> dict:
+    """Get fallback content, supporting both single fallback and fallback_pool."""
+    pool = content_cfg.get("fallback_pool")
+    if pool and isinstance(pool, list) and len(pool) > 0:
+        return dict(random.choice(pool))
+    return dict(content_cfg.get("fallback", {}))
+
+
+def _compute_content_hash(result: dict) -> str:
+    text = json.dumps(result, sort_keys=True, ensure_ascii=False)
+    return hashlib.md5(text.encode()).hexdigest()[:12]
+
+
+def _validate_content_quality(result: dict, schema: dict | None = None) -> bool:
+    """Validate LLM output quality. Returns True if acceptable."""
+    if not result:
+        return False
+    for key, val in result.items():
+        if isinstance(val, str) and len(val) > 500:
+            return False
+    important_keys = [k for k in result if k in ("quote", "question", "body", "word", "event_title", "challenge", "name_cn", "text")]
+    for k in important_keys:
+        if not result.get(k):
+            return False
+    return True
 
 
 async def generate_json_mode_content(
@@ -31,6 +62,7 @@ async def generate_json_mode_content(
     content_tone: str | None = None,
     llm_provider: str = "",
     llm_model: str = "",
+    mac: str = "",
 ) -> dict:
     """Generate content for a JSON-defined mode.
 
@@ -45,7 +77,7 @@ async def generate_json_mode_content(
     """
     content_cfg = mode_def.get("content", {})
     ctype = content_cfg.get("type", "static")
-    fallback = content_cfg.get("fallback", {})
+    fallback = _get_fallback(content_cfg)
 
     common_args = dict(
         date_str=date_str,
@@ -82,27 +114,54 @@ async def generate_json_mode_content(
         date_str, weather_str, festival, daily_word,
         upcoming_holiday, days_until_holiday,
     )
-    prompt = content_cfg.get("prompt_template", "").format(context=context)
+    base_prompt = content_cfg.get("prompt_template", "").format(context=context)
 
     style = _build_style_instructions(character_tones, language, content_tone)
     if style:
-        prompt += style
+        base_prompt += style
 
     mode_id = mode_def.get("mode_id", "CUSTOM")
     logger.info(f"[JSONContent] Generating content for {mode_id} via {provider}/{model}")
 
-    try:
-        text = await _call_llm(provider, model, prompt, temperature=temperature)
-    except Exception as e:
-        logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
-        return dict(fallback)
+    # Load recent content hashes for dedup
+    recent_hashes: list[str] = []
+    dedup_hint = ""
+    if mac and ctype in ("llm", "llm_json"):
+        try:
+            from .stats_store import get_recent_content_hashes, get_recent_content_summaries
+            recent_hashes = await get_recent_content_hashes(mac, mode_id, limit=20)
+            summaries = await get_recent_content_summaries(mac, mode_id, limit=3)
+            if summaries:
+                dedup_hint = "\n请避免与以下近期内容重复：" + "；".join(summaries)
+        except Exception:
+            pass
 
-    if ctype == "llm":
-        result = _parse_llm_output(text, content_cfg, fallback)
-    elif ctype == "llm_json":
-        result = _parse_llm_json_output(text, content_cfg, fallback)
-    else:
-        result = {"text": text}
+    for attempt in range(1 + DEDUP_MAX_RETRIES):
+        prompt = base_prompt
+        if attempt > 0 and dedup_hint:
+            prompt += dedup_hint
+
+        try:
+            text = await _call_llm(provider, model, prompt, temperature=temperature)
+        except Exception as e:
+            logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
+            return dict(fallback)
+
+        if ctype == "llm":
+            result = _parse_llm_output(text, content_cfg, fallback)
+        elif ctype == "llm_json":
+            result = _parse_llm_json_output(text, content_cfg, fallback)
+        else:
+            result = {"text": text}
+
+        if not _validate_content_quality(result, content_cfg.get("output_schema")):
+            logger.warning(f"[JSONContent] Quality check failed for {mode_id}, using fallback")
+            return _apply_post_process(dict(fallback), content_cfg)
+
+        content_hash = _compute_content_hash(result)
+        if content_hash not in recent_hashes:
+            break
+        logger.info(f"[JSONContent] Dedup retry {attempt + 1} for {mode_id} (hash collision)")
 
     return _apply_post_process(result, content_cfg)
 
@@ -158,6 +217,31 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             "weekday_num": weekday_num, "week_total": 7,
             "age": age, "life_expect": life_expect,
         }
+
+    if provider == "memo":
+        config = kwargs.get("config") or {}
+        memo_text = config.get("memo_text", "")
+        if not memo_text:
+            memo_text = fallback.get("memo_text", "在配置页面设置你的便签内容")
+        return {"memo_text": memo_text}
+
+    if provider == "habit":
+        config = kwargs.get("config") or {}
+        mac = config.get("mac", "")
+        try:
+            from .stats_store import get_habit_status
+            habits = await get_habit_status(mac)
+            completed = sum(1 for h in habits if h.get("status") == "✓")
+            total = len(habits) if habits else 7
+            return {
+                "habits": habits,
+                "summary": f"本周已完成 {completed}/{total} 项习惯",
+                "week_progress": completed,
+                "week_total": total,
+            }
+        except Exception:
+            return dict(fallback)
+
     return dict(fallback)
 
 
@@ -210,6 +294,17 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
             "ph_tagline": ph_tagline,
         })
         return result
+
+    if provider == "weather_forecast":
+        from .context import get_weather_forecast
+        config = kwargs.get("config") or {}
+        city = config.get("city")
+        data = await get_weather_forecast(city=city, days=3)
+        if not data.get("today_temp") or data["today_temp"] == "--":
+            return dict(fallback)
+        merged = dict(fallback)
+        merged.update(data)
+        return merged
 
     return dict(fallback)
 

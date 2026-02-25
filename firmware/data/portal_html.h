@@ -135,6 +135,11 @@ hr.dv{border:none;border-top:1px dashed var(--bd);margin:20px 0}
 </button>
 </div>
 </div>
+<div class="fg">
+<label class="lbl">服务器地址</label>
+<input type="text" class="inp" id="srvIn" placeholder="例如: http://192.168.1.100:8080">
+<div style="font-size:.68rem;color:var(--gy);margin-top:3px">InkSight 后端服务的完整地址（含端口）</div>
+</div>
 <button class="btn" id="cBtn" onclick="doConnect()"><span class="bt">连接 WiFi</span><div class="sp"></div></button>
 </div>
 
@@ -179,6 +184,9 @@ hr.dv{border:none;border-top:1px dashed var(--bd);margin:20px 0}
 <span class="ch" data-m="STORY" onclick="tc(this)"><b>STORY</b> <span class="ch-desc">微型小说</span></span>
 <span class="ch" data-m="LIFEBAR" onclick="tc(this)"><b>LIFEBAR</b> <span class="ch-desc">人生进度条</span></span>
 <span class="ch" data-m="CHALLENGE" onclick="tc(this)"><b>CHALLENGE</b> <span class="ch-desc">5分钟微挑战</span></span>
+<span class="ch" data-m="WEATHER" onclick="tc(this)"><b>WEATHER</b> <span class="ch-desc">天气看板预报</span></span>
+<span class="ch" data-m="MEMO" onclick="tc(this)"><b>MEMO</b> <span class="ch-desc">自定义便签</span></span>
+<span class="ch" data-m="HABIT" onclick="tc(this)"><b>HABIT</b> <span class="ch-desc">习惯打卡</span></span>
 </div>
 </div>
 
@@ -379,14 +387,16 @@ else{i.type='password';b.innerHTML='<svg width="14" height="14" viewBox="0 0 24 
 function doConnect(){
 var s=ssid||document.getElementById('ssidIn').value.trim();
 var p=document.getElementById('pwIn').value;
+var sv=document.getElementById('srvIn').value.trim();
 var st=document.getElementById('pSt'),btn=document.getElementById('cBtn');
 if(!s){st.className='st e';st.textContent='请选择或输入 WiFi';return;}
 if(!p){st.className='st e';st.textContent='请输入密码';return;}
 if(p.length<8){st.className='st e';st.textContent='密码至少 8 位';return;}
+if(sv&&!sv.match(/^https?:\/\//)){st.className='st e';st.textContent='服务器地址需以 http:// 或 https:// 开头';return;}
 btn.classList.add('ld');btn.disabled=true;
 st.className='st c';st.textContent='正在连接 '+s+' ...';
 
-var fd=new FormData();fd.append('ssid',s);fd.append('pass',p);
+var fd=new FormData();fd.append('ssid',s);fd.append('pass',p);if(sv)fd.append('server',sv);
 fetch('/save_wifi',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
 btn.classList.remove('ld');btn.disabled=false;
 if(d.ok){
@@ -422,7 +432,7 @@ if(arr.indexOf(c.dataset.m)>=0)c.classList.add('sel');else c.classList.remove('s
 function applyPreset(name){
 if(name==='relax'){setModes(['ZEN','DAILY','POETRY','LETTER','STORY']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=4;document.getElementById('riM').value=0;}
 else if(name==='news'){setModes(['BRIEFING','DAILY','THISDAY','BIAS']);sp(document.querySelector('#rStrat .pi[data-v="cycle"]'));document.getElementById('riH').value=2;document.getElementById('riM').value=0;}
-else if(name==='all'){setModes(['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=1;document.getElementById('riM').value=0;}
+else if(name==='all'){setModes(['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE','WEATHER','MEMO','HABIT']);sp(document.querySelector('#rStrat .pi[data-v="random"]'));document.getElementById('riH').value=1;document.getElementById('riM').value=0;}
 }
 
 var llmModels={
@@ -659,6 +669,7 @@ ul.appendChild(li);
 fetch('/info').then(function(r){return r.json()}).then(function(d){
 if(d.mac)document.getElementById('devMAC').textContent=d.mac;
 if(d.battery)document.getElementById('devBat').textContent=d.battery;
+if(d.server_url)document.getElementById('srvIn').value=d.server_url;
 }).catch(function(){});
 })();
 </script>

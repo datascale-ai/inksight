@@ -1,0 +1,31 @@
+{
+  "mode_id": "HABIT",
+  "display_name": "习惯打卡",
+  "icon": "check",
+  "cacheable": false,
+  "description": "追踪每日习惯完成情况",
+  "content": {
+    "type": "computed",
+    "provider": "habit",
+    "fallback": {"habits": [], "summary": "在配置中设置你要追踪的习惯", "week_progress": 0, "week_total": 7},
+    "fallback_pool": [
+      {"habits": [], "summary": "在配置中设置你要追踪的习惯", "week_progress": 0, "week_total": 7},
+      {"habits": [], "summary": "坚持就是胜利", "week_progress": 0, "week_total": 7},
+      {"habits": [], "summary": "每一天都是新的开始", "week_progress": 0, "week_total": 7}
+    ]
+  },
+  "layout": {
+    "status_bar": {"line_width": 1, "dashed": false},
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "summary",
+        "font": "noto_serif_regular",
+        "font_size": 16,
+        "max_width_ratio": 0.85,
+        "vertical_center": true
+      }
+    ],
+    "footer": {"label": "HABIT"}
+  }
+}

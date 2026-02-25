@@ -1,0 +1,54 @@
+{
+  "mode_id": "WEATHER",
+  "display_name": "天气看板",
+  "icon": "weather",
+  "cacheable": false,
+  "description": "当日天气 + 未来3天预报 + 穿衣建议",
+  "content": {
+    "type": "composite",
+    "steps": [
+      {
+        "type": "external_data",
+        "provider": "weather_forecast",
+        "fallback": {
+          "today_temp": "--",
+          "today_desc": "暂无数据",
+          "forecast": []
+        }
+      },
+      {
+        "type": "llm_json",
+        "prompt_template": "你是一位贴心的生活助手。根据以下天气信息，生成一句简短的穿衣建议（20字以内）。只输出 JSON：{\"advice\": \"建议内容\"}\n天气：{context}",
+        "output_schema": {
+          "advice": {"type": "string", "default": "注意添减衣物"}
+        },
+        "fallback": {"advice": "注意添减衣物"}
+      }
+    ],
+    "fallback": {
+      "today_temp": "--",
+      "today_desc": "暂无数据",
+      "advice": "注意根据天气添减衣物",
+      "forecast": []
+    },
+    "fallback_pool": [
+      {"today_temp": "--", "today_desc": "暂无数据", "advice": "注意根据天气添减衣物", "forecast": []},
+      {"today_temp": "--", "today_desc": "暂无数据", "advice": "早晚温差大，记得带件外套", "forecast": []},
+      {"today_temp": "--", "today_desc": "暂无数据", "advice": "气温适宜，轻装出行", "forecast": []},
+      {"today_temp": "--", "today_desc": "暂无数据", "advice": "有雨记得带伞", "forecast": []},
+      {"today_temp": "--", "today_desc": "暂无数据", "advice": "天冷注意保暖", "forecast": []}
+    ]
+  },
+  "layout": {
+    "status_bar": {"line_width": 1, "dashed": false},
+    "body": [
+      {"type": "big_number", "field": "today_temp", "font_size": 42, "align": "center"},
+      {"type": "text", "field": "today_desc", "font_size": 14, "align": "center"},
+      {"type": "separator", "style": "dashed"},
+      {"type": "list", "field": "forecast", "max_items": 3, "item_template": "{day}: {temp_range} {desc}", "font_size": 12},
+      {"type": "separator", "style": "short", "width": 90},
+      {"type": "text", "field": "advice", "font_size": 12, "align": "center", "max_lines": 2}
+    ],
+    "footer": {"label": "WEATHER"}
+  }
+}

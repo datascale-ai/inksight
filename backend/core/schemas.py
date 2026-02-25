@@ -61,6 +61,7 @@ class ConfigRequest(BaseModel):
         max_length=24,
         description="时段绑定规则 [{startHour, endHour, modes}]",
     )
+    memoText: str = Field(default="", description="MEMO 模式下的备忘录文本")
 
     @field_validator("mac")
     @classmethod

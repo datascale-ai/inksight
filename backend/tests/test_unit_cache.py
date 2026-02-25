@@ -124,7 +124,7 @@ class TestGenerateSingleMode:
     async def test_success(self, cache, sample_config, sample_date_ctx, sample_weather):
         mock_img = _make_image()
         with patch("core.cache.generate_and_render", new_callable=AsyncMock) as mock_gar:
-            mock_gar.return_value = mock_img
+            mock_gar.return_value = (mock_img, {"test": True})
             result = await cache._generate_single_mode(
                 "AA:BB:CC:DD:EE:FF", "STOIC", 85.0,
                 sample_config, sample_date_ctx, sample_weather,

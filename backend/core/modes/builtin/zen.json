@@ -15,9 +15,15 @@
     "post_process": { "word": "first_char" },
     "temperature": 0.8,
     "fallback": {
-      "word": "静",
-      "source": "万物归寂"
-    }
+      "word": "静"
+    },
+    "fallback_pool": [
+      {"word": "静"},
+      {"word": "空"},
+      {"word": "悟"},
+      {"word": "定"},
+      {"word": "舍"}
+    ]
   },
 
   "layout": {
@@ -26,9 +32,9 @@
       {
         "type": "centered_text",
         "field": "word",
-        "font": "noto_serif_bold",
-        "font_size": 52,
-        "max_width_ratio": 0.5,
+        "font": "noto_serif_regular",
+        "font_size": 96,
+        "max_width_ratio": 0.7,
         "vertical_center": true
       },
       {

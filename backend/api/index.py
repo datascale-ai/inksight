@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import random
@@ -11,8 +12,8 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 from typing import Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Query, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 import httpx
 from PIL import Image
 
@@ -45,6 +46,8 @@ from core.config_store import (
     get_device_state,
     set_pending_refresh,
     consume_pending_refresh,
+    generate_device_token,
+    validate_device_token,
 )
 from core.cache import content_cache
 from core.schemas import ConfigRequest
@@ -66,6 +69,8 @@ from core.stats_store import (
     add_favorite,
     get_favorites,
     get_latest_render_content,
+    check_habit,
+    get_habit_status,
 )
 
 
@@ -73,6 +78,8 @@ from core.stats_store import (
 async def lifespan(app: FastAPI):
     await init_db()
     await init_stats_db()
+    from core.cache import init_cache_db
+    await init_cache_db()
     yield
 
 
@@ -278,6 +285,7 @@ async def _build_image(
         img, content_data = await generate_and_render(
             persona, config, date_ctx, weather, battery_pct,
             screen_w=screen_w, screen_h=screen_h,
+            mac=mac or "",
         )
 
         if mac and config:
@@ -504,6 +512,54 @@ async def render(
         )
 
 
+@app.get("/api/widget/{mac}")
+async def get_widget(
+    mac: str,
+    mode: str = "",
+    w: int = 400,
+    h: int = 300,
+    size: str = "",
+):
+    """Read-only widget endpoint for embedding InkSight content.
+    Does NOT update device state or trigger refreshes.
+    """
+    # Size presets
+    if size == "small":
+        w, h = 200, 150
+    elif size == "medium":
+        w, h = 400, 300
+    elif size == "large":
+        w, h = 800, 480
+
+    config = await get_active_config(mac)
+    if not config:
+        config = {}
+
+    persona = mode.upper() if mode else config.get("modes", ["STOIC"])[0] if config.get("modes") else "STOIC"
+    city = config.get("city") if config else None
+
+    date_ctx = await get_date_context()
+    weather = await get_weather(city=city)
+
+    img, _ = await generate_and_render(
+        persona, config, date_ctx, weather, 100.0,
+        screen_w=w, screen_h=h,
+    )
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "X-InkSight-Mode": persona,
+        },
+    )
+
+
 @app.get("/api/preview")
 async def preview(
     v: float = Query(default=3.3, description="Battery voltage"),
@@ -586,6 +642,35 @@ async def list_modes():
             "source": info.source,
         })
     return {"modes": modes}
+
+
+@app.post("/api/modes/custom/preview")
+async def custom_mode_preview(body: dict):
+    """Render a preview for a custom mode definition without saving."""
+    mode_def = body.get("mode_def", body)
+    if not mode_def.get("mode_id"):
+        mode_def = dict(mode_def, mode_id="PREVIEW")
+    from core.json_content import generate_json_mode_content
+    from core.json_renderer import render_json_mode
+
+    date_ctx = await get_date_context()
+    weather = await get_weather()
+    content = await generate_json_mode_content(
+        mode_def,
+        date_ctx=date_ctx,
+        date_str=date_ctx["date_str"],
+        weather_str=weather["weather_str"],
+    )
+    img = render_json_mode(
+        mode_def, content,
+        date_str=date_ctx["date_str"],
+        weather_str=weather["weather_str"],
+        battery_pct=100.0,
+    )
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="image/png")
 
 
 @app.post("/api/modes/custom")
@@ -750,6 +835,11 @@ async def dashboard_page():
     return HTMLResponse(content=_load_web_page_html("dashboard.html"))
 
 
+@app.get("/editor", response_class=HTMLResponse)
+async def editor_page():
+    return HTMLResponse(content=_load_web_page_html("editor.html"))
+
+
 def _load_web_page_html(filename: str) -> str:
     """Load static page from webconfig directory."""
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -826,6 +916,24 @@ async def content_history(
     """Get content history for a device."""
     history = await get_content_history(mac, limit, offset, mode)
     return {"mac": mac, "history": history}
+
+
+@app.post("/api/device/{mac}/habit/check")
+async def habit_check(mac: str, body: dict):
+    """Record a habit check."""
+    habit_name = body.get("habit", "").strip()
+    if not habit_name:
+        return JSONResponse({"error": "habit name is required"}, status_code=400)
+    date = body.get("date")
+    await check_habit(mac, habit_name, date)
+    return {"ok": True, "message": f"Habit '{habit_name}' checked"}
+
+
+@app.get("/api/device/{mac}/habit/status")
+async def habit_status(mac: str):
+    """Get habit status for the current week."""
+    habits = await get_habit_status(mac)
+    return {"mac": mac, "habits": habits}
 
 
 # ── Stats endpoints ──────────────────────────────────────────

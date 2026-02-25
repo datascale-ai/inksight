@@ -147,22 +147,25 @@ def draw_status_bar(
     screen_h: int = SCREEN_HEIGHT,
 ):
     """绘制顶部状态栏"""
-    font_cn = load_font("noto_serif_extralight", FONT_SIZES["status_bar"]["cn"])
-    font_en = load_font("inter_medium", FONT_SIZES["status_bar"]["en"])
+    scale = screen_w / 400.0
+    font_cn = load_font("noto_serif_extralight", int(FONT_SIZES["status_bar"]["cn"] * scale))
+    font_en = load_font("inter_medium", int(FONT_SIZES["status_bar"]["en"] * scale))
 
-    y = 10
-    x = 12
+    pad_y = int(screen_h * 0.03)
+    pad_x = int(screen_w * 0.03)
+    y = pad_y
+    x = pad_x
     if time_str:
         draw.text((x, y), time_str, fill=EINK_FG, font=font_cn)
         bbox_time = draw.textbbox((0, 0), time_str, font=font_cn)
-        x += (bbox_time[2] - bbox_time[0]) + 8
+        x += (bbox_time[2] - bbox_time[0]) + int(8 * scale)
     draw.text((x, y), date_str, fill=EINK_FG, font=font_cn)
 
-    wx = screen_w // 2 - 28
+    wx = screen_w // 2 - int(28 * scale)
     weather_icon = get_weather_icon(weather_code) if weather_code >= 0 else None
     if weather_icon:
         img.paste(weather_icon, (wx, y - 1))
-        draw.text((wx + 18, y), weather_str, fill=EINK_FG, font=font_cn)
+        draw.text((wx + int(18 * scale), y), weather_str, fill=EINK_FG, font=font_cn)
     else:
         draw.text((wx, y), weather_str, fill=EINK_FG, font=font_cn)
 
@@ -170,20 +173,23 @@ def draw_status_bar(
     bbox = draw.textbbox((0, 0), batt_text, font=font_en)
     batt_text_w = bbox[2] - bbox[0]
 
-    bx = screen_w - 12 - batt_text_w - 6 - 26
+    batt_box_w = int(22 * scale)
+    batt_box_h = int(11 * scale)
+    bx = screen_w - pad_x - batt_text_w - int(6 * scale) - batt_box_w
     by = y + 1
-    draw.rectangle([bx, by, bx + 22, by + 11], outline=EINK_FG, width=1)
-    draw.rectangle([bx + 22, by + 3, bx + 24, by + 8], fill=EINK_FG)
-    fill_w = int(18 * battery_pct / 100)
+    draw.rectangle([bx, by, bx + batt_box_w, by + batt_box_h], outline=EINK_FG, width=1)
+    draw.rectangle([bx + batt_box_w, by + int(3 * scale), bx + batt_box_w + int(2 * scale), by + int(8 * scale)], fill=EINK_FG)
+    fill_w = int((batt_box_w - 4) * battery_pct / 100)
     if fill_w > 0:
-        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + 9], fill=EINK_FG)
+        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + batt_box_h - 2], fill=EINK_FG)
 
-    draw.text((bx + 28, y), batt_text, fill=EINK_FG, font=font_en)
+    draw.text((bx + batt_box_w + int(6 * scale), y), batt_text, fill=EINK_FG, font=font_en)
 
+    line_y = int(screen_h * 0.11)
     if dashed:
-        draw_dashed_line(draw, (0, 32), (screen_w, 32), fill=EINK_FG, width=line_width)
+        draw_dashed_line(draw, (0, line_y), (screen_w, line_y), fill=EINK_FG, width=line_width)
     else:
-        draw.line([(0, 32), (screen_w, 32)], fill=EINK_FG, width=line_width)
+        draw.line([(0, line_y), (screen_w, line_y)], fill=EINK_FG, width=line_width)
 
 
 def has_cjk(text: str) -> bool:
@@ -204,10 +210,11 @@ def draw_footer(
     screen_h: int = SCREEN_HEIGHT,
 ):
     """绘制底部页脚"""
+    scale = screen_w / 400.0
     if attr_font_size is None:
-        attr_font_size = FONT_SIZES["footer"]["attribution"]
+        attr_font_size = int(FONT_SIZES["footer"]["attribution"] * scale)
 
-    y_line = screen_h - 30
+    y_line = screen_h - int(screen_h * 0.10)
     if dashed:
         draw_dashed_line(
             draw, (0, y_line), (screen_w, y_line), fill=EINK_FG, width=line_width
@@ -215,7 +222,7 @@ def draw_footer(
     else:
         draw.line([(0, y_line), (screen_w, y_line)], fill=EINK_FG, width=line_width)
 
-    font_label = load_font("inter_medium", FONT_SIZES["footer"]["label"])
+    font_label = load_font("inter_medium", int(FONT_SIZES["footer"]["label"] * scale))
     if attr_font:
         font_attr = load_font_by_name(attr_font, attr_font_size)
     elif attribution and has_cjk(attribution):
@@ -223,20 +230,20 @@ def draw_footer(
     else:
         font_attr = load_font("lora_regular", attr_font_size)
 
-    icon_x = 12
-    icon_y = y_line + 9
+    icon_x = int(12 * scale)
+    icon_y = y_line + int(9 * scale)
     mode_icon = get_mode_icon(mode)
     if mode_icon:
         img.paste(mode_icon, (icon_x, icon_y))
-        label_x = icon_x + 15
+        label_x = icon_x + int(15 * scale)
     else:
         label_x = icon_x
-    draw.text((label_x, y_line + 9), mode.upper(), fill=EINK_FG, font=font_label)
+    draw.text((label_x, y_line + int(9 * scale)), mode.upper(), fill=EINK_FG, font=font_label)
 
     if attribution:
         bbox = draw.textbbox((0, 0), attribution, font=font_attr)
         draw.text(
-            (screen_w - 12 - (bbox[2] - bbox[0]), y_line + 9),
+            (screen_w - int(12 * scale) - (bbox[2] - bbox[0]), y_line + int(9 * scale)),
             attribution,
             fill=EINK_FG,
             font=font_attr,

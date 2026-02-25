@@ -17,6 +17,10 @@
 // ── Display constants ────────────────────────────────────────
 // Default for 4.2" E-Paper (400x300, 1-bit).
 // Override via build flags: -D EPD_WIDTH=800 -D EPD_HEIGHT=480
+// Supported configurations:
+//   4.2" (400x300) - default
+//   7.5" (800x480)
+//   2.9" (296x128)
 #ifndef EPD_WIDTH
 #define EPD_WIDTH  400
 #endif
@@ -37,7 +41,7 @@ extern uint8_t imgBuf[];
 static const int FULL_REFRESH_INTERVAL = 10;  // Full refresh every N updates to clear ghosting
 
 // ── Config defaults ─────────────────────────────────────────
-static const char *DEFAULT_SERVER  = "http://192.168.3.30:8080";  // Set via captive portal
+static const char *DEFAULT_SERVER  = "";  // Must be set via captive portal
 static const int   WIFI_TIMEOUT    = 15000;   // ms
 static const int   HTTP_TIMEOUT    = 30000;   // ms
 static const int   CFG_BTN_HOLD_MS = 2000;    // Long press duration to trigger config mode
@@ -51,7 +55,7 @@ static const int   RETRY_DELAY_SEC = 10;      // Delay between retries (seconds)
 #define NTP_UTC_OFFSET  (8 * 3600)  // UTC+8 (China Standard Time), adjust for your region
 
 // ── Debug mode ──────────────────────────────────────────────
-#define DEBUG_MODE 1  // Set to 1 for fast refresh (1 min), 0 for user config
+#define DEBUG_MODE 0  // Set to 1 for fast refresh (1 min), 0 for user config
 #if DEBUG_MODE
 static const int DEBUG_REFRESH_MIN = 1;  // 1 minute for debugging
 #endif

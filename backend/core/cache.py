@@ -1,12 +1,31 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional
+
+import aiosqlite
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+_CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "cache.db")
+
+
+async def init_cache_db():
+    """Initialize the cache database."""
+    async with aiosqlite.connect(_CACHE_DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS image_cache (
+                cache_key TEXT PRIMARY KEY,
+                image_data BLOB NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        await db.commit()
 
 from .config import (
     SCREEN_WIDTH,
@@ -59,6 +78,14 @@ class ContentCache:
                 else:
                     logger.debug(f"[CACHE] {key} expired (TTL={ttl_minutes}min)")
                     del self._cache[key]
+            # Try SQLite persistent cache
+            try:
+                img = await self._get_from_db(key)
+                if img:
+                    self._cache[key] = (img, datetime.now())
+                    return img
+            except Exception:
+                pass
             return None
 
     async def set(
@@ -69,6 +96,10 @@ class ContentCache:
         async with self._lock:
             key = self._get_cache_key(mac, persona, screen_w, screen_h)
             self._cache[key] = (img, datetime.now())
+            try:
+                await self._save_to_db(key, img)
+            except Exception:
+                pass
 
     async def check_and_regenerate_all(
         self, mac: str, config: dict, v: float = 3.3,
@@ -144,7 +175,7 @@ class ContentCache:
         try:
             logger.info(f"[CACHE] Generating {mac}:{persona}...")
 
-            img = await generate_and_render(
+            img, _content = await generate_and_render(
                 persona, config, date_ctx, weather, battery_pct,
                 screen_w=screen_w, screen_h=screen_h,
             )
@@ -156,6 +187,43 @@ class ContentCache:
         except Exception as e:
             logger.error(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
             return False
+
+    async def _get_from_db(self, key: str) -> Image.Image | None:
+        async with aiosqlite.connect(_CACHE_DB_PATH) as db:
+            cursor = await db.execute(
+                "SELECT image_data, created_at FROM image_cache WHERE cache_key = ?",
+                (key,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            try:
+                return Image.open(io.BytesIO(row[0]))
+            except Exception:
+                return None
+
+    async def _save_to_db(self, key: str, img: Image.Image):
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        data = buf.getvalue()
+        async with aiosqlite.connect(_CACHE_DB_PATH) as db:
+            await db.execute(
+                """INSERT INTO image_cache (cache_key, image_data, created_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(cache_key) DO UPDATE SET image_data = ?, created_at = ?""",
+                (key, data, datetime.now().isoformat(), data, datetime.now().isoformat()),
+            )
+            await db.commit()
+
+    async def cleanup_expired(self, max_age_hours: int = 48):
+        """Remove cache entries older than max_age_hours."""
+        cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+        try:
+            async with aiosqlite.connect(_CACHE_DB_PATH) as db:
+                await db.execute("DELETE FROM image_cache WHERE created_at < ?", (cutoff,))
+                await db.commit()
+        except Exception:
+            pass
 
 
 # Global cache instance

@@ -172,8 +172,8 @@
     /* Persona buttons */
     .persona-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 5px;
     }
     .persona-btn {
       padding: 8px 4px;
@@ -459,6 +459,42 @@
                 <button class="persona-btn" data-persona="COUNTDOWN" onclick="selectPersona(this)">
                   COUNTDOWN<span class="label">倒计时</span>
                 </button>
+                <button class="persona-btn" data-persona="WEATHER" onclick="selectPersona(this)">
+                  WEATHER<span class="label">天气看板</span>
+                </button>
+                <button class="persona-btn" data-persona="MEMO" onclick="selectPersona(this)">
+                  MEMO<span class="label">便签留言</span>
+                </button>
+                <button class="persona-btn" data-persona="HABIT" onclick="selectPersona(this)">
+                  HABIT<span class="label">习惯打卡</span>
+                </button>
+                <button class="persona-btn" data-persona="RIDDLE" onclick="selectPersona(this)">
+                  RIDDLE<span class="label">脑筋急转弯</span>
+                </button>
+                <button class="persona-btn" data-persona="CHALLENGE" onclick="selectPersona(this)">
+                  CHALLENGE<span class="label">每日挑战</span>
+                </button>
+                <button class="persona-btn" data-persona="STORY" onclick="selectPersona(this)">
+                  STORY<span class="label">微小说</span>
+                </button>
+                <button class="persona-btn" data-persona="LIFEBAR" onclick="selectPersona(this)">
+                  LIFEBAR<span class="label">人生进度</span>
+                </button>
+                <button class="persona-btn" data-persona="ALMANAC" onclick="selectPersona(this)">
+                  ALMANAC<span class="label">老黄历</span>
+                </button>
+                <button class="persona-btn" data-persona="THISDAY" onclick="selectPersona(this)">
+                  THISDAY<span class="label">历史上的今天</span>
+                </button>
+                <button class="persona-btn" data-persona="LETTER" onclick="selectPersona(this)">
+                  LETTER<span class="label">给未来的信</span>
+                </button>
+                <button class="persona-btn" data-persona="QUESTION" onclick="selectPersona(this)">
+                  QUESTION<span class="label">每日一问</span>
+                </button>
+                <button class="persona-btn" data-persona="BIAS" onclick="selectPersona(this)">
+                  BIAS<span class="label">认知偏差</span>
+                </button>
               </div>
             </div>
 
@@ -700,7 +736,7 @@
         const progressFill = document.getElementById('allModesFill');
         progressBar.style.display = 'block';
 
-        const modes = ['STOIC', 'ROAST', 'ZEN', 'DAILY', 'BRIEFING', 'ARTWALL', 'RECIPE', 'FITNESS', 'POETRY', 'COUNTDOWN'];
+        const modes = ['STOIC', 'ROAST', 'ZEN', 'DAILY', 'BRIEFING', 'ARTWALL', 'RECIPE', 'FITNESS', 'POETRY', 'COUNTDOWN', 'WEATHER', 'MEMO', 'HABIT', 'RIDDLE', 'CHALLENGE', 'STORY', 'LIFEBAR', 'ALMANAC', 'THISDAY', 'LETTER', 'QUESTION', 'BIAS'];
         for (let i = 0; i < modes.length; i++) {
           if (!allModesRunning) break;
 

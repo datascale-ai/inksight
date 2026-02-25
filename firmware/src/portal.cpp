@@ -139,10 +139,25 @@ void startCaptivePortal() {
     webServer.on("/save_wifi", HTTP_POST, []() {
         String ssid = sanitizeSSID(webServer.arg("ssid"));
         String pass = sanitizeTextInput(webServer.arg("pass"), PORTAL_MAX_PASS);
+        String serverUrl = sanitizeInput(webServer.arg("server"), PORTAL_MAX_URL);
 
         if (ssid.length() == 0) {
             webServer.send(200, "application/json", "{\"ok\":false,\"msg\":\"SSID empty\"}");
             return;
+        }
+
+        if (serverUrl.length() > 0) {
+            if (!isValidUrl(serverUrl)) {
+                webServer.send(200, "application/json",
+                               "{\"ok\":false,\"msg\":\"服务器地址必须以 http:// 或 https:// 开头\"}");
+                return;
+            }
+            // Remove trailing slash
+            while (serverUrl.endsWith("/")) {
+                serverUrl = serverUrl.substring(0, serverUrl.length() - 1);
+            }
+            saveServerUrl(serverUrl);
+            Serial.printf("Server URL saved: %s\n", serverUrl.c_str());
         }
 
         Serial.printf("Portal: connecting to %s\n", ssid.c_str());

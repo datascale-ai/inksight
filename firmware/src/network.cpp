@@ -3,6 +3,7 @@
 #include "storage.h"
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <time.h>
 
@@ -74,11 +75,22 @@ bool fetchBMP(bool nextMode) {
     }
     Serial.printf("GET %s (RSSI=%d)\n", url.c_str(), rssi);
 
-    WiFiClient client;
+    bool useSSL = cfgServer.startsWith("https://");
+    WiFiClient plainClient;
+    WiFiClientSecure secClient;
     HTTPClient http;
-    http.begin(client, url);
+    if (useSSL) {
+        secClient.setInsecure();
+        http.begin(secClient, url);
+    } else {
+        http.begin(plainClient, url);
+    }
     http.setTimeout(HTTP_TIMEOUT);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+    if (cfgDeviceToken.length() > 0) {
+        http.addHeader("X-Device-Token", cfgDeviceToken);
+    }
 
     Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
     int code = http.GET();
@@ -158,12 +170,22 @@ void postConfigToBackend() {
         body = "{\"mac\":\"" + mac + "\"," + body.substring(1);
     }
 
+    bool useSSL = cfgServer.startsWith("https://");
+    WiFiClient plainClient;
+    WiFiClientSecure secClient;
     HTTPClient http;
-    WiFiClient client;
     String url = cfgServer + "/api/config";
-    http.begin(client, url);
+    if (useSSL) {
+        secClient.setInsecure();
+        http.begin(secClient, url);
+    } else {
+        http.begin(plainClient, url);
+    }
     http.addHeader("Content-Type", "application/json");
     http.setTimeout(HTTP_TIMEOUT);
+    if (cfgDeviceToken.length() > 0) {
+        http.addHeader("X-Device-Token", cfgDeviceToken);
+    }
 
     int code = http.POST(body);
     Serial.printf("POST /api/config -> %d\n", code);

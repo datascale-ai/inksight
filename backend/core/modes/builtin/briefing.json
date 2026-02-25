@@ -12,30 +12,100 @@
     "summarize": true,
     "include_insight": true,
     "fallback": {
-      "hn_items": [
-        { "title": "数据获取失败", "score": 0 }
-      ],
+      "hn_items": [{ "title": "数据获取失败", "score": 0 }],
       "ph_item": { "name": "N/A", "tagline": "" },
       "v2ex_items": [],
       "insight": "今日科技动态暂时无法获取，请稍后刷新。",
       "ph_name": "N/A",
       "ph_tagline": ""
-    }
+    },
+    "fallback_pool": [
+      {
+        "hn_items": [{ "title": "数据获取失败", "score": 0 }],
+        "ph_item": { "name": "N/A", "tagline": "" },
+        "v2ex_items": [],
+        "insight": "今日科技动态暂时无法获取，请稍后刷新。",
+        "ph_name": "N/A",
+        "ph_tagline": ""
+      },
+      {
+        "hn_items": [{ "title": "LLM 技术前沿", "score": 156 }],
+        "ph_item": { "name": "AI Toolkit", "tagline": "开发者必备" },
+        "v2ex_items": [{ "title": "今天你学习了吗" }],
+        "insight": "AI 工具迭代加速，关注开源模型与本地部署。",
+        "ph_name": "AI Toolkit",
+        "ph_tagline": "开发者必备"
+      },
+      {
+        "hn_items": [{ "title": "新框架发布", "score": 89 }],
+        "ph_item": { "name": "DevTools", "tagline": "效率提升" },
+        "v2ex_items": [],
+        "insight": "开源生态活跃，值得探索新项目。",
+        "ph_name": "DevTools",
+        "ph_tagline": "效率提升"
+      }
+    ]
   },
   "layout": {
     "status_bar": { "line_width": 1, "dashed": false },
     "body": [
-      { "type": "section", "title": "HN Top", "icon": "global", "children": [
-        { "type": "list", "field": "hn_items", "max_items": 2, "item_template": "{title}", "right_field": "score", "font_size": 11, "item_spacing": 14, "margin_x": 36 }
-      ]},
+      {
+        "type": "section",
+        "title": "HN Top",
+        "icon": "global",
+        "title_font_size": 13,
+        "children": [
+          {
+            "type": "list",
+            "field": "hn_items",
+            "max_items": 2,
+            "item_template": "{title}",
+            "right_field": "score",
+            "font_size": 12,
+            "item_spacing": 18,
+            "margin_x": 36
+          }
+        ]
+      },
       { "type": "separator", "style": "short", "width": 90 },
-      { "type": "section", "title": "PH #1", "icon": "star", "children": [
-        { "type": "text", "template": "{ph_name}", "font_size": 12, "align": "left", "margin_x": 36, "max_lines": 1 },
-        { "type": "text", "template": "{ph_tagline}", "font_size": 10, "align": "left", "margin_x": 36, "max_lines": 2 }
-      ]},
-      { "type": "separator", "style": "short", "width": 90 },
-      { "type": "text", "field": "insight", "font_size": 12, "align": "left", "margin_x": 24, "max_lines": 4 }
+      {
+        "type": "section",
+        "title": "PH #1",
+        "icon": "star",
+        "title_font_size": 13,
+        "children": [
+          {
+            "type": "text",
+            "template": "{ph_name}",
+            "font_size": 13,
+            "align": "left",
+            "margin_x": 36,
+            "max_lines": 1
+          },
+          {
+            "type": "text",
+            "template": "{ph_tagline}",
+            "font_size": 11,
+            "align": "left",
+            "margin_x": 36,
+            "max_lines": 2
+          }
+        ]
+      },
+      { "type": "separator", "style": "dashed", "margin_x": 30 },
+      { "type": "spacer", "height": 4 },
+      {
+        "type": "text",
+        "field": "insight",
+        "font_size": 12,
+        "align": "left",
+        "margin_x": 24,
+        "max_lines": 3
+      }
     ],
-    "footer": { "label": "BRIEFING", "attribution_template": "— AI Brief" }
+    "footer": {
+      "label": "BRIEFING",
+      "attribution_template": "— AI Brief"
+    }
   }
 }
