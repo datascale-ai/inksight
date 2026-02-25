@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import time
 import httpx
 import random
 from datetime import datetime
+from typing import Any
+
 from zhdate import ZhDate
+
 from .config import (
     WEEKDAY_CN,
     MONTH_CN,
@@ -18,6 +22,21 @@ from .config import (
     HOLIDAY_WORK_API_URL,
     HOLIDAY_NEXT_API_URL,
 )
+
+_context_cache: dict[str, tuple[Any, float]] = {}
+
+
+def _cache_get(key: str, ttl: float) -> Any | None:
+    if key in _context_cache:
+        val, ts = _context_cache[key]
+        if time.time() - ts < ttl:
+            return val
+        del _context_cache[key]
+    return None
+
+
+def _cache_set(key: str, val: Any):
+    _context_cache[key] = (val, time.time())
 
 
 def _resolve_city(city: str | None) -> tuple[float, float]:
@@ -132,6 +151,16 @@ async def get_date_context() -> dict:
     }
 
 
+async def get_date_context_cached(ttl: float = 900) -> dict:
+    """Cached version of get_date_context (15min default TTL)."""
+    cached = _cache_get("date_context", ttl)
+    if cached is not None:
+        return cached
+    result = await get_date_context()
+    _cache_set("date_context", result)
+    return result
+
+
 async def get_weather(
     lat: float | None = None, lon: float | None = None, city: str | None = None
 ) -> dict:
@@ -157,6 +186,85 @@ async def get_weather(
             }
     except Exception:
         return {"temp": 0, "weather_code": -1, "weather_str": "--°C"}
+
+
+async def get_weather_cached(city: str | None = None, ttl: float = 1800) -> dict:
+    """Cached version of get_weather (30min default TTL)."""
+    cache_key = f"weather:{city or 'default'}"
+    cached = _cache_get(cache_key, ttl)
+    if cached is not None:
+        return cached
+    result = await get_weather(city=city)
+    _cache_set(cache_key, result)
+    return result
+
+
+def _weather_code_to_desc(code: int) -> str:
+    """Convert WMO weather code to Chinese description."""
+    mapping = {
+        0: "晴", 1: "多云", 2: "多云", 3: "阴",
+        45: "雾", 48: "雾凇",
+        51: "小雨", 53: "中雨", 55: "大雨",
+        61: "小雨", 63: "中雨", 65: "大雨",
+        71: "小雪", 73: "中雪", 75: "大雪",
+        80: "阵雨", 81: "阵雨", 82: "暴雨",
+        95: "雷阵雨", 96: "冰雹", 99: "冰雹",
+    }
+    return mapping.get(code, "未知")
+
+
+async def get_weather_forecast(
+    city: str | None = None, days: int = 3
+) -> dict:
+    """Get multi-day weather forecast from Open-Meteo."""
+    lat, lon = _resolve_city(city)
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+        "timezone": "auto",
+        "forecast_days": days + 1,  # include today
+    }
+    try:
+        forecast_url = (
+            OPEN_METEO_URL.replace("/current", "/forecast")
+            if "/current" in OPEN_METEO_URL
+            else OPEN_METEO_URL
+        )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(forecast_url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            daily = data.get("daily", {})
+            dates = daily.get("time", [])
+            t_max = daily.get("temperature_2m_max", [])
+            t_min = daily.get("temperature_2m_min", [])
+            codes = daily.get("weather_code", [])
+
+            WEEKDAY_SHORT = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+            forecast = []
+            for i in range(min(len(dates), days + 1)):
+                d = datetime.strptime(dates[i], "%Y-%m-%d")
+                day_label = "今天" if i == 0 else ("明天" if i == 1 else WEEKDAY_SHORT[d.weekday()])
+                wcode = codes[i] if i < len(codes) else -1
+                desc = _weather_code_to_desc(wcode)
+                forecast.append({
+                    "day": day_label,
+                    "temp_range": f"{round(t_min[i])}~{round(t_max[i])}°C"
+                    if i < len(t_min) and i < len(t_max)
+                    else "--",
+                    "desc": desc,
+                    "code": wcode,
+                })
+
+            today = forecast[0] if forecast else {}
+            return {
+                "today_temp": str(round(t_max[0])) if t_max else "--",
+                "today_desc": today.get("desc", ""),
+                "forecast": forecast[1:] if len(forecast) > 1 else [],
+            }
+    except Exception:
+        return {"today_temp": "--", "today_desc": "暂无数据", "forecast": []}
 
 
 def calc_battery_pct(voltage: float) -> int:

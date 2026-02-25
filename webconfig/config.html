@@ -96,9 +96,112 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .tpl-card:hover{border-color:var(--bk);background:var(--bg)}
 .tpl-card strong{font-size:.85rem;display:block;margin-bottom:4px}
 .tpl-card span{font-size:.7rem;color:var(--gy)}
+
+.wizard-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
+.wizard-card{background:#fff;border-radius:16px;padding:32px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.wizard-header{text-align:center;margin-bottom:20px}
+.wizard-header h2{font-size:1.3rem;margin:0 0 4px}
+.wizard-header p{color:#888;font-size:.85rem;margin:0}
+.wizard-steps{display:flex;justify-content:center;gap:16px;margin-bottom:24px}
+.wiz-step{font-size:.75rem;color:#aaa;font-weight:500}
+.wiz-step.active{color:#1a1a1a;font-weight:600}
+.wiz-step.done{color:#22c55e}
+.wiz-field{margin-bottom:16px}
+.wiz-field label{display:block;font-size:.82rem;font-weight:500;margin-bottom:6px;color:#333}
+.wiz-input{width:100%;padding:10px 12px;border:1px solid #d4d4cf;border-radius:8px;font-size:.85rem;background:#fafaf7}
+.wiz-input:focus{border-color:#1a1a1a;outline:none}
+.wiz-hint{font-size:.72rem;color:#999;margin-top:4px}
+.wiz-btn{display:block;width:100%;padding:12px;font-size:.9rem;font-weight:600;color:#fff;background:#1a1a1a;border:none;border-radius:10px;cursor:pointer}
+.wiz-btn:hover{background:#333}
+.wiz-btn-secondary{background:#f5f5f0;color:#1a1a1a;flex:1}
+.wiz-btn-secondary:hover{background:#e8e8e0}
+.wiz-presets{display:flex;flex-direction:column;gap:8px}
+.wiz-preset{padding:12px;border:1px solid #d4d4cf;border-radius:8px;cursor:pointer;font-size:.82rem}
+.wiz-preset:hover{border-color:#1a1a1a}
+.wiz-preset.selected{border-color:#1a1a1a;background:#f5f5f0}
+.wiz-preset strong{font-size:.85rem}
+.wiz-preset span{color:#888;font-size:.75rem}
 </style>
 </head>
 <body>
+<!-- Setup Wizard Modal -->
+<div id="setupWizard" class="wizard-overlay" style="display:none">
+  <div class="wizard-card">
+    <div class="wizard-header">
+      <h2>🎉 欢迎使用 InkSight</h2>
+      <p>让我们快速完成初始配置</p>
+    </div>
+    <div class="wizard-steps">
+      <span class="wiz-step active" id="ws1">1. AI 模型</span>
+      <span class="wiz-step" id="ws2">2. 内容模式</span>
+      <span class="wiz-step" id="ws3">3. 基本设置</span>
+    </div>
+    
+    <!-- Step 1: LLM Provider -->
+    <div id="wizStep1" class="wiz-panel">
+      <div class="wiz-field">
+        <label>AI 服务商</label>
+        <select id="wizLlmProvider" class="wiz-input">
+          <option value="deepseek">DeepSeek</option>
+          <option value="aliyun">阿里百炼</option>
+          <option value="moonshot">月之暗面</option>
+        </select>
+      </div>
+      <div class="wiz-field">
+        <label>API Key</label>
+        <input type="password" id="wizApiKey" class="wiz-input" placeholder="输入你的 API Key">
+        <div class="wiz-hint">前往对应服务商官网获取 API Key</div>
+      </div>
+      <button class="wiz-btn" onclick="wizNext(2)">下一步</button>
+    </div>
+    
+    <!-- Step 2: Mode Selection -->
+    <div id="wizStep2" class="wiz-panel" style="display:none">
+      <div class="wiz-field">
+        <label>选择一个预设方案，稍后可以修改</label>
+        <div class="wiz-presets">
+          <div class="wiz-preset selected" data-preset="relax" onclick="selectWizPreset(this)">
+            <strong>🎨 文艺模式</strong><br>
+            <span>ZEN + DAILY + POETRY + ARTWALL</span>
+          </div>
+          <div class="wiz-preset" data-preset="efficiency" onclick="selectWizPreset(this)">
+            <strong>⚡ 效率模式</strong><br>
+            <span>BRIEFING + COUNTDOWN + WEATHER</span>
+          </div>
+          <div class="wiz-preset" data-preset="minimal" onclick="selectWizPreset(this)">
+            <strong>🧘 极简模式</strong><br>
+            <span>STOIC + ZEN</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="wiz-btn wiz-btn-secondary" onclick="wizBack(1)">上一步</button>
+        <button class="wiz-btn" onclick="wizNext(3)">下一步</button>
+      </div>
+    </div>
+    
+    <!-- Step 3: Basic Settings -->
+    <div id="wizStep3" class="wiz-panel" style="display:none">
+      <div class="wiz-field">
+        <label>刷新间隔</label>
+        <select id="wizRefresh" class="wiz-input">
+          <option value="60">1 小时</option>
+          <option value="120">2 小时</option>
+          <option value="240">4 小时</option>
+        </select>
+      </div>
+      <div class="wiz-field">
+        <label>所在城市</label>
+        <input type="text" id="wizCity" class="wiz-input" value="杭州" placeholder="输入你的城市名">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="wiz-btn wiz-btn-secondary" onclick="wizBack(2)">上一步</button>
+        <button class="wiz-btn" onclick="wizFinish()">完成配置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toastContainer"></div>
 
 <div id="previewModal" class="modal-overlay" onclick="if(event.target===this)closePreviewModal()">
@@ -182,6 +285,9 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <span class="ch" data-m="STORY" data-tip="三幕微型小说" onclick="tc(this)">STORY 微故事</span>
 <span class="ch" data-m="LIFEBAR" data-tip="人生进度可视化" onclick="tc(this)">LIFEBAR 进度条</span>
 <span class="ch" data-m="CHALLENGE" data-tip="5分钟微挑战" onclick="tc(this)">CHALLENGE 微挑战</span>
+<span class="ch" data-m="WEATHER" data-tip="天气看板预报" onclick="tc(this)">WEATHER 天气</span>
+<span class="ch" data-m="MEMO" data-tip="自定义便签" onclick="tc(this)">MEMO 便签</span>
+<span class="ch" data-m="HABIT" data-tip="习惯打卡" onclick="tc(this)">HABIT 打卡</span>
 </div>
 </div>
 
@@ -275,6 +381,12 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <input type="number" class="inp" id="interval" min="10" max="1440" placeholder="60">
 </div>
 
+<div class="fg" id="memoSection" style="display:none">
+<label class="lbl">便签内容（MEMO 模式使用）</label>
+<textarea class="inp" id="memoText" rows="3" placeholder="输入要在墨水屏上显示的文字..." style="resize:vertical;font-size:.85rem;line-height:1.5"></textarea>
+<div style="font-size:.7rem;color:var(--gy);margin-top:4px">内容将以大字显示在屏幕中央</div>
+</div>
+
 <div class="fg" id="countdownSection">
 <label class="lbl">倒计时事件（COUNTDOWN 模式使用）</label>
 <div id="countdownEvents"></div>
@@ -361,7 +473,7 @@ const strategyDescs = {
   smart: '根据时间段自动匹配最佳模式（早餐建议/科技简报/运动计划等）'
 };
 
-const ALL_MODES = ['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE'];
+const ALL_MODES = ['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE','WEATHER','MEMO','HABIT'];
 
 // ── Toast notifications ──────────────────────────────────────
 
@@ -395,7 +507,7 @@ function closeConfirm(result) {
 
 // ── Basic UI helpers ─────────────────────────────────────────
 
-function tc(el) { el.classList.toggle('sel'); }
+function tc(el) { el.classList.toggle('sel'); updateModeSections(); }
 
 function sp(el, group) {
   document.querySelectorAll(`#${group} .pi`).forEach(i => i.classList.remove('sel'));
@@ -614,6 +726,12 @@ function fillForm(cfg) {
 
   // Time slot rules
   fillTimeSlotRules(cfg.time_slot_rules || cfg.timeSlotRules || []);
+
+  // Memo text
+  document.getElementById('memoText').value = cfg.memo_text || cfg.memoText || '';
+
+  // Show/hide mode-specific sections
+  updateModeSections();
 }
 
 function collectFormData() {
@@ -641,8 +759,16 @@ function collectFormData() {
     llmModel: document.getElementById('llmModel').value,
     refreshInterval: parseInt(document.getElementById('interval').value) || 60,
     countdownEvents: getCountdownEvents(),
-    timeSlotRules: getTimeSlotRules()
+    timeSlotRules: getTimeSlotRules(),
+    memoText: document.getElementById('memoText').value.trim()
   };
+}
+
+function updateModeSections() {
+  const modes = [];
+  document.querySelectorAll('#modes .ch.sel').forEach(el => modes.push(el.dataset.m));
+  document.getElementById('memoSection').style.display = modes.includes('MEMO') ? '' : 'none';
+  document.getElementById('countdownSection').style.display = modes.includes('COUNTDOWN') ? '' : 'none';
 }
 
 async function saveConfig() {
@@ -1181,6 +1307,76 @@ if (macParam) {
   document.getElementById('macIn').value = macParam;
   loadConfig();
 }
+
+// Setup Wizard
+function checkShowWizard(){
+  // Show wizard if no config exists for current MAC
+  var mac = new URLSearchParams(window.location.search).get('mac');
+  if(!mac) return;
+  fetch('/api/config?mac='+encodeURIComponent(mac)).then(r=>r.json()).then(d=>{
+    if(!d || !d.modes || d.modes.length === 0){
+      document.getElementById('setupWizard').style.display='flex';
+    }
+  }).catch(()=>{
+    document.getElementById('setupWizard').style.display='flex';
+  });
+}
+
+function wizNext(step){
+  for(var i=1;i<=3;i++){
+    document.getElementById('wizStep'+i).style.display=(i===step?'block':'none');
+    var ws=document.getElementById('ws'+i);
+    ws.className='wiz-step'+(i===step?' active':(i<step?' done':''));
+  }
+}
+function wizBack(step){wizNext(step);}
+
+function selectWizPreset(el){
+  document.querySelectorAll('.wiz-preset').forEach(p=>p.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function wizFinish(){
+  var preset=document.querySelector('.wiz-preset.selected');
+  var presetName=preset?preset.dataset.preset:'relax';
+  var presetModes={
+    relax:['ZEN','DAILY','POETRY','ARTWALL'],
+    efficiency:['BRIEFING','COUNTDOWN','WEATHER'],
+    minimal:['STOIC','ZEN']
+  };
+  var modes=presetModes[presetName]||presetModes.relax;
+  var provider=document.getElementById('wizLlmProvider').value;
+  var apiKey=document.getElementById('wizApiKey').value;
+  var refresh=parseInt(document.getElementById('wizRefresh').value)||60;
+  var city=document.getElementById('wizCity').value||'杭州';
+  
+  var cfg={
+    modes:modes,
+    llmProvider:provider,
+    apiKey:apiKey,
+    refreshInterval:refresh,
+    refreshStrategy:'random',
+    language:'zh',
+    contentTone:'neutral',
+    city:city
+  };
+  
+  var mac=new URLSearchParams(window.location.search).get('mac');
+  fetch('/api/config?mac='+encodeURIComponent(mac),{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(cfg)
+  }).then(r=>r.json()).then(()=>{
+    document.getElementById('setupWizard').style.display='none';
+    location.reload();
+  }).catch(()=>{
+    document.getElementById('setupWizard').style.display='none';
+    alert('配置保存失败，请手动配置');
+  });
+}
+
+// Check on page load
+document.addEventListener('DOMContentLoaded', checkShowWizard);
 </script>
 </body>
 </html>

@@ -28,7 +28,7 @@ from .patterns.utils import (
 
 logger = logging.getLogger(__name__)
 
-STATUS_BAR_BOTTOM = 36
+STATUS_BAR_BOTTOM_DEFAULT = 36  # Used when screen_h unknown (e.g. dataclass default)
 
 
 @dataclass
@@ -39,9 +39,14 @@ class RenderContext:
     content: dict
     screen_w: int = SCREEN_WIDTH
     screen_h: int = SCREEN_HEIGHT
-    y: int = STATUS_BAR_BOTTOM
+    y: int = STATUS_BAR_BOTTOM_DEFAULT
     x_offset: int = 0
     available_width: int = SCREEN_WIDTH
+    footer_height: int = 30
+
+    @property
+    def scale(self) -> float:
+        return self.screen_w / 400.0
 
     def __post_init__(self):
         if self.available_width == SCREEN_WIDTH and self.screen_w != SCREEN_WIDTH:
@@ -49,7 +54,7 @@ class RenderContext:
 
     @property
     def footer_top(self) -> int:
-        return self.screen_h - 30
+        return self.screen_h - self.footer_height
 
     def resolve(self, template: str) -> str:
         """Resolve {field} placeholders against content dict."""
@@ -99,37 +104,74 @@ def render_json_mode(
         screen_w=screen_w, screen_h=screen_h,
     )
 
-    footer_top = screen_h - 30
+    ft_layout = layout.get("footer", {})
+    status_bar_bottom = int(screen_h * 0.12)
+    scale = screen_w / 400.0
+    footer_height = int(ft_layout.get("height", 30) * scale)
+    footer_top = screen_h - footer_height
 
     # 2. Body blocks
-    ctx = RenderContext(
-        draw=draw, img=img, content=content,
-        screen_w=screen_w, screen_h=screen_h,
-        y=STATUS_BAR_BOTTOM,
-    )
-
     body = layout.get("body", [])
+    body_align = layout.get("body_align", "center")
     _has_vcenter = any(
         b.get("type") == "centered_text" and b.get("vertical_center", True)
         for b in body
     )
+
     if _has_vcenter and len(body) == 1:
+        ctx = RenderContext(
+            draw=draw, img=img, content=content,
+            screen_w=screen_w, screen_h=screen_h,
+            y=status_bar_bottom, footer_height=footer_height,
+        )
         _render_centered_text(ctx, body[0], use_full_body=True)
+    elif body_align == "center" and body:
+        measure_img = Image.new("1", (screen_w, screen_h), EINK_BG)
+        measure_ctx = RenderContext(
+            draw=ImageDraw.Draw(measure_img), img=measure_img, content=content,
+            screen_w=screen_w, screen_h=screen_h,
+            y=status_bar_bottom, footer_height=footer_height,
+        )
+        for block in body:
+            if measure_ctx.y >= footer_top - 10:
+                break
+            _render_block(measure_ctx, block)
+        content_height = measure_ctx.y - status_bar_bottom
+        available_height = footer_top - status_bar_bottom
+        offset = max(0, (available_height - content_height) // 2)
+
+        ctx = RenderContext(
+            draw=draw, img=img, content=content,
+            screen_w=screen_w, screen_h=screen_h,
+            y=status_bar_bottom + offset, footer_height=footer_height,
+        )
+        for block in body:
+            if ctx.y >= footer_top - 10:
+                break
+            _render_block(ctx, block)
     else:
+        ctx = RenderContext(
+            draw=draw, img=img, content=content,
+            screen_w=screen_w, screen_h=screen_h,
+            y=status_bar_bottom, footer_height=footer_height,
+        )
         for block in body:
             if ctx.y >= footer_top - 10:
                 break
             _render_block(ctx, block)
 
     # 3. Footer
-    ft = layout.get("footer", {})
+    ft = ft_layout
     label = ft.get("label", mode_def.get("mode_id", ""))
     attribution = ctx.resolve(ft.get("attribution_template", "")) if ft.get("attribution_template") else ""
+    _attr_font_size = ft.get("font_size")
+    if _attr_font_size is not None:
+        _attr_font_size = int(_attr_font_size * scale)
     draw_footer(
         draw, img, label, attribution,
         line_width=ft.get("line_width", 1),
         dashed=ft.get("dashed", False),
-        attr_font_size=ft.get("font_size"),
+        attr_font_size=_attr_font_size,
         screen_w=screen_w, screen_h=screen_h,
     )
 
@@ -160,29 +202,35 @@ def _render_centered_text(ctx: RenderContext, block: dict, *, use_full_body: boo
     if not text:
         return
 
-    font_size = block.get("font_size", 16)
+    font_size = int(block.get("font_size", 16) * ctx.scale)
     font_name = block.get("font_name")
     font_key = block.get("font", "noto_serif_light")
     max_ratio = block.get("max_width_ratio", 0.88)
-    line_spacing = block.get("line_spacing", 8)
+    line_spacing = int(block.get("line_spacing", 8) * ctx.scale)
 
-    if font_name:
-        if has_cjk(text) and "Noto" not in font_name:
-            font_name = "NotoSerifSC-Light.ttf"
-        font = load_font_by_name(font_name, font_size)
-    else:
-        if has_cjk(text):
-            font_key = "noto_serif_light"
-        font = load_font(font_key, font_size)
-
+    body_height = ctx.footer_top - ctx.y
     max_w = int(ctx.available_width * max_ratio)
-    lines = wrap_text(text, font, max_w)
-    line_h = font_size + line_spacing
-    total_h = len(lines) * line_h
+    while font_size >= 10:
+        if font_name:
+            if has_cjk(text) and "Noto" not in font_name:
+                font_name = "NotoSerifSC-Light.ttf"
+            font = load_font_by_name(font_name, font_size)
+        else:
+            if has_cjk(text):
+                font_key = "noto_serif_light"
+            font = load_font(font_key, font_size)
+
+        lines = wrap_text(text, font, max_w)
+        line_h = font_size + line_spacing
+        total_h = len(lines) * line_h
+
+        if use_full_body and block.get("vertical_center", True) and total_h > body_height:
+            font_size -= 2
+        else:
+            break
 
     if use_full_body and block.get("vertical_center", True):
-        body_height = ctx.footer_top - STATUS_BAR_BOTTOM
-        y_start = STATUS_BAR_BOTTOM + (body_height - total_h) // 2
+        y_start = ctx.y + (body_height - total_h) // 2
     else:
         y_start = ctx.y
 
@@ -208,20 +256,25 @@ def _render_text(ctx: RenderContext, block: dict) -> None:
     if not text:
         return
 
-    font_size = block.get("font_size", 14)
+    font_size = int(block.get("font_size", 14) * ctx.scale)
     font_key = block.get("font", "noto_serif_regular")
     if has_cjk(text):
         font_key = _pick_cjk_font(font_key)
     font = load_font(font_key, font_size)
 
     align = block.get("align", "center")
-    margin_x = block.get("margin_x", 24)
+    margin_x = block.get("margin_x", int(ctx.screen_w * 0.06))
     max_lines = block.get("max_lines", 3)
     max_w = max(20, ctx.available_width - margin_x * 2)
 
     lines = wrap_text(text, font, max_w)
 
-    for line in lines[:max_lines]:
+    if max_lines and len(lines) > max_lines:
+        lines = lines[:max_lines]
+        if lines:
+            lines[-1] = lines[-1].rstrip() + "..."
+
+    for line in lines:
         if ctx.y >= ctx.footer_top - 10:
             break
         bbox = font.getbbox(line)
@@ -238,7 +291,7 @@ def _render_text(ctx: RenderContext, block: dict) -> None:
 
 def _render_separator(ctx: RenderContext, block: dict) -> None:
     style = block.get("style", "solid")
-    margin_x = block.get("margin_x", 24)
+    margin_x = block.get("margin_x", int(ctx.screen_w * 0.06))
     line_width = block.get("line_width", 1)
 
     if style == "short":
@@ -258,21 +311,23 @@ def _render_section(ctx: RenderContext, block: dict) -> None:
     title = block.get("title", "")
     icon_name = block.get("icon")
     title_font_key = block.get("title_font", "noto_serif_regular")
-    title_font_size = block.get("title_font_size", 14)
+    title_font_size = int(block.get("title_font_size", 14) * ctx.scale)
 
     if has_cjk(title):
         title_font_key = _pick_cjk_font(title_font_key)
     font = load_font(title_font_key, title_font_size)
 
-    x = ctx.x_offset + 24
+    margin_x = int(ctx.screen_w * 0.06)
+    x = ctx.x_offset + margin_x
+    icon_size = int(12 * ctx.scale)
     if icon_name:
-        icon_img = load_icon(icon_name, size=(12, 12))
+        icon_img = load_icon(icon_name, size=(icon_size, icon_size))
         if icon_img:
             ctx.img.paste(icon_img, (x, ctx.y))
-            x += 16
+            x += int(16 * ctx.scale)
 
     ctx.draw.text((x, ctx.y), title, fill=EINK_FG, font=font)
-    ctx.y += title_font_size + 6
+    ctx.y += title_font_size + int(6 * ctx.scale)
 
     for child in block.get("children", []):
         if ctx.y >= ctx.footer_top - 10:
@@ -291,15 +346,24 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
     right_field = block.get("right_field")
     numbered = block.get("numbered", False)
     font_key = block.get("font", "noto_serif_regular")
-    font_size = block.get("font_size", 13)
-    spacing = block.get("item_spacing", 16)
-    margin_x = block.get("margin_x", 32)
+    font_size = int(block.get("font_size", 13) * ctx.scale)
+    spacing = int(block.get("item_spacing", 16) * ctx.scale)
+    margin_x = block.get("margin_x", int(ctx.screen_w * 0.08))
 
     align = block.get("align", "left")
 
     font = load_font(_pick_cjk_font(font_key), font_size)
+    item_height = spacing
 
+    rendered_count = 0
     for i, item in enumerate(items[:max_items]):
+        if ctx.y + item_height > ctx.footer_top:
+            remaining = len(items) - rendered_count
+            if remaining > 0:
+                more_text = f"+{remaining} more"
+                more_font = load_font(_pick_cjk_font(font_key), int(11 * ctx.scale))
+                ctx.draw.text((ctx.x_offset + margin_x, ctx.y), more_text, fill=EINK_FG, font=more_font)
+            break
         if ctx.y >= ctx.footer_top - 10:
             break
 
@@ -317,7 +381,8 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
             text = f"{i + 1}. {text}"
         text = text.replace("{index}", str(i + 1))
 
-        max_text_w = ctx.available_width - margin_x * 2 if not right_field else ctx.available_width - margin_x - 80
+        right_col_w = int(80 * ctx.scale)
+        max_text_w = ctx.available_width - margin_x * 2 if not right_field else ctx.available_width - margin_x - right_col_w
         lines = wrap_text(text, font, max_text_w)
 
         if align == "center":
@@ -332,9 +397,10 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
         if right_field and isinstance(item, dict):
             rv = str(item.get(right_field, ""))
             if rv:
-                ctx.draw.text((ctx.x_offset + ctx.available_width - 80, ctx.y), rv, fill=EINK_FG, font=font)
+                ctx.draw.text((ctx.x_offset + ctx.available_width - right_col_w, ctx.y), rv, fill=EINK_FG, font=font)
 
         ctx.y += spacing
+        rendered_count += 1
 
 
 def _render_vertical_stack(ctx: RenderContext, block: dict) -> None:
@@ -383,7 +449,7 @@ def _render_conditional(ctx: RenderContext, block: dict) -> None:
 
 
 def _render_spacer(ctx: RenderContext, block: dict) -> None:
-    ctx.y += block.get("height", 12)
+    ctx.y += int(block.get("height", 12) * ctx.scale)
 
 
 def _render_icon_text(ctx: RenderContext, block: dict) -> None:
@@ -395,9 +461,9 @@ def _render_icon_text(ctx: RenderContext, block: dict) -> None:
         return
 
     font_key = block.get("font", "noto_serif_regular")
-    font_size = block.get("font_size", 14)
-    icon_size = block.get("icon_size", 12)
-    margin_x = block.get("margin_x", 24)
+    font_size = int(block.get("font_size", 14) * ctx.scale)
+    icon_size = int(block.get("icon_size", 12) * ctx.scale)
+    margin_x = block.get("margin_x", int(ctx.screen_w * 0.06))
 
     if has_cjk(text):
         font_key = _pick_cjk_font(font_key)
@@ -419,7 +485,7 @@ def _render_big_number(ctx: RenderContext, block: dict) -> None:
     text = str(ctx.get_field(field_name))
     if not text:
         return
-    font_size = block.get("font_size", 42)
+    font_size = int(block.get("font_size", 42) * ctx.scale)
     font_key = block.get("font", "lora_bold")
     if has_cjk(text):
         font_key = _pick_cjk_font(font_key)
@@ -427,12 +493,13 @@ def _render_big_number(ctx: RenderContext, block: dict) -> None:
     bbox = font.getbbox(text)
     tw = bbox[2] - bbox[0]
     align = block.get("align", "center")
+    margin_x = int(block.get("margin_x", ctx.available_width * 0.06))
     if align == "left":
-        x = block.get("margin_x", 24)
+        x = ctx.x_offset + margin_x
     elif align == "right":
-        x = ctx.screen_w - block.get("margin_x", 24) - tw
+        x = ctx.x_offset + ctx.available_width - margin_x - tw
     else:
-        x = (ctx.screen_w - tw) // 2
+        x = ctx.x_offset + (ctx.available_width - tw) // 2
     ctx.draw.text((x, ctx.y), text, fill=EINK_FG, font=font)
     ctx.y += font_size + 6
 
@@ -441,10 +508,10 @@ def _render_progress_bar(ctx: RenderContext, block: dict) -> None:
     value = _num(ctx.get_field(block.get("field", "")))
     max_value = max(_num(ctx.get_field(block.get("max_field", ""))), 1)
     ratio = max(0.0, min(1.0, value / max_value))
-    width = int(block.get("width", 80))
-    height = int(block.get("height", 6))
-    margin_x = int(block.get("margin_x", 24))
-    x = margin_x
+    width = int(block.get("width", 80) * ctx.scale)
+    height = int(block.get("height", 6) * ctx.scale)
+    margin_x = int(block.get("margin_x", ctx.screen_w * 0.06))
+    x = ctx.x_offset + margin_x
     y = ctx.y
     ctx.draw.rectangle([x, y, x + width, y + height], outline=EINK_FG, width=1)
     fill_w = int((width - 2) * ratio)
@@ -454,19 +521,21 @@ def _render_progress_bar(ctx: RenderContext, block: dict) -> None:
 
 
 def _render_two_column(ctx: RenderContext, block: dict) -> None:
-    left_width = int(block.get("left_width", 120))
-    gap = int(block.get("gap", 8))
-    left_x = int(block.get("left_x", 0))
+    left_width = int(block.get("left_width", 120) * ctx.scale)
+    gap = int(block.get("gap", 8) * ctx.scale)
+    left_x = int(block.get("left_x", 0) * ctx.scale) + ctx.x_offset
     right_x = left_x + left_width + gap
     left_ctx = RenderContext(
         draw=ctx.draw, img=ctx.img, content=ctx.content,
         screen_w=ctx.screen_w, screen_h=ctx.screen_h, y=ctx.y,
         x_offset=left_x, available_width=left_width,
+        footer_height=ctx.footer_height,
     )
     right_ctx = RenderContext(
         draw=ctx.draw, img=ctx.img, content=ctx.content,
         screen_w=ctx.screen_w, screen_h=ctx.screen_h, y=ctx.y,
         x_offset=right_x, available_width=max(0, ctx.screen_w - right_x),
+        footer_height=ctx.footer_height,
     )
     for child in block.get("left", []):
         _render_block(left_ctx, child)
@@ -488,20 +557,21 @@ def _render_key_value(ctx: RenderContext, block: dict) -> None:
     else:
         value_text = str(value)
     text = f"{label}: {value_text}" if label else value_text
-    font_size = block.get("font_size", 12)
+    font_size = int(block.get("font_size", 12) * ctx.scale)
     font = load_font("noto_serif_light", font_size)
-    margin_x = block.get("margin_x", 24)
-    ctx.draw.text((margin_x, ctx.y), text, fill=EINK_FG, font=font)
+    margin_x = block.get("margin_x", int(ctx.screen_w * 0.06))
+    ctx.draw.text((ctx.x_offset + margin_x, ctx.y), text, fill=EINK_FG, font=font)
     ctx.y += font_size + 4
 
 
 def _render_group(ctx: RenderContext, block: dict) -> None:
     title = block.get("title", "")
     if title:
-        title_font = load_font("noto_serif_bold", block.get("title_font_size", 12))
-        margin_x = block.get("margin_x", 24)
-        ctx.draw.text((margin_x, ctx.y), title, fill=EINK_FG, font=title_font)
-        ctx.y += block.get("title_font_size", 12) + 4
+        title_font_size = int(block.get("title_font_size", 12) * ctx.scale)
+        title_font = load_font("noto_serif_bold", title_font_size)
+        margin_x = block.get("margin_x", int(ctx.available_width * 0.06))
+        ctx.draw.text((ctx.x_offset + margin_x, ctx.y), title, fill=EINK_FG, font=title_font)
+        ctx.y += title_font_size + int(4 * ctx.scale)
     for child in block.get("children", []):
         _render_block(ctx, child)
 
@@ -513,20 +583,22 @@ def _render_icon_list(ctx: RenderContext, block: dict) -> None:
     icon_field = block.get("icon_field", "icon")
     text_field = block.get("text_field", "text")
     max_items = int(block.get("max_items", 6))
-    font = load_font("noto_serif_regular", block.get("font_size", 12))
-    margin_x = int(block.get("margin_x", 24))
-    line_h = int(block.get("line_height", 16))
+    font_size = int(block.get("font_size", 12) * ctx.scale)
+    font = load_font("noto_serif_regular", font_size)
+    margin_x = int(block.get("margin_x", ctx.available_width * 0.06))
+    line_h = int(block.get("line_height", 16) * ctx.scale)
     for item in items[:max_items]:
         if not isinstance(item, dict):
             continue
         icon_name = item.get(icon_field)
         text = str(item.get(text_field, ""))
-        x = margin_x
+        x = ctx.x_offset + margin_x
+        icon_size = int(12 * ctx.scale)
         if icon_name:
-            icon_img = load_icon(icon_name, size=(12, 12))
+            icon_img = load_icon(icon_name, size=(icon_size, icon_size))
             if icon_img:
                 ctx.img.paste(icon_img, (x, ctx.y))
-                x += 16
+                x += int(16 * ctx.scale)
         ctx.draw.text((x, ctx.y), text, fill=EINK_FG, font=font)
         ctx.y += line_h
 
@@ -536,15 +608,15 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
     image_url = str(ctx.get_field(field_name) or "")
     if not image_url:
         return
-    width = int(block.get("width", 220))
-    height = int(block.get("height", 140))
+    width = int(block.get("width", 220) * ctx.scale)
+    height = int(block.get("height", 140) * ctx.scale)
     x = int(block.get("x", (ctx.screen_w - width) // 2))
     y = int(block.get("y", ctx.y))
     try:
         with httpx.Client(timeout=8.0, follow_redirects=True) as client:
             resp = client.get(image_url)
         if resp.status_code >= 400:
-            return
+            raise ValueError(f"HTTP {resp.status_code}")
         from io import BytesIO
         img = Image.open(BytesIO(resp.content)).convert("L").resize((width, height))
         mono = img.convert("1")
@@ -552,6 +624,16 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
         ctx.y = y + height + int(block.get("margin_bottom", 6))
     except Exception:
         logger.warning("[JSONRenderer] Failed to render image block", exc_info=True)
+        ctx.draw.rectangle([x, y, x + width, y + height], outline=EINK_FG, width=1)
+        placeholder_font = load_font("noto_serif_light", int(12 * ctx.scale))
+        placeholder_text = "Image unavailable"
+        bbox = placeholder_font.getbbox(placeholder_text)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        tx = x + (width - tw) // 2
+        ty = y + (height - th) // 2
+        ctx.draw.text((tx, ty), placeholder_text, fill=EINK_FG, font=placeholder_font)
+        ctx.y = y + height + int(block.get("margin_bottom", 6) * ctx.scale)
 
 
 # ── Helpers ──────────────────────────────────────────────────

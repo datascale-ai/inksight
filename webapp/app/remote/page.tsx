@@ -15,6 +15,7 @@ const ALL_MODES = [
   "RECIPE", "FITNESS", "POETRY", "COUNTDOWN",
   "ALMANAC", "LETTER", "THISDAY", "RIDDLE", "QUESTION",
   "BIAS", "STORY", "LIFEBAR", "CHALLENGE",
+  "WEATHER", "MEMO", "HABIT",
 ];
 
 const MODE_LABELS: Record<string, string> = {
@@ -25,6 +26,7 @@ const MODE_LABELS: Record<string, string> = {
   THISDAY: "今日历史", RIDDLE: "每日一谜", QUESTION: "每日一问",
   BIAS: "认知偏差", STORY: "微故事", LIFEBAR: "人生进度条",
   CHALLENGE: "微挑战",
+  WEATHER: "天气看板", MEMO: "便签留言", HABIT: "习惯打卡",
 };
 
 function RemoteContent() {

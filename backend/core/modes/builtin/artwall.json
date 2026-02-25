@@ -11,15 +11,65 @@
       "artwork_title": "墨韵天成",
       "image_url": "",
       "description": "今日艺术作品"
-    }
+    },
+    "fallback_pool": [
+      {
+        "artwork_title": "墨韵天成",
+        "image_url": "",
+        "description": "今日艺术作品"
+      },
+      {
+        "artwork_title": "山居秋暝",
+        "image_url": "",
+        "description": "水墨山水意境"
+      },
+      {
+        "artwork_title": "竹林七贤",
+        "image_url": "",
+        "description": "古典人物版画"
+      },
+      {
+        "artwork_title": "禅意莲花",
+        "image_url": "",
+        "description": "极简禅宗美学"
+      },
+      {
+        "artwork_title": "云卷云舒",
+        "image_url": "",
+        "description": "黑白云海写意"
+      }
+    ]
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      { "type": "text", "field": "artwork_title", "font_size": 14, "align": "center", "max_lines": 1 },
-      { "type": "image", "field": "image_url", "width": 220, "height": 150 },
-      { "type": "text", "field": "description", "font_size": 11, "align": "center", "max_lines": 2 }
+      {
+        "type": "text",
+        "field": "artwork_title",
+        "font_size": 14,
+        "align": "center",
+        "max_lines": 1
+      },
+      {
+        "type": "image",
+        "field": "image_url",
+        "width": 220,
+        "height": 150
+      },
+      {
+        "type": "text",
+        "field": "description",
+        "font_size": 11,
+        "align": "center",
+        "max_lines": 2
+      }
     ],
-    "footer": { "label": "ARTWALL", "attribution_template": "— Ink Art" }
+    "footer": {
+      "label": "ARTWALL",
+      "attribution_template": "— Ink Art"
+    }
   }
 }

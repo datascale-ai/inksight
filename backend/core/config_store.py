@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import logging
+import secrets
 import aiosqlite
 from datetime import datetime
 
@@ -57,6 +58,13 @@ async def init_db():
         except Exception:
             pass  # Column already exists
 
+        # Migration: add memo_text column if missing
+        try:
+            await db.execute("ALTER TABLE configs ADD COLUMN memo_text TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass  # Column already exists
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_mac ON configs(mac)")
 
         # Device state table for persisting runtime state (cycle_index, etc.)
@@ -75,6 +83,13 @@ async def init_db():
         # Migration: add pending_mode column if missing
         try:
             await db.execute("ALTER TABLE device_state ADD COLUMN pending_mode TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+
+        # Migration: add auth_token column if missing
+        try:
+            await db.execute("ALTER TABLE device_state ADD COLUMN auth_token TEXT DEFAULT ''")
             await db.commit()
         except Exception:
             pass
@@ -100,12 +115,13 @@ async def save_config(mac: str, data: dict) -> int:
         time_slot_rules_json = json.dumps(
             data.get("timeSlotRules", []), ensure_ascii=False
         )
+        memo_text = data.get("memoText", "")
         cursor = await db.execute(
             """INSERT INTO configs
                (mac, nickname, modes, refresh_strategy, character_tones,
                 language, content_tone, city, refresh_interval, llm_provider, llm_model,
-                countdown_events, time_slot_rules, is_active, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                countdown_events, time_slot_rules, memo_text, is_active, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
             (
                 mac,
                 data.get("nickname", ""),
@@ -120,6 +136,7 @@ async def save_config(mac: str, data: dict) -> int:
                 data.get("llmModel", DEFAULT_LLM_MODEL),
                 countdown_events_json,
                 time_slot_rules_json,
+                memo_text,
                 now,
             ),
         )
@@ -161,6 +178,7 @@ def _row_to_dict(row, columns) -> dict:
     # Add mac field for cycle index tracking
     if "mac" not in d:
         d["mac"] = d.get("mac", "default")
+    d["memo_text"] = d.get("memo_text", "")
     return d
 
 
@@ -292,3 +310,35 @@ async def consume_pending_refresh(mac: str) -> bool:
             await db.commit()
             return True
         return False
+
+
+async def generate_device_token(mac: str) -> str:
+    """Generate and store a new auth token for a device."""
+    token = secrets.token_urlsafe(32)
+    now = datetime.now().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """UPDATE device_state SET auth_token = ?, updated_at = ? WHERE mac = ?""",
+            (token, now, mac),
+        )
+        if cursor.rowcount == 0:
+            await db.execute(
+                """INSERT INTO device_state (mac, auth_token, updated_at) VALUES (?, ?, ?)""",
+                (mac, token, now),
+            )
+        await db.commit()
+    return token
+
+
+async def validate_device_token(mac: str, token: str) -> bool:
+    """Validate a device's auth token."""
+    if not token:
+        return False
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT auth_token FROM device_state WHERE mac = ?", (mac,)
+        )
+        row = await cursor.fetchone()
+        if not row or not row[0]:
+            return False
+        return row[0] == token

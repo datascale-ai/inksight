@@ -1,242 +1,100 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Search } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Search,
-  Download,
-  Copy,
-  Check,
-  BookOpen,
-  Flame,
-  CircleDot,
-  CloudSun,
-  Newspaper,
-  Palette,
-  UtensilsCrossed,
-  Dumbbell,
-  ScrollText,
-  Timer,
-  Bitcoin,
-  Clock,
-} from "lucide-react";
 
 interface Plugin {
-  id: number;
-  name: string;
+  mode_id: string;
+  display_name: string;
+  description: string;
   author: string;
-  downloads: string;
-  desc: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  config: Record<string, unknown>;
+  category: string;
+  preview_url?: string;
+  definition_url: string;
+  downloads?: number;
 }
 
-const PLUGINS: Plugin[] = [
-  {
-    id: 1,
-    name: "Stoic Philosophy",
-    author: "Official",
-    downloads: "12k",
-    desc: "每日斯多葛哲学语录，庄重内省，适合工作日清晨",
-    icon: BookOpen,
-    config: {
-      mode: "stoic",
-      language: "zh-CN",
-      tone: "profound",
-      refresh_interval: 3600,
-    },
-  },
-  {
-    id: 2,
-    name: "Crypto Ticker",
-    author: "GeekUser",
-    downloads: "5k",
-    desc: "实时加密货币价格看板，支持 BTC/ETH 等主流币种",
-    icon: Bitcoin,
-    config: {
-      mode: "custom",
-      plugin: "crypto-ticker",
-      coins: ["BTC", "ETH", "SOL"],
-      refresh_interval: 300,
-    },
-  },
-  {
-    id: 3,
-    name: "Pomodoro",
-    author: "Productivity",
-    downloads: "3k",
-    desc: "番茄工作法倒计时，专注与休息交替进行",
-    icon: Clock,
-    config: {
-      mode: "countdown",
-      events: [
-        { name: "专注时间", minutes: 25 },
-        { name: "短休息", minutes: 5 },
-      ],
-    },
-  },
-  {
-    id: 4,
-    name: "AI Artwall",
-    author: "Official",
-    downloads: "8k",
-    desc: "根据天气和节气生成黑白版画风格的艺术作品",
-    icon: Palette,
-    config: {
-      mode: "artwall",
-      style: "woodcut",
-      language: "zh-CN",
-      refresh_interval: 7200,
-    },
-  },
-  {
-    id: 5,
-    name: "Daily Recipe",
-    author: "FoodLover",
-    downloads: "4k",
-    desc: "时令食材推荐早中晚三餐方案，荤素搭配",
-    icon: UtensilsCrossed,
-    config: {
-      mode: "recipe",
-      language: "zh-CN",
-      dietary: "balanced",
-      refresh_interval: 21600,
-    },
-  },
-  {
-    id: 6,
-    name: "Fitness Timer",
-    author: "HealthGuru",
-    downloads: "2k",
-    desc: "简单的居家健身训练计划，动作列表 + 健康提示",
-    icon: Dumbbell,
-    config: {
-      mode: "fitness",
-      difficulty: "beginner",
-      duration_minutes: 15,
-      refresh_interval: 86400,
-    },
-  },
-  {
-    id: 7,
-    name: "毒舌吐槽",
-    author: "Official",
-    downloads: "9k",
-    desc: "犀利的中文吐槽，用黑色幽默缓解压力",
-    icon: Flame,
-    config: {
-      mode: "roast",
-      language: "zh-CN",
-      tone: "humorous",
-      refresh_interval: 1800,
-    },
-  },
-  {
-    id: 8,
-    name: "禅意",
-    author: "Official",
-    downloads: "7k",
-    desc: "极简的汉字展示，如「静」「空」，营造宁静氛围",
-    icon: CircleDot,
-    config: {
-      mode: "zen",
-      language: "zh-CN",
-      refresh_interval: 3600,
-    },
-  },
-  {
-    id: 9,
-    name: "每日诗词",
-    author: "LiteraryFan",
-    downloads: "6k",
-    desc: "精选古典诗词，感受唐诗宋词之美",
-    icon: ScrollText,
-    config: {
-      mode: "poetry",
-      language: "zh-CN",
-      era: "classical",
-      refresh_interval: 7200,
-    },
-  },
-  {
-    id: 10,
-    name: "Tech Briefing",
-    author: "Official",
-    downloads: "10k",
-    desc: "Hacker News Top 3 + Product Hunt #1，AI 行业洞察",
-    icon: Newspaper,
-    config: {
-      mode: "briefing",
-      sources: ["hackernews", "producthunt"],
-      language: "zh-CN",
-      refresh_interval: 3600,
-    },
-  },
-  {
-    id: 11,
-    name: "每日推荐",
-    author: "Official",
-    downloads: "8k",
-    desc: "语录、书籍推荐、冷知识、节气信息的丰富组合",
-    icon: CloudSun,
-    config: {
-      mode: "daily",
-      language: "zh-CN",
-      refresh_interval: 3600,
-    },
-  },
-  {
-    id: 12,
-    name: "纪念日倒计时",
-    author: "MemoryKeeper",
-    downloads: "3k",
-    desc: "重要日期倒计时/正计日，纪念日提醒",
-    icon: Timer,
-    config: {
-      mode: "countdown",
-      events: [
-        { name: "示例事件", date: "2026-12-31" },
-      ],
-    },
-  },
-];
-
 export default function StorePage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [plugins, setPlugins] = useState<Plugin[]>([]);
+  const [filtered, setFiltered] = useState<Plugin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [installed, setInstalled] = useState<Set<string>>(new Set());
 
-  const filteredPlugins = PLUGINS.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.desc.includes(searchQuery) ||
-      p.author.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    fetchPlugins();
+  }, []);
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
+  useEffect(() => {
+    if (!search.trim()) {
+      setFiltered(plugins);
+    } else {
+      const q = search.toLowerCase();
+      setFiltered(
+        plugins.filter(
+          (p) =>
+            p.display_name.toLowerCase().includes(q) ||
+            p.description.toLowerCase().includes(q) ||
+            p.category.toLowerCase().includes(q)
+        )
+      );
+    }
+  }, [search, plugins]);
+
+  async function fetchPlugins() {
+    setLoading(true);
+    setError("");
+    try {
+      const resp = await fetch("/api/store");
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      setPlugins(data.plugins || []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load plugins");
+      setPlugins([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const installPlugin = useCallback(async (plugin: Plugin) => {
+    setInstalling(plugin.mode_id);
+    try {
+      const defResp = await fetch(
+        `/api/store/plugin?url=${encodeURIComponent(plugin.definition_url)}`
+      );
+      if (!defResp.ok) throw new Error("Failed to fetch plugin definition");
+      const modeDef = await defResp.json();
+
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE || "";
+      const installResp = await fetch(`${apiBase}/api/modes/custom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(modeDef),
+      });
+      if (!installResp.ok) throw new Error("Install failed");
+
+      setInstalled((prev) => new Set([...prev, plugin.mode_id]));
+    } catch (e: unknown) {
+      alert(`安装失败: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setInstalling(null);
+    }
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-16">
       {/* Page Header */}
       <div className="text-center mb-12">
         <h1 className="font-serif text-3xl md:text-4xl font-bold text-ink mb-3">
-          插件市场
+          插件商店
         </h1>
         <p className="text-ink-light max-w-lg mx-auto">
-          探索和安装社区贡献的 InkSight 内容插件，一键生成配置
+          发现和安装社区贡献的内容模式
         </p>
       </div>
 
@@ -249,125 +107,109 @@ export default function StorePage() {
         <input
           type="text"
           placeholder="搜索插件..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-11 pr-4 py-3 rounded-sm border border-ink/10 bg-white text-sm text-ink placeholder:text-ink-light/60 focus:outline-none focus:border-ink/30 transition-colors"
         />
       </div>
 
-      {/* Plugin Grid */}
-      {filteredPlugins.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-ink-light">没有找到匹配的插件</p>
+      {loading && (
+        <div className="text-center py-20 text-ink-light">
+          <div className="animate-spin w-8 h-8 border-2 border-ink border-t-transparent rounded-full mx-auto mb-4" />
+          加载插件中...
         </div>
-      ) : (
+      )}
+
+      {error && (
+        <div className="text-center py-20">
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={fetchPlugins} size="sm">
+            重试
+          </Button>
+        </div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div className="text-center py-20 text-ink-light">
+          {search ? "没有找到匹配的插件" : "暂无可用插件"}
+        </div>
+      )}
+
+      {!loading && !error && filtered.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPlugins.map((plugin) => (
+          {filtered.map((plugin) => (
             <Card
-              key={plugin.id}
+              key={plugin.mode_id}
               className="flex flex-col group hover:border-ink/20 transition-all duration-200"
             >
-              {/* Image placeholder */}
-              <div className="h-40 bg-paper-dark border-b border-ink/5 flex items-center justify-center">
-                <plugin.icon
-                  size={36}
-                  className="text-ink/20 group-hover:text-ink/40 transition-colors"
-                />
-              </div>
-
-              <CardContent className="flex-1 p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-base font-semibold text-ink">
-                    {plugin.name}
-                  </h3>
+              {plugin.preview_url ? (
+                <div className="h-40 bg-paper-dark border-b border-ink/5 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={plugin.preview_url}
+                    alt={plugin.display_name}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-                <p className="text-xs text-ink-light mb-3">
+              ) : (
+                <div className="h-40 bg-paper-dark border-b border-ink/5 flex items-center justify-center">
+                  <span className="text-ink/20 text-4xl font-serif">墨</span>
+                </div>
+              )}
+              <CardContent className="flex-1 p-5">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="text-base font-semibold text-ink">
+                    {plugin.display_name}
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-sm bg-paper-dark text-ink-light shrink-0">
+                    {plugin.category}
+                  </span>
+                </div>
+                <p className="text-xs text-ink-light mb-3 line-clamp-2">
+                  {plugin.description}
+                </p>
+                <p className="text-xs text-ink-light">
                   by{" "}
                   <span className="text-ink-muted font-medium">
                     @{plugin.author}
                   </span>
                 </p>
-                <p className="text-sm text-ink-light leading-relaxed line-clamp-2">
-                  {plugin.desc}
-                </p>
               </CardContent>
-
               <CardFooter className="p-5 pt-0 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs text-ink-light">
-                  <Download size={12} />
-                  <span>{plugin.downloads}</span>
+                {plugin.downloads != null && (
+                  <span className="text-xs text-ink-light">
+                    {plugin.downloads >= 1000
+                      ? `${(plugin.downloads / 1000).toFixed(1)}k`
+                      : plugin.downloads}{" "}
+                    下载
+                  </span>
+                )}
+                <div className={plugin.downloads != null ? "" : "ml-auto"}>
+                  <Button
+                    size="sm"
+                    variant={installed.has(plugin.mode_id) ? "ghost" : "default"}
+                    disabled={
+                      installing === plugin.mode_id ||
+                      installed.has(plugin.mode_id)
+                    }
+                    onClick={() => installPlugin(plugin)}
+                    className={
+                      installed.has(plugin.mode_id)
+                        ? "text-green-600 hover:text-green-600 cursor-default"
+                        : ""
+                    }
+                  >
+                    {installed.has(plugin.mode_id)
+                      ? "已安装 ✓"
+                      : installing === plugin.mode_id
+                        ? "安装中..."
+                        : "安装"}
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedPlugin(plugin);
-                    setCopied(false);
-                  }}
-                >
-                  安装
-                </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
       )}
-
-      {/* Install Dialog */}
-      <Dialog
-        open={selectedPlugin !== null}
-        onClose={() => setSelectedPlugin(null)}
-      >
-        <DialogContent>
-          <DialogHeader onClose={() => setSelectedPlugin(null)}>
-            <DialogTitle>安装 {selectedPlugin?.name}</DialogTitle>
-            <DialogDescription>
-              复制以下 JSON 配置到你的 InkSight 设备配置中
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="relative">
-            <pre className="rounded-sm border border-ink/10 bg-paper p-4 text-sm font-mono text-ink overflow-x-auto max-h-64 overflow-y-auto">
-              {selectedPlugin
-                ? JSON.stringify(selectedPlugin.config, null, 2)
-                : ""}
-            </pre>
-            <button
-              onClick={() =>
-                selectedPlugin &&
-                handleCopy(JSON.stringify(selectedPlugin.config, null, 2))
-              }
-              className="absolute top-3 right-3 p-1.5 rounded-sm border border-ink/10 bg-white hover:bg-paper-dark transition-colors"
-              title="复制到剪贴板"
-            >
-              {copied ? (
-                <Check size={14} className="text-green-600" />
-              ) : (
-                <Copy size={14} className="text-ink-light" />
-              )}
-            </button>
-          </div>
-
-          <div className="mt-4 flex justify-end gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedPlugin(null)}
-            >
-              关闭
-            </Button>
-            <Button
-              size="sm"
-              onClick={() =>
-                selectedPlugin &&
-                handleCopy(JSON.stringify(selectedPlugin.config, null, 2))
-              }
-            >
-              {copied ? "已复制" : "复制配置"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -33,13 +33,13 @@
       { "type": "separator", "style": "short", "width": 70 },
       { "type": "spacer", "height": 8 },
       { "type": "text", "field": "definition", "font_size": 14, "align": "center", "margin_x": 28, "max_lines": 2 },
-      { "type": "spacer", "height": 10 },
-      { "type": "group", "title": "日常举例", "children": [
-        { "type": "text", "field": "example", "font_size": 12, "align": "left", "margin_x": 32, "max_lines": 3 }
+      { "type": "spacer", "height": 12 },
+      { "type": "group", "title": "日常举例", "title_font_size": 12, "margin_x": 24, "children": [
+        { "type": "text", "field": "example", "font_size": 12, "align": "left", "margin_x": 36, "max_lines": 3 }
       ]},
-      { "type": "spacer", "height": 6 },
+      { "type": "spacer", "height": 8 },
       { "type": "separator", "style": "dashed", "margin_x": 40 },
-      { "type": "spacer", "height": 4 },
+      { "type": "spacer", "height": 6 },
       { "type": "icon_text", "icon": "tips", "text": "解药", "font_size": 12, "margin_x": 24 },
       { "type": "text", "field": "antidote", "font_size": 12, "align": "left", "margin_x": 40, "max_lines": 2 }
     ],

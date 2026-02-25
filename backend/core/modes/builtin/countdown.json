@@ -9,18 +9,96 @@
     "provider": "countdown",
     "fallback": {
       "events": [
-        { "name": "元旦", "date": "2027-01-01", "type": "countdown", "days": 100 }
+        {
+          "name": "元旦",
+          "date": "2027-01-01",
+          "type": "countdown",
+          "days": 100
+        }
       ]
-    }
+    },
+    "fallback_pool": [
+      {
+        "events": [
+          {
+            "name": "元旦",
+            "date": "2027-01-01",
+            "type": "countdown",
+            "days": 100
+          }
+        ]
+      },
+      {
+        "events": [
+          {
+            "name": "春节",
+            "date": "2027-01-28",
+            "type": "countdown",
+            "days": 365
+          }
+        ]
+      },
+      {
+        "events": [
+          {
+            "name": "生日",
+            "date": "2026-06-15",
+            "type": "countdown",
+            "days": 110
+          }
+        ]
+      },
+      {
+        "events": [
+          {
+            "name": "项目截止",
+            "date": "2026-03-31",
+            "type": "countdown",
+            "days": 34
+          }
+        ]
+      }
+    ]
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      { "type": "list", "field": "events", "max_items": 1, "item_template": "{name}", "font_size": 16, "align": "center" },
-      { "type": "list", "field": "events", "max_items": 1, "item_template": "{date}", "font_size": 11, "align": "center" },
-      { "type": "separator", "style": "short", "width": 70 },
-      { "type": "list", "field": "events", "max_items": 1, "item_template": "{days} 天", "font_size": 52, "align": "center" }
+      {
+        "type": "list",
+        "field": "events",
+        "max_items": 1,
+        "item_template": "{name}",
+        "font_size": 16,
+        "align": "center"
+      },
+      {
+        "type": "list",
+        "field": "events",
+        "max_items": 1,
+        "item_template": "{date}",
+        "font_size": 11,
+        "align": "center"
+      },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 70
+      },
+      {
+        "type": "list",
+        "field": "events",
+        "max_items": 1,
+        "item_template": "{days} 天",
+        "font_size": 52,
+        "align": "center"
+      }
     ],
-    "footer": { "label": "COUNTDOWN", "attribution_template": "— Remember" }
+    "footer": {
+      "label": "COUNTDOWN",
+      "attribution_template": "— Remember"
+    }
   }
 }

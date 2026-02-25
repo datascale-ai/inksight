@@ -4,41 +4,170 @@
   "icon": "exercise",
   "cacheable": false,
   "description": "简单的居家健身训练计划",
-
   "content": {
     "type": "llm_json",
     "prompt_template": "你是一位健身教练。推荐一套简单的健身计划，用 JSON 格式输出：\n\n{{\n  \"workout_name\": \"训练名称（如：晨间拉伸、核心训练）\",\n  \"duration\": \"总时长（如：15分钟）\",\n  \"exercises\": [\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}},\n    {{\"name\": \"动作名称\", \"reps\": \"次数/时长\"}}\n  ],\n  \"tip\": \"健康提示（30字以内）\"\n}}\n\n要求：\n1. 动作简单，适合居家训练\n2. 不需要器械\n3. 只输出 JSON，不要其他内容",
     "output_schema": {
-      "workout_name": { "type": "string", "default": "晨间拉伸" },
-      "duration": { "type": "string", "default": "15分钟" },
-      "exercises": { "type": "array", "default": [
-        {"name": "颈部拉伸", "reps": "10次"},
-        {"name": "肩部环绕", "reps": "15次"},
-        {"name": "腰部扭转", "reps": "20次"},
-        {"name": "腿部拉伸", "reps": "30秒"},
-        {"name": "深呼吸", "reps": "5次"}
-      ]},
-      "tip": { "type": "string", "default": "运动前充分热身，避免受伤。保持规律作息，健康生活。" }
+      "workout_name": {
+        "type": "string",
+        "default": "晨间拉伸"
+      },
+      "duration": {
+        "type": "string",
+        "default": "15分钟"
+      },
+      "exercises": {
+        "type": "array",
+        "default": [
+          {
+            "name": "颈部拉伸",
+            "reps": "10次"
+          },
+          {
+            "name": "肩部环绕",
+            "reps": "15次"
+          },
+          {
+            "name": "腰部扭转",
+            "reps": "20次"
+          },
+          {
+            "name": "腿部拉伸",
+            "reps": "30秒"
+          },
+          {
+            "name": "深呼吸",
+            "reps": "5次"
+          }
+        ]
+      },
+      "tip": {
+        "type": "string",
+        "default": "运动前充分热身，避免受伤。保持规律作息，健康生活。"
+      }
     },
     "temperature": 0.8,
     "fallback": {
       "workout_name": "晨间拉伸",
       "duration": "15分钟",
       "exercises": [
-        {"name": "颈部拉伸", "reps": "10次"},
-        {"name": "肩部环绕", "reps": "15次"},
-        {"name": "腰部扭转", "reps": "20次"},
-        {"name": "腿部拉伸", "reps": "30秒"},
-        {"name": "深呼吸", "reps": "5次"}
+        {
+          "name": "颈部拉伸",
+          "reps": "10次"
+        },
+        {
+          "name": "肩部环绕",
+          "reps": "15次"
+        },
+        {
+          "name": "腰部扭转",
+          "reps": "20次"
+        },
+        {
+          "name": "腿部拉伸",
+          "reps": "30秒"
+        },
+        {
+          "name": "深呼吸",
+          "reps": "5次"
+        }
       ],
       "tip": "运动前充分热身，避免受伤。保持规律作息，健康生活。"
-    }
+    },
+    "fallback_pool": [
+      {
+        "workout_name": "晨间拉伸",
+        "duration": "15分钟",
+        "exercises": [
+          {
+            "name": "颈部拉伸",
+            "reps": "10次"
+          },
+          {
+            "name": "肩部环绕",
+            "reps": "15次"
+          },
+          {
+            "name": "腰部扭转",
+            "reps": "20次"
+          },
+          {
+            "name": "腿部拉伸",
+            "reps": "30秒"
+          },
+          {
+            "name": "深呼吸",
+            "reps": "5次"
+          }
+        ],
+        "tip": "运动前充分热身，避免受伤。保持规律作息，健康生活。"
+      },
+      {
+        "workout_name": "核心力量",
+        "duration": "20分钟",
+        "exercises": [
+          {
+            "name": "平板支撑",
+            "reps": "30秒"
+          },
+          {
+            "name": "卷腹",
+            "reps": "15次"
+          },
+          {
+            "name": "侧平板",
+            "reps": "20秒每侧"
+          },
+          {
+            "name": "登山跑",
+            "reps": "30秒"
+          },
+          {
+            "name": "臀桥",
+            "reps": "15次"
+          }
+        ],
+        "tip": "核心稳定是一切运动的基础，坚持练出好体态。"
+      },
+      {
+        "workout_name": "肩颈放松",
+        "duration": "10分钟",
+        "exercises": [
+          {
+            "name": "颈部左右转头",
+            "reps": "10次"
+          },
+          {
+            "name": "耸肩放下",
+            "reps": "15次"
+          },
+          {
+            "name": "扩胸运动",
+            "reps": "12次"
+          },
+          {
+            "name": "肩部画圈",
+            "reps": "前后各10次"
+          },
+          {
+            "name": "拉伸斜方肌",
+            "reps": "30秒每侧"
+          }
+        ],
+        "tip": "久坐族必备，预防颈椎病。"
+      }
+    ]
   },
-
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      { "type": "spacer", "height": 14 },
+      {
+        "type": "spacer",
+        "height": 14
+      },
       {
         "type": "text",
         "field": "workout_name",
@@ -53,7 +182,10 @@
         "font_size": 14,
         "align": "center"
       },
-      { "type": "spacer", "height": 2 },
+      {
+        "type": "spacer",
+        "height": 2
+      },
       {
         "type": "separator",
         "style": "solid",
@@ -80,7 +212,10 @@
         "margin_x": 32,
         "numbered": true
       },
-      { "type": "spacer", "height": 4 },
+      {
+        "type": "spacer",
+        "height": 4
+      },
       {
         "type": "separator",
         "style": "solid",

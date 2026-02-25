@@ -104,6 +104,18 @@ void setup() {
         return;
     }
 
+    // Check server URL is configured
+    if (cfgServer.length() == 0) {
+        Serial.println("No server URL configured -> portal");
+        String mac = WiFi.macAddress();
+        String apName = "InkSight-" + mac.substring(mac.length() - 5);
+        apName.replace(":", "");
+        ledFeedback("portal");
+        showSetupScreen(apName.c_str());
+        startCaptivePortal();
+        return;
+    }
+
     // Normal boot: connect WiFi and fetch image
     int retryCount = getRetryCount();
     Serial.printf("Retry count: %d/%d\n", retryCount, MAX_RETRY_COUNT);

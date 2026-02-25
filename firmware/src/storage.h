@@ -9,6 +9,7 @@ extern String cfgPass;
 extern String cfgServer;
 extern int    cfgSleepMin;
 extern String cfgConfigJson;
+extern String cfgDeviceToken;
 
 // ── NVS operations ──────────────────────────────────────────
 
@@ -18,6 +19,9 @@ void loadConfig();
 // Save WiFi credentials to NVS
 void saveWiFiConfig(const String &ssid, const String &pass);
 
+// Save server URL to NVS
+void saveServerUrl(const String &url);
+
 // Save user config JSON to NVS (also extracts refreshInterval)
 void saveUserConfig(const String &configJson);
 
@@ -25,5 +29,8 @@ void saveUserConfig(const String &configJson);
 int  getRetryCount();
 void setRetryCount(int count);
 void resetRetryCount();
+
+// Device token for backend auth
+void saveDeviceToken(const String &token);
 
 #endif // INKSIGHT_STORAGE_H

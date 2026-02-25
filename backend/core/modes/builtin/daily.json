@@ -42,7 +42,12 @@
         }
       }
     ],
-    "fallback": {}
+    "fallback": {},
+    "fallback_pool": [
+      {"quote": "阻碍行动的障碍，本身就是行动的路。", "author": "马可·奥勒留", "book_title": "《沉思录》", "book_author": "马可·奥勒留 著", "book_desc": "罗马帝王的自省笔记。", "tip": "冬季干燥，记得多喝水。", "season_text": "立春已过，万物生长。"},
+      {"quote": "知止而后有定，定而后能静。", "author": "《大学》", "book_title": "《人间值得》", "book_author": "中村恒子 著", "book_desc": "九十岁心理医生的生活智慧。", "tip": "午睡20分钟最佳，过长易头痛。", "season_text": "春寒料峭，宜早睡早起。"},
+      {"quote": "活在当下，珍惜眼前人。", "author": "佚名", "book_title": "《小王子》", "book_author": "圣埃克苏佩里 著", "book_desc": "献给所有的大人和小孩。", "tip": "蓝光影响睡眠，睡前少看手机。", "season_text": "万物复苏，适合户外走走。"}
+    ]
   },
   "layout": {
     "status_bar": { "line_width": 1, "dashed": false },

@@ -1,9 +1,11 @@
 """
 Statistics data collection and querying.
-Stores render logs and device heartbeats in SQLite.
+Stores render logs, content history, and device heartbeats in SQLite.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import logging
 import aiosqlite
@@ -38,29 +40,33 @@ async def init_stats_db():
             )
         """)
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS render_content (
+            CREATE TABLE IF NOT EXISTS content_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 mac TEXT NOT NULL,
                 mode_id TEXT NOT NULL,
-                content TEXT NOT NULL,
+                content TEXT DEFAULT '{}',
+                content_hash TEXT DEFAULT '',
                 is_favorite INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             )
         """)
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS content_favorites (
+            CREATE TABLE IF NOT EXISTS habit_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 mac TEXT NOT NULL,
-                mode_id TEXT NOT NULL,
-                content_snapshot TEXT,
-                created_at TEXT NOT NULL
+                habit_name TEXT NOT NULL,
+                date TEXT NOT NULL,
+                completed INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE(mac, habit_name, date)
             )
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_render_logs_mac ON render_logs(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_render_logs_created ON render_logs(created_at)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_heartbeats_mac ON device_heartbeats(mac)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_render_content_mac ON render_content(mac)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_favorites_mac ON content_favorites(mac)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_content_history_mac ON content_history(mac)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_content_history_hash ON content_history(mac, mode_id, content_hash)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_habit_mac ON habit_records(mac)")
         await db.commit()
 
 
@@ -254,22 +260,30 @@ async def get_render_history(mac: str, limit: int = 50, offset: int = 0) -> list
 # ── Content history ──────────────────────────────────────────
 
 
-async def save_render_content(mac: str, mode_id: str, content: dict):
-    """Save rendered content snapshot for history."""
-    import json
+def _compute_content_hash(content: dict | str | None) -> str:
+    """Compute a short hash for content deduplication."""
+    if content is None:
+        return ""
+    text = json.dumps(content, sort_keys=True, ensure_ascii=False) if isinstance(content, dict) else str(content)
+    return hashlib.md5(text.encode()).hexdigest()[:12]
+
+
+async def save_render_content(mac: str, mode_id: str, content: dict | None):
+    """Save rendered content to history for dedup and browsing."""
     now = datetime.now().isoformat()
+    content_str = json.dumps(content, ensure_ascii=False) if content else "{}"
+    content_hash = _compute_content_hash(content)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO render_content (mac, mode_id, content, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (mac, mode_id, json.dumps(content, ensure_ascii=False), now),
+            """INSERT INTO content_history (mac, mode_id, content, content_hash, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (mac, mode_id, content_str, content_hash, now),
         )
-        # Keep only latest 200 per device
         await db.execute(
-            """DELETE FROM render_content
+            """DELETE FROM content_history
                WHERE mac = ? AND id NOT IN (
-                   SELECT id FROM render_content WHERE mac = ?
-                   ORDER BY created_at DESC LIMIT 200
+                   SELECT id FROM content_history WHERE mac = ?
+                   ORDER BY created_at DESC LIMIT 500
                )""",
             (mac, mac),
         )
@@ -277,29 +291,28 @@ async def save_render_content(mac: str, mode_id: str, content: dict):
 
 
 async def get_content_history(
-    mac: str, limit: int = 30, offset: int = 0, mode: str | None = None
+    mac: str, limit: int = 30, offset: int = 0, mode: str | None = None,
 ) -> list[dict]:
-    """Get content history for a device with optional mode filter."""
-    import json
     async with aiosqlite.connect(DB_PATH) as db:
         if mode:
             cursor = await db.execute(
                 """SELECT id, mode_id, content, is_favorite, created_at
-                   FROM render_content WHERE mac = ? AND mode_id = ?
+                   FROM content_history WHERE mac = ? AND mode_id = ?
                    ORDER BY created_at DESC LIMIT ? OFFSET ?""",
                 (mac, mode.upper(), limit, offset),
             )
         else:
             cursor = await db.execute(
                 """SELECT id, mode_id, content, is_favorite, created_at
-                   FROM render_content WHERE mac = ?
+                   FROM content_history WHERE mac = ?
                    ORDER BY created_at DESC LIMIT ? OFFSET ?""",
                 (mac, limit, offset),
             )
+        rows = await cursor.fetchall()
         results = []
-        for row in await cursor.fetchall():
+        for row in rows:
             try:
-                content = json.loads(row[2])
+                content = json.loads(row[2]) if row[2] else {}
             except (json.JSONDecodeError, TypeError):
                 content = {}
             results.append({
@@ -312,43 +325,51 @@ async def get_content_history(
         return results
 
 
-# ── Favorites ────────────────────────────────────────────────
+async def get_latest_render_content(mac: str) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT mode_id, content FROM content_history
+               WHERE mac = ? ORDER BY created_at DESC LIMIT 1""",
+            (mac,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            content = json.loads(row[1]) if row[1] else {}
+        except (json.JSONDecodeError, TypeError):
+            content = {}
+        return {"mode_id": row[0], "content": content}
 
 
-async def add_favorite(mac: str, mode_id: str, content_snapshot: str | None = None):
-    """Add current content to favorites."""
+async def add_favorite(mac: str, mode_id: str, content_json: str | None):
     now = datetime.now().isoformat()
+    content_str = content_json or "{}"
+    content_hash = ""
+    try:
+        content_hash = _compute_content_hash(json.loads(content_str))
+    except Exception:
+        pass
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO content_favorites (mac, mode_id, content_snapshot, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (mac, mode_id, content_snapshot, now),
-        )
-        # Also mark in render_content if the latest entry matches
-        await db.execute(
-            """UPDATE render_content SET is_favorite = 1
-               WHERE id = (
-                   SELECT id FROM render_content
-                   WHERE mac = ? AND mode_id = ?
-                   ORDER BY created_at DESC LIMIT 1
-               )""",
-            (mac, mode_id),
+            """INSERT INTO content_history (mac, mode_id, content, content_hash, is_favorite, created_at)
+               VALUES (?, ?, ?, ?, 1, ?)""",
+            (mac, mode_id, content_str, content_hash, now),
         )
         await db.commit()
 
 
 async def get_favorites(mac: str, limit: int = 30) -> list[dict]:
-    """Get favorites for a device."""
-    import json
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            """SELECT id, mode_id, content_snapshot, created_at
-               FROM content_favorites WHERE mac = ?
+            """SELECT id, mode_id, content, created_at FROM content_history
+               WHERE mac = ? AND is_favorite = 1
                ORDER BY created_at DESC LIMIT ?""",
             (mac, limit),
         )
+        rows = await cursor.fetchall()
         results = []
-        for row in await cursor.fetchall():
+        for row in rows:
             try:
                 content = json.loads(row[2]) if row[2] else {}
             except (json.JSONDecodeError, TypeError):
@@ -362,20 +383,90 @@ async def get_favorites(mac: str, limit: int = 30) -> list[dict]:
         return results
 
 
-async def get_latest_render_content(mac: str) -> dict | None:
-    """Get the most recent render content for a device (used for favorites)."""
-    import json
+async def get_recent_content_hashes(mac: str, mode_id: str, limit: int = 20) -> list[str]:
+    """Get recent content hashes for deduplication."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            """SELECT mode_id, content FROM render_content
-               WHERE mac = ? ORDER BY created_at DESC LIMIT 1""",
+            """SELECT content_hash FROM content_history
+               WHERE mac = ? AND mode_id = ? AND content_hash != ''
+               ORDER BY created_at DESC LIMIT ?""",
+            (mac, mode_id, limit),
+        )
+        return [row[0] for row in await cursor.fetchall()]
+
+
+async def get_recent_content_summaries(mac: str, mode_id: str, limit: int = 3) -> list[str]:
+    """Get short summaries of recent content for LLM dedup hints."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT content FROM content_history
+               WHERE mac = ? AND mode_id = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (mac, mode_id, limit),
+        )
+        summaries = []
+        for row in await cursor.fetchall():
+            try:
+                data = json.loads(row[0]) if row[0] else {}
+                for key in ("quote", "question", "challenge", "body", "word", "event_title", "name_cn", "text"):
+                    if key in data and data[key]:
+                        summaries.append(str(data[key])[:80])
+                        break
+            except Exception:
+                pass
+        return summaries
+
+
+async def check_habit(mac: str, habit_name: str, date: str | None = None):
+    """Record a habit check for a given date (defaults to today)."""
+    now = datetime.now()
+    if not date:
+        date = now.strftime("%Y-%m-%d")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO habit_records (mac, habit_name, date, completed, created_at)
+               VALUES (?, ?, ?, 1, ?)
+               ON CONFLICT(mac, habit_name, date) DO UPDATE SET completed = 1""",
+            (mac, habit_name, date, now.isoformat()),
+        )
+        await db.commit()
+
+
+async def get_habit_status(mac: str) -> list[dict]:
+    """Get habit completion status for the current week."""
+    from datetime import timedelta
+    now = datetime.now()
+    week_start = (now - timedelta(days=now.weekday())).strftime("%Y-%m-%d")
+    today = now.strftime("%Y-%m-%d")
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT DISTINCT habit_name FROM habit_records
+               WHERE mac = ? ORDER BY habit_name""",
             (mac,),
         )
-        row = await cursor.fetchone()
-        if not row:
-            return None
-        try:
-            content = json.loads(row[1])
-        except (json.JSONDecodeError, TypeError):
-            content = {}
-        return {"mode_id": row[0], "content": content}
+        habit_names = [row[0] for row in await cursor.fetchall()]
+        if not habit_names:
+            return []
+
+        results = []
+        for name in habit_names:
+            cursor = await db.execute(
+                """SELECT COUNT(*) FROM habit_records
+                   WHERE mac = ? AND habit_name = ? AND date >= ? AND completed = 1""",
+                (mac, name, week_start),
+            )
+            count = (await cursor.fetchone())[0]
+            cursor = await db.execute(
+                """SELECT completed FROM habit_records
+                   WHERE mac = ? AND habit_name = ? AND date = ?""",
+                (mac, name, today),
+            )
+            today_row = await cursor.fetchone()
+            today_done = bool(today_row and today_row[0])
+            results.append({
+                "name": name,
+                "week_count": count,
+                "today": today_done,
+                "status": "✓" if today_done else "○",
+            })
+        return results

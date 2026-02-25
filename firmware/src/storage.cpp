@@ -10,16 +10,18 @@ String cfgPass;
 String cfgServer;
 int    cfgSleepMin;
 String cfgConfigJson;
+String cfgDeviceToken;
 
 // ── Load config from NVS ────────────────────────────────────
 
 void loadConfig() {
     prefs.begin("inksight", true);  // read-only
-    cfgSSID       = prefs.getString("ssid", "");
-    cfgPass       = prefs.getString("pass", "");
-    cfgServer     = prefs.getString("server", DEFAULT_SERVER);
-    cfgSleepMin   = prefs.getInt("sleep_min", 60);
-    cfgConfigJson = prefs.getString("config_json", "");
+    cfgSSID         = prefs.getString("ssid", "");
+    cfgPass         = prefs.getString("pass", "");
+    cfgServer       = prefs.getString("server", DEFAULT_SERVER);
+    cfgSleepMin     = prefs.getInt("sleep_min", 60);
+    cfgConfigJson   = prefs.getString("config_json", "");
+    cfgDeviceToken  = prefs.getString("device_token", "");
     prefs.end();
 }
 
@@ -53,6 +55,15 @@ void saveWiFiConfig(const String &ssid, const String &pass) {
     cfgPass = pass;
 }
 
+// ── Save server URL ─────────────────────────────────────────
+
+void saveServerUrl(const String &url) {
+    prefs.begin("inksight", false);
+    prefs.putString("server", url);
+    prefs.end();
+    cfgServer = url;
+}
+
 // ── Save user config JSON ───────────────────────────────────
 
 void saveUserConfig(const String &configJson) {
@@ -75,4 +86,13 @@ void saveUserConfig(const String &configJson) {
 
     prefs.end();
     cfgConfigJson = configJson;
+}
+
+// ── Device token ────────────────────────────────────────────
+
+void saveDeviceToken(const String &token) {
+    prefs.begin("inksight", false);
+    prefs.putString("device_token", token);
+    prefs.end();
+    cfgDeviceToken = token;
 }

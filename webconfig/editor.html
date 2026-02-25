@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>InkSight - 模式编辑器</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bk:#1a1a1a;--wh:#f5f5f0;--gy:#888;--bg:#fafaf7;--bd:#d4d4cf}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--bk);min-height:100vh;display:flex;flex-direction:column}
+.toolbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--bk);color:#fff}
+.toolbar h1{font-size:1rem;font-weight:600}
+.toolbar select,.toolbar button{padding:6px 14px;border-radius:6px;font-size:.82rem;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer}
+.toolbar button{background:#22c55e;border-color:#22c55e;font-weight:600}
+.toolbar button:hover{background:#16a34a}
+.toolbar .btn-preview{background:#3b82f6;border-color:#3b82f6}
+.toolbar .btn-preview:hover{background:#2563eb}
+.toolbar .btn-save{background:#22c55e;border-color:#22c55e}
+.main{display:flex;flex:1;overflow:hidden}
+.editor-pane{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--bd)}
+.preview-pane{width:420px;display:flex;flex-direction:column;background:#fff}
+.preview-header{padding:10px 16px;border-bottom:1px solid var(--bd);font-size:.82rem;font-weight:600;color:var(--gy)}
+.preview-body{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.preview-body img{max-width:100%;border:1px solid var(--bd);border-radius:4px}
+.preview-placeholder{color:var(--gy);font-size:.85rem}
+#editor{flex:1;width:100%;padding:16px;font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:.82rem;line-height:1.6;border:none;outline:none;resize:none;background:#1e1e2e;color:#cdd6f4;tab-size:2}
+.error-bar{padding:8px 16px;background:#fef2f2;color:#dc2626;font-size:.75rem;border-top:1px solid #fca5a5;display:none}
+.error-bar.visible{display:block}
+.status-bar{padding:6px 16px;background:#f1f1ee;font-size:.72rem;color:var(--gy);border-top:1px solid var(--bd);display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <h1>📝 模式编辑器</h1>
+  <select id="templateSelect" onchange="loadTemplate()">
+    <option value="">选择模板...</option>
+    <option value="quote">语录模板 (Quote)</option>
+    <option value="list">列表模板 (List)</option>
+    <option value="zen">禅意模板 (Zen)</option>
+    <option value="sections">综合模板 (Sections)</option>
+  </select>
+  <button class="btn-preview" onclick="doPreview()">▶ 预览</button>
+  <button class="btn-save" onclick="doSave()">💾 保存模式</button>
+</div>
+
+<div class="main">
+  <div class="editor-pane">
+    <textarea id="editor" spellcheck="false"></textarea>
+    <div class="error-bar" id="errorBar"></div>
+    <div class="status-bar">
+      <span id="statusText">就绪</span>
+      <span id="charCount">0 字符</span>
+    </div>
+  </div>
+  <div class="preview-pane">
+    <div class="preview-header">实时预览</div>
+    <div class="preview-body">
+      <div class="preview-placeholder" id="previewArea">点击「预览」按钮查看效果</div>
+    </div>
+  </div>
+</div>
+
+<script>
+var TEMPLATES={
+quote:{
+  mode_id:"MY_QUOTE",display_name:"自定义语录",icon:"book",cacheable:true,
+  description:"自定义语录模式",
+  content:{type:"llm_json",prompt_template:"请生成一条有深度的语录，用 JSON 返回 {quote, author}。{context}",
+    output_schema:{quote:{type:"string"},author:{type:"string"}},temperature:0.8,
+    fallback:{quote:"路漫漫其修远兮",author:"屈原"},
+    fallback_pool:[{quote:"路漫漫其修远兮",author:"屈原"},{quote:"知者不惑，仁者不忧",author:"孔子"},{quote:"天行健，君子以自强不息",author:"易经"}]
+  },
+  layout:{status_bar:{line_width:1},body:[{type:"centered_text",field:"quote",font:"NotoSerifSC-Light.ttf",font_size:18,vertical_center:true}],footer:{label:"MY_QUOTE",attribution_template:"— {author}"}}
+},
+list:{
+  mode_id:"MY_LIST",display_name:"自定义列表",icon:"list",cacheable:true,
+  description:"列表展示模式",
+  content:{type:"llm_json",prompt_template:"请生成3条科技快讯，JSON 格式 {title, items: [{text}]}。{context}",
+    output_schema:{title:{type:"string"},items:{type:"array",items:{type:"object",properties:{text:{type:"string"}}}}},
+    temperature:0.7,
+    fallback:{title:"今日快讯",items:[{text:"暂无内容"}]}
+  },
+  layout:{status_bar:{line_width:1},body:[{type:"text",field:"title",font_size:16,align:"center",bold:true},{type:"spacer",height:8},{type:"list",field:"items",item_template:"{text}",max_items:5,font_size:12}],footer:{label:"MY_LIST"}}
+},
+zen:{
+  mode_id:"MY_ZEN",display_name:"自定义禅",icon:"zen",cacheable:true,
+  description:"单字禅意模式",
+  content:{type:"llm_json",prompt_template:"请给出一个蕴含哲理的汉字，并简短解读。JSON: {word, reading}。{context}",
+    output_schema:{word:{type:"string"},reading:{type:"string"}},temperature:0.9,
+    fallback:{word:"道",reading:"万物之始"}
+  },
+  layout:{status_bar:{line_width:1},body:[{type:"centered_text",field:"word",font:"NotoSerifSC-Bold.ttf",font_size:80,vertical_center:true},{type:"centered_text",field:"reading",font_size:13}],footer:{label:"MY_ZEN"}}
+},
+sections:{
+  mode_id:"MY_DAILY",display_name:"自定义综合",icon:"daily",cacheable:true,
+  description:"多栏综合内容",
+  content:{type:"llm_json",prompt_template:"请生成今日内容：一句话语录、一个推荐、一个小贴士。JSON: {quote, recommend, tip}。{context}",
+    output_schema:{quote:{type:"string"},recommend:{type:"string"},tip:{type:"string"}},temperature:0.8,
+    fallback:{quote:"今天是美好的一天",recommend:"推荐阅读",tip:"记得喝水"}
+  },
+  layout:{status_bar:{line_width:1},body:[{type:"section",label:"📖 语录",blocks:[{type:"text",field:"quote",font_size:13}]},{type:"separator",dashed:true},{type:"section",label:"💡 推荐",blocks:[{type:"text",field:"recommend",font_size:12}]},{type:"separator",dashed:true},{type:"section",label:"🌟 小贴士",blocks:[{type:"text",field:"tip",font_size:12}]}],footer:{label:"MY_DAILY"}}
+}
+};
+
+var editor=document.getElementById('editor');
+var errorBar=document.getElementById('errorBar');
+
+function loadTemplate(){
+  var t=document.getElementById('templateSelect').value;
+  if(!t)return;
+  editor.value=JSON.stringify(TEMPLATES[t],null,2);
+  validateJSON();
+  updateCount();
+}
+
+function validateJSON(){
+  try{
+    JSON.parse(editor.value);
+    errorBar.textContent='';errorBar.classList.remove('visible');
+    document.getElementById('statusText').textContent='JSON 有效 ✓';
+    return true;
+  }catch(e){
+    errorBar.textContent='JSON 错误: '+e.message;
+    errorBar.classList.add('visible');
+    document.getElementById('statusText').textContent='JSON 无效 ✗';
+    return false;
+  }
+}
+
+function updateCount(){
+  document.getElementById('charCount').textContent=editor.value.length+' 字符';
+}
+
+editor.addEventListener('input',function(){validateJSON();updateCount();});
+
+editor.addEventListener('keydown',function(e){
+  if(e.key==='Tab'){
+    e.preventDefault();
+    var s=this.selectionStart,en=this.selectionEnd;
+    this.value=this.value.substring(0,s)+'  '+this.value.substring(en);
+    this.selectionStart=this.selectionEnd=s+2;
+  }
+});
+
+function doPreview(){
+  if(!validateJSON())return;
+  var def=JSON.parse(editor.value);
+  document.getElementById('previewArea').innerHTML='<div class="preview-placeholder">加载中...</div>';
+  fetch('/api/modes/custom/preview',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mode_def:def})
+  }).then(function(r){
+    if(!r.ok)throw new Error('Preview failed: '+r.status);
+    return r.blob();
+  }).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    document.getElementById('previewArea').innerHTML='<img src="'+url+'" alt="Preview">';
+  }).catch(function(e){
+    document.getElementById('previewArea').innerHTML='<div class="preview-placeholder" style="color:#dc2626">预览失败: '+e.message+'</div>';
+  });
+}
+
+function doSave(){
+  if(!validateJSON())return;
+  var def=JSON.parse(editor.value);
+  if(!def.mode_id){alert('请设置 mode_id');return;}
+  fetch('/api/modes/custom',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(def)
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok||d.status==='ok'){
+      document.getElementById('statusText').textContent='保存成功 ✓';
+      alert('模式 '+def.mode_id+' 保存成功！');
+    }else{
+      alert('保存失败: '+(d.error||d.message||'未知错误'));
+    }
+  }).catch(function(e){
+    alert('保存失败: '+e.message);
+  });
+}
+
+// Load quote template by default
+editor.value=JSON.stringify(TEMPLATES.quote,null,2);
+validateJSON();
+updateCount();
+</script>
+</body>
+</html>

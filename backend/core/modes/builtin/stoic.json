@@ -16,9 +16,15 @@
     "temperature": 0.8,
     "fallback": {
       "quote": "The impediment to action advances action. What stands in the way becomes the way.",
-      "author": "Marcus Aurelius",
-      "interpretation": "挡路的石头，本身就是路。"
-    }
+      "author": "Marcus Aurelius"
+    },
+    "fallback_pool": [
+      {"quote": "The impediment to action advances action. What stands in the way becomes the way.", "author": "Marcus Aurelius"},
+      {"quote": "We suffer more often in imagination than in reality.", "author": "Seneca"},
+      {"quote": "The happiness of your life depends upon the quality of your thoughts.", "author": "Marcus Aurelius"},
+      {"quote": "It is not that we have a short time to live, but that we waste a lot of it.", "author": "Seneca"},
+      {"quote": "Waste no more time arguing what a good man should be. Be one.", "author": "Marcus Aurelius"}
+    ]
   },
 
   "layout": {
@@ -28,20 +34,9 @@
         "type": "centered_text",
         "field": "quote",
         "font_name": "Lora-Regular.ttf",
-        "font_size": 15,
-        "max_width_ratio": 0.85,
-        "vertical_center": false
-      },
-      { "type": "spacer", "height": 8 },
-      { "type": "separator", "style": "short", "width": 50 },
-      { "type": "spacer", "height": 6 },
-      {
-        "type": "text",
-        "field": "interpretation",
-        "font": "noto_serif_light",
-        "font_size": 12,
-        "align": "center",
-        "max_lines": 2
+        "font_size": 20,
+        "max_width_ratio": 0.88,
+        "vertical_center": true
       }
     ],
     "footer": {

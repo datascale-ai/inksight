@@ -13,7 +13,14 @@
     "temperature": 0.85,
     "fallback": {
       "quote": "服务器也累了，和你一样需要休息。"
-    }
+    },
+    "fallback_pool": [
+      {"quote": "服务器也累了，和你一样需要休息。"},
+      {"quote": "加载中...就像你的人生一样，一直在加载。"},
+      {"quote": "404 找到了，你的动力没找到。"},
+      {"quote": "网络超时，和你的耐心一起。"},
+      {"quote": "系统繁忙，建议你也忙点正事。"}
+    ]
   },
 
   "layout": {
@@ -23,7 +30,7 @@
         "type": "centered_text",
         "field": "quote",
         "font_name": "NotoSerifSC-Bold.ttf",
-        "font_size": 15,
+        "font_size": 18,
         "max_width_ratio": 0.88,
         "vertical_center": true
       }
