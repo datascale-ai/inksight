@@ -43,6 +43,13 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .hist-actions button:hover{background:var(--bg)}
 .tc{margin-bottom:6px}
 .tcl{font-size:.68rem;color:var(--gy);margin-bottom:3px;font-weight:500}
+.mode-fold-toggle{margin-top:8px;padding:6px 12px;font-size:.75rem;border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--gy);cursor:pointer}
+.mode-fold-toggle:hover{border-color:var(--bk);color:var(--bk);background:var(--bg)}
+.mode-thumb{margin-top:10px;border:1px solid var(--bd);border-radius:10px;padding:10px;background:var(--bg)}
+.mode-thumb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.mode-thumb-title{font-size:.78rem;font-weight:600}
+.mode-thumb-desc{font-size:.7rem;color:var(--gy)}
+.mode-thumb-img{width:100%;max-height:140px;object-fit:contain;border:1px solid var(--bd);border-radius:6px;background:#fff}
 
 /* Toast notifications */
 #toastContainer{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
@@ -160,17 +167,21 @@ h1{font-size:1.8rem;margin-bottom:8px}
       <div class="wiz-field">
         <label>选择一个预设方案，稍后可以修改</label>
         <div class="wiz-presets">
-          <div class="wiz-preset selected" data-preset="relax" onclick="selectWizPreset(this)">
-            <strong>🎨 文艺模式</strong><br>
-            <span>ZEN + DAILY + POETRY + ARTWALL</span>
+          <div class="wiz-preset selected" data-preset="recommended" onclick="selectWizPreset(this)">
+            <strong>推荐模式</strong><br>
+            <span>DAILY + WEATHER + ZEN + STOIC + BRIEFING<br>最受欢迎的全能组合</span>
+          </div>
+          <div class="wiz-preset" data-preset="literary" onclick="selectWizPreset(this)">
+            <strong>文艺模式</strong><br>
+            <span>ZEN + POETRY + ARTWALL + ALMANAC<br>诗词画作与节气陪伴</span>
           </div>
           <div class="wiz-preset" data-preset="efficiency" onclick="selectWizPreset(this)">
-            <strong>⚡ 效率模式</strong><br>
-            <span>BRIEFING + COUNTDOWN + WEATHER</span>
+            <strong>效率模式</strong><br>
+            <span>BRIEFING + WEATHER + COUNTDOWN + DAILY<br>工作桌面常用信息</span>
           </div>
           <div class="wiz-preset" data-preset="minimal" onclick="selectWizPreset(this)">
-            <strong>🧘 极简模式</strong><br>
-            <span>STOIC + ZEN</span>
+            <strong>极简模式</strong><br>
+            <span>STOIC + ZEN<br>一字一句，安静陪伴</span>
           </div>
         </div>
       </div>
@@ -265,29 +276,52 @@ h1{font-size:1.8rem;margin-bottom:8px}
 
 <div class="fg">
 <label class="lbl">内容模式（多选）</label>
-<div class="cg" id="modes">
-<span class="ch" data-m="STOIC" data-tip="哲学箴言+当代解读" onclick="tc(this)">STOIC 斯多葛</span>
-<span class="ch" data-m="ROAST" data-tip="精准情境吐槽" onclick="tc(this)">ROAST 毒舌</span>
-<span class="ch" data-m="ZEN" data-tip="一字禅+意境出处" onclick="tc(this)">ZEN 禅意</span>
-<span class="ch" data-m="DAILY" data-tip="语录·书荐·冷知识" onclick="tc(this)">DAILY 每日</span>
-<span class="ch" data-m="BRIEFING" data-tip="科技热榜简报" onclick="tc(this)">BRIEFING 简报</span>
-<span class="ch" data-m="ARTWALL" data-tip="AI黑白艺术画" onclick="tc(this)">ARTWALL 画廊</span>
-<span class="ch" data-m="RECIPE" data-tip="早中晚三餐建议" onclick="tc(this)">RECIPE 食谱</span>
-<span class="ch" data-m="FITNESS" data-tip="居家训练计划" onclick="tc(this)">FITNESS 健身</span>
-<span class="ch" data-m="POETRY" data-tip="每日古诗词" onclick="tc(this)">POETRY 诗词</span>
-<span class="ch" data-m="COUNTDOWN" data-tip="重要日倒计时" onclick="tc(this)">COUNTDOWN 倒计时</span>
-<span class="ch" data-m="ALMANAC" data-tip="老黄历·宜忌·节气" onclick="tc(this)">ALMANAC 老黄历</span>
-<span class="ch" data-m="LETTER" data-tip="来自时空的慢信" onclick="tc(this)">LETTER 慢信</span>
-<span class="ch" data-m="THISDAY" data-tip="历史上的今天" onclick="tc(this)">THISDAY 今日历史</span>
-<span class="ch" data-m="RIDDLE" data-tip="谜语·脑筋急转弯" onclick="tc(this)">RIDDLE 猜谜</span>
-<span class="ch" data-m="QUESTION" data-tip="发人深省的每日一问" onclick="tc(this)">QUESTION 每日一问</span>
-<span class="ch" data-m="BIAS" data-tip="认知偏差科普" onclick="tc(this)">BIAS 认知偏差</span>
-<span class="ch" data-m="STORY" data-tip="三幕微型小说" onclick="tc(this)">STORY 微故事</span>
-<span class="ch" data-m="LIFEBAR" data-tip="人生进度可视化" onclick="tc(this)">LIFEBAR 进度条</span>
-<span class="ch" data-m="CHALLENGE" data-tip="5分钟微挑战" onclick="tc(this)">CHALLENGE 微挑战</span>
-<span class="ch" data-m="WEATHER" data-tip="天气看板预报" onclick="tc(this)">WEATHER 天气</span>
-<span class="ch" data-m="MEMO" data-tip="自定义便签" onclick="tc(this)">MEMO 便签</span>
-<span class="ch" data-m="HABIT" data-tip="习惯打卡" onclick="tc(this)">HABIT 打卡</span>
+<div id="modes">
+<div class="tc">
+<div class="tcl">推荐核心（10）</div>
+<div class="cg" id="modesCore">
+<span class="ch" data-m="DAILY" data-tip="语录、书籍推荐、冷知识的综合日报" onclick="tc(this)">DAILY 每日</span>
+<span class="ch" data-m="WEATHER" data-tip="实时天气和未来趋势看板" onclick="tc(this)">WEATHER 天气</span>
+<span class="ch" data-m="ZEN" data-tip="一个大字表达当下心境" onclick="tc(this)">ZEN 禅意</span>
+<span class="ch" data-m="BRIEFING" data-tip="科技热榜 + AI 洞察简报" onclick="tc(this)">BRIEFING 简报</span>
+<span class="ch" data-m="STOIC" data-tip="每日一句哲学箴言" onclick="tc(this)">STOIC 斯多葛</span>
+<span class="ch" data-m="POETRY" data-tip="古诗词与简短注解" onclick="tc(this)">POETRY 诗词</span>
+<span class="ch" data-m="ARTWALL" data-tip="根据时令生成黑白艺术画" onclick="tc(this)">ARTWALL 画廊</span>
+<span class="ch" data-m="ALMANAC" data-tip="农历、节气、宜忌信息" onclick="tc(this)">ALMANAC 老黄历</span>
+<span class="ch" data-m="RECIPE" data-tip="按时段推荐三餐方案" onclick="tc(this)">RECIPE 食谱</span>
+<span class="ch" data-m="COUNTDOWN" data-tip="重要日程倒计时/正计时" onclick="tc(this)">COUNTDOWN 倒计时</span>
+</div>
+</div>
+<div class="tc">
+<div class="tcl">工具模式</div>
+<div class="cg" id="modesTools">
+<span class="ch" data-m="MEMO" data-tip="展示自定义便签文字" onclick="tc(this)">MEMO 便签</span>
+<span class="ch" data-m="HABIT" data-tip="每日习惯完成进度" onclick="tc(this)">HABIT 打卡</span>
+</div>
+</div>
+<button type="button" class="mode-fold-toggle" id="modesMoreToggle" onclick="toggleMoreModes()">展开更多模式</button>
+<div class="tc" id="modesMoreWrap" style="display:none">
+<div class="tcl">更多模式</div>
+<div class="cg" id="modesMore">
+<span class="ch" data-m="ROAST" data-tip="轻松幽默的吐槽风格内容" onclick="tc(this)">ROAST 毒舌</span>
+<span class="ch" data-m="FITNESS" data-tip="居家健身动作与建议" onclick="tc(this)">FITNESS 健身</span>
+<span class="ch" data-m="LETTER" data-tip="来自不同时空的一封慢信" onclick="tc(this)">LETTER 慢信</span>
+<span class="ch" data-m="THISDAY" data-tip="历史上的今天重大事件" onclick="tc(this)">THISDAY 今日历史</span>
+<span class="ch" data-m="RIDDLE" data-tip="谜题与脑筋急转弯" onclick="tc(this)">RIDDLE 猜谜</span>
+<span class="ch" data-m="QUESTION" data-tip="值得思考的开放式问题" onclick="tc(this)">QUESTION 每日一问</span>
+<span class="ch" data-m="BIAS" data-tip="认知偏差与心理效应" onclick="tc(this)">BIAS 认知偏差</span>
+<span class="ch" data-m="STORY" data-tip="可在 30 秒内读完的微故事" onclick="tc(this)">STORY 微故事</span>
+<span class="ch" data-m="LIFEBAR" data-tip="年/月/周/人生进度条" onclick="tc(this)">LIFEBAR 进度条</span>
+<span class="ch" data-m="CHALLENGE" data-tip="每天一个 5 分钟微挑战" onclick="tc(this)">CHALLENGE 微挑战</span>
+</div>
+</div>
+<div class="mode-thumb" id="modeThumbPanel">
+<div class="mode-thumb-head">
+<span class="mode-thumb-title" id="modeThumbTitle">DAILY 每日</span>
+<span class="mode-thumb-desc" id="modeThumbDesc">语录、书籍推荐、冷知识的综合日报</span>
+</div>
+<img class="mode-thumb-img" id="modeThumbImg" alt="模式缩略图">
+</div>
 </div>
 </div>
 
@@ -473,7 +507,91 @@ const strategyDescs = {
   smart: '根据时间段自动匹配最佳模式（早餐建议/科技简报/运动计划等）'
 };
 
-const ALL_MODES = ['STOIC','ROAST','ZEN','DAILY','BRIEFING','ARTWALL','RECIPE','FITNESS','POETRY','COUNTDOWN','ALMANAC','LETTER','THISDAY','RIDDLE','QUESTION','BIAS','STORY','LIFEBAR','CHALLENGE','WEATHER','MEMO','HABIT'];
+const MODE_META = {
+  DAILY: { name: '每日', tip: '语录、书籍推荐、冷知识的综合日报' },
+  WEATHER: { name: '天气', tip: '实时天气和未来趋势看板' },
+  ZEN: { name: '禅意', tip: '一个大字表达当下心境' },
+  BRIEFING: { name: '简报', tip: '科技热榜 + AI 洞察简报' },
+  STOIC: { name: '斯多葛', tip: '每日一句哲学箴言' },
+  POETRY: { name: '诗词', tip: '古诗词与简短注解' },
+  ARTWALL: { name: '画廊', tip: '根据时令生成黑白艺术画' },
+  ALMANAC: { name: '老黄历', tip: '农历、节气、宜忌信息' },
+  RECIPE: { name: '食谱', tip: '按时段推荐三餐方案' },
+  COUNTDOWN: { name: '倒计时', tip: '重要日程倒计时/正计时' },
+  MEMO: { name: '便签', tip: '展示自定义便签文字' },
+  HABIT: { name: '打卡', tip: '每日习惯完成进度' },
+  ROAST: { name: '毒舌', tip: '轻松幽默的吐槽风格内容' },
+  FITNESS: { name: '健身', tip: '居家健身动作与建议' },
+  LETTER: { name: '慢信', tip: '来自不同时空的一封慢信' },
+  THISDAY: { name: '今日历史', tip: '历史上的今天重大事件' },
+  RIDDLE: { name: '猜谜', tip: '谜题与脑筋急转弯' },
+  QUESTION: { name: '每日一问', tip: '值得思考的开放式问题' },
+  BIAS: { name: '认知偏差', tip: '认知偏差与心理效应' },
+  STORY: { name: '微故事', tip: '可在 30 秒内读完的微故事' },
+  LIFEBAR: { name: '进度条', tip: '年/月/周/人生进度条' },
+  CHALLENGE: { name: '微挑战', tip: '每天一个 5 分钟微挑战' }
+};
+const CORE_MODE_IDS = ['DAILY','WEATHER','ZEN','BRIEFING','STOIC','POETRY','ARTWALL','ALMANAC','RECIPE','COUNTDOWN'];
+const TOOL_MODE_IDS = ['MEMO','HABIT'];
+const ALL_MODES = [...new Set([...CORE_MODE_IDS, ...TOOL_MODE_IDS, ...Object.keys(MODE_META)])];
+
+function getModeMeta(modeId) {
+  return MODE_META[modeId] || { name: modeId, tip: '' };
+}
+function getModeChipLabel(modeId) {
+  const meta = getModeMeta(modeId);
+  return `${modeId} ${meta.name}`;
+}
+function makeModeChip(modeId, label = '', tip = '') {
+  const meta = getModeMeta(modeId);
+  const chip = document.createElement('span');
+  chip.className = 'ch';
+  chip.dataset.m = modeId;
+  chip.dataset.tip = tip || meta.tip || '';
+  chip.onclick = function() { tc(this); };
+  chip.textContent = label || getModeChipLabel(modeId);
+  return chip;
+}
+function toggleMoreModes(forceOpen) {
+  const wrap = document.getElementById('modesMoreWrap');
+  const btn = document.getElementById('modesMoreToggle');
+  if (!wrap || !btn) return;
+  const open = typeof forceOpen === 'boolean' ? forceOpen : wrap.style.display === 'none';
+  wrap.style.display = open ? '' : 'none';
+  btn.textContent = open ? '收起更多模式' : '展开更多模式';
+}
+function ensureMoreModesVisibleForSelection() {
+  const hasExtraModeSelected = Array.from(document.querySelectorAll('#modes .ch.sel')).some(el => {
+    const modeId = el.dataset.m;
+    return modeId && !CORE_MODE_IDS.includes(modeId) && !TOOL_MODE_IDS.includes(modeId);
+  });
+  if (hasExtraModeSelected) toggleMoreModes(true);
+}
+function ensureModeChipExists(modeId) {
+  if (!modeId || CORE_MODE_IDS.includes(modeId) || TOOL_MODE_IDS.includes(modeId)) return;
+  if (document.querySelector(`#modes .ch[data-m="${modeId}"]`)) return;
+  const moreContainer = document.getElementById('modesMore');
+  if (!moreContainer) return;
+  moreContainer.appendChild(makeModeChip(modeId));
+}
+function updateModeThumbnail(modeId) {
+  if (!modeId) return;
+  const meta = getModeMeta(modeId);
+  const title = document.getElementById('modeThumbTitle');
+  const desc = document.getElementById('modeThumbDesc');
+  const img = document.getElementById('modeThumbImg');
+  if (!title || !desc || !img) return;
+  title.textContent = getModeChipLabel(modeId);
+  desc.textContent = meta.tip || '该模式暂无描述';
+  const fallbackSvg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="#f8f8f8"/><rect x="18" y="18" width="364" height="264" fill="none" stroke="#bbb"/><text x="200" y="140" text-anchor="middle" font-size="26" fill="#333">${modeId}</text><text x="200" y="172" text-anchor="middle" font-size="14" fill="#666">No static thumbnail</text></svg>`
+  );
+  img.onerror = () => {
+    img.onerror = null;
+    img.src = fallbackSvg;
+  };
+  img.src = `${API_BASE}/thumbs/${modeId.toLowerCase()}.png`;
+}
 
 // ── Toast notifications ──────────────────────────────────────
 
@@ -507,7 +625,14 @@ function closeConfirm(result) {
 
 // ── Basic UI helpers ─────────────────────────────────────────
 
-function tc(el) { el.classList.toggle('sel'); updateModeSections(); }
+function tc(el) {
+  el.classList.toggle('sel');
+  if (el.dataset.m) {
+    updateModeThumbnail(el.dataset.m);
+    ensureMoreModesVisibleForSelection();
+  }
+  updateModeSections();
+}
 
 function sp(el, group) {
   document.querySelectorAll(`#${group} .pi`).forEach(i => i.classList.remove('sel'));
@@ -544,7 +669,8 @@ function addTimeSlotRule(startHour=9, endHour=12, modes=[]) {
 
   let modesHtml = ALL_MODES.map(m => {
     const sel = modes.includes(m) ? ' sel' : '';
-    return `<span class="ch${sel}" data-m="${m}" onclick="tc(this)">${m}</span>`;
+    const tip = (getModeMeta(m).tip || '').replace(/"/g, '&quot;');
+    return `<span class="ch${sel}" data-m="${m}" data-tip="${tip}" onclick="tc(this)">${m}</span>`;
   }).join('');
 
   row.innerHTML = `
@@ -677,6 +803,7 @@ function fillForm(cfg) {
   document.getElementById('nickname').value = cfg.nickname || '';
   document.getElementById('city').value = cfg.city || '杭州';
   document.getElementById('interval').value = cfg.refresh_interval || 60;
+  (cfg.modes || []).forEach(modeId => ensureModeChipExists(modeId));
 
   // Modes
   document.querySelectorAll('#modes .ch').forEach(el => {
@@ -732,6 +859,9 @@ function fillForm(cfg) {
 
   // Show/hide mode-specific sections
   updateModeSections();
+  ensureMoreModesVisibleForSelection();
+  const firstMode = (cfg.modes || [])[0] || CORE_MODE_IDS[0];
+  updateModeThumbnail(firstMode);
 }
 
 function collectFormData() {
@@ -1092,21 +1222,22 @@ async function refreshModeList() {
 }
 
 function updateModeChips(modes) {
-  const container = document.getElementById('modes');
+  const container = document.getElementById('modesMore');
+  if (!container) return;
   const existing = new Set();
-  container.querySelectorAll('.ch').forEach(el => existing.add(el.dataset.m));
+  document.querySelectorAll('#modes .ch').forEach(el => existing.add(el.dataset.m));
 
   modes.forEach(m => {
-    if (!existing.has(m.mode_id)) {
-      const chip = document.createElement('span');
-      chip.className = 'ch';
-      chip.dataset.m = m.mode_id;
-      chip.dataset.tip = m.description || '';
-      chip.onclick = function() { tc(this); };
-      chip.textContent = `${m.mode_id} ${m.display_name}`;
-      container.appendChild(chip);
-    }
+    const modeId = (m.mode_id || '').toUpperCase();
+    if (!modeId) return;
+    if (CORE_MODE_IDS.includes(modeId) || TOOL_MODE_IDS.includes(modeId)) return;
+    if (existing.has(modeId)) return;
+    const label = `${modeId} ${m.display_name || getModeMeta(modeId).name || modeId}`;
+    const chip = makeModeChip(modeId, label, m.description || '');
+    container.appendChild(chip);
+    existing.add(modeId);
   });
+  ensureMoreModesVisibleForSelection();
 }
 
 function openModeEditor(modeId) {
@@ -1300,6 +1431,7 @@ async function showInlinePreview(mode) {
 updateModels();
 refreshModeList();
 loadDeviceList();
+updateModeThumbnail(CORE_MODE_IDS[0]);
 
 const urlParams = new URLSearchParams(window.location.search);
 const macParam = urlParams.get('mac');
@@ -1313,7 +1445,11 @@ function checkShowWizard(){
   // Show wizard if no config exists for current MAC
   var mac = new URLSearchParams(window.location.search).get('mac');
   if(!mac) return;
-  fetch('/api/config?mac='+encodeURIComponent(mac)).then(r=>r.json()).then(d=>{
+  fetch('/api/config/'+encodeURIComponent(mac)).then(r=>{
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('load failed');
+    return r.json();
+  }).then(d=>{
     if(!d || !d.modes || d.modes.length === 0){
       document.getElementById('setupWizard').style.display='flex';
     }
@@ -1338,13 +1474,14 @@ function selectWizPreset(el){
 
 function wizFinish(){
   var preset=document.querySelector('.wiz-preset.selected');
-  var presetName=preset?preset.dataset.preset:'relax';
+  var presetName=preset?preset.dataset.preset:'recommended';
   var presetModes={
-    relax:['ZEN','DAILY','POETRY','ARTWALL'],
-    efficiency:['BRIEFING','COUNTDOWN','WEATHER'],
+    recommended:['DAILY','WEATHER','ZEN','STOIC','BRIEFING'],
+    literary:['ZEN','POETRY','ARTWALL','ALMANAC'],
+    efficiency:['BRIEFING','WEATHER','COUNTDOWN','DAILY'],
     minimal:['STOIC','ZEN']
   };
-  var modes=presetModes[presetName]||presetModes.relax;
+  var modes=presetModes[presetName]||presetModes.recommended;
   var provider=document.getElementById('wizLlmProvider').value;
   var apiKey=document.getElementById('wizApiKey').value;
   var refresh=parseInt(document.getElementById('wizRefresh').value)||60;

@@ -175,6 +175,26 @@
       grid-template-columns: 1fr 1fr 1fr;
       gap: 5px;
     }
+    .persona-section { margin-bottom: 10px; }
+    .persona-section:last-of-type { margin-bottom: 0; }
+    .persona-section-title {
+      font-size: 0.64rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+      margin-bottom: 5px;
+    }
+    .persona-fold-toggle {
+      margin-top: 6px;
+      padding: 6px 10px;
+      font-size: 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text-secondary);
+      cursor: pointer;
+      width: 100%;
+    }
+    .persona-fold-toggle:hover { border-color: #a3a3a3; color: var(--text); }
     .persona-btn {
       padding: 8px 4px;
       font-size: 0.78rem;
@@ -425,76 +445,95 @@
             <!-- Persona -->
             <div class="form-group">
               <label class="form-label">Persona Mode</label>
-              <div class="persona-grid">
-                <button class="persona-btn" data-persona="AUTO" onclick="selectPersona(this)">
-                  AUTO<span class="label">自动选择</span>
-                </button>
-                <button class="persona-btn" data-persona="STOIC" onclick="selectPersona(this)">
-                  STOIC<span class="label">斯多葛</span>
-                </button>
-                <button class="persona-btn" data-persona="ROAST" onclick="selectPersona(this)">
-                  ROAST<span class="label">毒舌吐槽</span>
-                </button>
-                <button class="persona-btn" data-persona="ZEN" onclick="selectPersona(this)">
-                  ZEN<span class="label">禅意大字</span>
-                </button>
-                <button class="persona-btn active" data-persona="DAILY" onclick="selectPersona(this)">
-                  DAILY<span class="label">每日推荐</span>
-                </button>
-                <button class="persona-btn" data-persona="BRIEFING" onclick="selectPersona(this)">
-                  BRIEFING<span class="label">AI 简报</span>
-                </button>
-                <button class="persona-btn" data-persona="ARTWALL" onclick="selectPersona(this)">
-                  ARTWALL<span class="label">AI 画廊</span>
-                </button>
-                <button class="persona-btn" data-persona="RECIPE" onclick="selectPersona(this)">
-                  RECIPE<span class="label">每日食谱</span>
-                </button>
-                <button class="persona-btn" data-persona="FITNESS" onclick="selectPersona(this)">
-                  FITNESS<span class="label">健身计划</span>
-                </button>
-                <button class="persona-btn" data-persona="POETRY" onclick="selectPersona(this)">
-                  POETRY<span class="label">每日诗词</span>
-                </button>
-                <button class="persona-btn" data-persona="COUNTDOWN" onclick="selectPersona(this)">
-                  COUNTDOWN<span class="label">倒计时</span>
-                </button>
-                <button class="persona-btn" data-persona="WEATHER" onclick="selectPersona(this)">
-                  WEATHER<span class="label">天气看板</span>
-                </button>
-                <button class="persona-btn" data-persona="MEMO" onclick="selectPersona(this)">
-                  MEMO<span class="label">便签留言</span>
-                </button>
-                <button class="persona-btn" data-persona="HABIT" onclick="selectPersona(this)">
-                  HABIT<span class="label">习惯打卡</span>
-                </button>
-                <button class="persona-btn" data-persona="RIDDLE" onclick="selectPersona(this)">
-                  RIDDLE<span class="label">脑筋急转弯</span>
-                </button>
-                <button class="persona-btn" data-persona="CHALLENGE" onclick="selectPersona(this)">
-                  CHALLENGE<span class="label">每日挑战</span>
-                </button>
-                <button class="persona-btn" data-persona="STORY" onclick="selectPersona(this)">
-                  STORY<span class="label">微小说</span>
-                </button>
-                <button class="persona-btn" data-persona="LIFEBAR" onclick="selectPersona(this)">
-                  LIFEBAR<span class="label">人生进度</span>
-                </button>
-                <button class="persona-btn" data-persona="ALMANAC" onclick="selectPersona(this)">
-                  ALMANAC<span class="label">老黄历</span>
-                </button>
-                <button class="persona-btn" data-persona="THISDAY" onclick="selectPersona(this)">
-                  THISDAY<span class="label">历史上的今天</span>
-                </button>
-                <button class="persona-btn" data-persona="LETTER" onclick="selectPersona(this)">
-                  LETTER<span class="label">给未来的信</span>
-                </button>
-                <button class="persona-btn" data-persona="QUESTION" onclick="selectPersona(this)">
-                  QUESTION<span class="label">每日一问</span>
-                </button>
-                <button class="persona-btn" data-persona="BIAS" onclick="selectPersona(this)">
-                  BIAS<span class="label">认知偏差</span>
-                </button>
+              <div class="persona-section">
+                <div class="persona-section-title">自动</div>
+                <div class="persona-grid">
+                  <button class="persona-btn" data-persona="AUTO" onclick="selectPersona(this)">
+                    AUTO<span class="label">自动选择</span>
+                  </button>
+                </div>
+              </div>
+              <div class="persona-section">
+                <div class="persona-section-title">推荐核心（10）</div>
+                <div class="persona-grid">
+                  <button class="persona-btn active" data-persona="DAILY" onclick="selectPersona(this)">
+                    DAILY<span class="label">每日推荐</span>
+                  </button>
+                  <button class="persona-btn" data-persona="WEATHER" onclick="selectPersona(this)">
+                    WEATHER<span class="label">天气看板</span>
+                  </button>
+                  <button class="persona-btn" data-persona="ZEN" onclick="selectPersona(this)">
+                    ZEN<span class="label">禅意大字</span>
+                  </button>
+                  <button class="persona-btn" data-persona="BRIEFING" onclick="selectPersona(this)">
+                    BRIEFING<span class="label">AI 简报</span>
+                  </button>
+                  <button class="persona-btn" data-persona="STOIC" onclick="selectPersona(this)">
+                    STOIC<span class="label">斯多葛</span>
+                  </button>
+                  <button class="persona-btn" data-persona="POETRY" onclick="selectPersona(this)">
+                    POETRY<span class="label">每日诗词</span>
+                  </button>
+                  <button class="persona-btn" data-persona="ARTWALL" onclick="selectPersona(this)">
+                    ARTWALL<span class="label">AI 画廊</span>
+                  </button>
+                  <button class="persona-btn" data-persona="ALMANAC" onclick="selectPersona(this)">
+                    ALMANAC<span class="label">老黄历</span>
+                  </button>
+                  <button class="persona-btn" data-persona="RECIPE" onclick="selectPersona(this)">
+                    RECIPE<span class="label">每日食谱</span>
+                  </button>
+                  <button class="persona-btn" data-persona="COUNTDOWN" onclick="selectPersona(this)">
+                    COUNTDOWN<span class="label">倒计时</span>
+                  </button>
+                </div>
+              </div>
+              <div class="persona-section">
+                <div class="persona-section-title">工具模式</div>
+                <div class="persona-grid">
+                  <button class="persona-btn" data-persona="MEMO" onclick="selectPersona(this)">
+                    MEMO<span class="label">便签留言</span>
+                  </button>
+                  <button class="persona-btn" data-persona="HABIT" onclick="selectPersona(this)">
+                    HABIT<span class="label">习惯打卡</span>
+                  </button>
+                </div>
+              </div>
+              <button type="button" class="persona-fold-toggle" id="personaMoreToggle" onclick="togglePersonaMore()">展开更多模式</button>
+              <div class="persona-section" id="personaMoreWrap" style="display:none">
+                <div class="persona-section-title">更多模式</div>
+                <div class="persona-grid">
+                  <button class="persona-btn" data-persona="ROAST" onclick="selectPersona(this)">
+                    ROAST<span class="label">毒舌吐槽</span>
+                  </button>
+                  <button class="persona-btn" data-persona="FITNESS" onclick="selectPersona(this)">
+                    FITNESS<span class="label">健身计划</span>
+                  </button>
+                  <button class="persona-btn" data-persona="RIDDLE" onclick="selectPersona(this)">
+                    RIDDLE<span class="label">脑筋急转弯</span>
+                  </button>
+                  <button class="persona-btn" data-persona="CHALLENGE" onclick="selectPersona(this)">
+                    CHALLENGE<span class="label">每日挑战</span>
+                  </button>
+                  <button class="persona-btn" data-persona="STORY" onclick="selectPersona(this)">
+                    STORY<span class="label">微小说</span>
+                  </button>
+                  <button class="persona-btn" data-persona="LIFEBAR" onclick="selectPersona(this)">
+                    LIFEBAR<span class="label">人生进度</span>
+                  </button>
+                  <button class="persona-btn" data-persona="THISDAY" onclick="selectPersona(this)">
+                    THISDAY<span class="label">历史上的今天</span>
+                  </button>
+                  <button class="persona-btn" data-persona="LETTER" onclick="selectPersona(this)">
+                    LETTER<span class="label">给未来的信</span>
+                  </button>
+                  <button class="persona-btn" data-persona="QUESTION" onclick="selectPersona(this)">
+                    QUESTION<span class="label">每日一问</span>
+                  </button>
+                  <button class="persona-btn" data-persona="BIAS" onclick="selectPersona(this)">
+                    BIAS<span class="label">认知偏差</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -555,6 +594,10 @@
     let allModesRunning = false;
     let renderHistory = [];
     let currentResolution = { w: 400, h: 300, label: '4.2"' };
+    const CORE_PERSONA_MODES = ['DAILY','WEATHER','ZEN','BRIEFING','STOIC','POETRY','ARTWALL','ALMANAC','RECIPE','COUNTDOWN'];
+    const TOOL_PERSONA_MODES = ['MEMO','HABIT'];
+    const EXTRA_PERSONA_MODES = ['ROAST','FITNESS','RIDDLE','CHALLENGE','STORY','LIFEBAR','THISDAY','LETTER','QUESTION','BIAS'];
+    const ALL_PERSONA_MODES = [...CORE_PERSONA_MODES, ...TOOL_PERSONA_MODES, ...EXTRA_PERSONA_MODES];
 
     // ── DOM refs ────────────────────────────────────────────────
     const previewImg = document.getElementById('previewImg');
@@ -590,6 +633,22 @@
       document.querySelectorAll('.persona-grid .persona-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedPersona = btn.dataset.persona;
+      ensurePersonaMoreVisibleForSelected(selectedPersona);
+    }
+
+    function togglePersonaMore(forceOpen) {
+      const wrap = document.getElementById('personaMoreWrap');
+      const btn = document.getElementById('personaMoreToggle');
+      if (!wrap || !btn) return;
+      const open = typeof forceOpen === 'boolean' ? forceOpen : wrap.style.display === 'none';
+      wrap.style.display = open ? '' : 'none';
+      btn.textContent = open ? '收起更多模式' : '展开更多模式';
+    }
+
+    function ensurePersonaMoreVisibleForSelected(mode) {
+      if (EXTRA_PERSONA_MODES.includes(mode)) {
+        togglePersonaMore(true);
+      }
     }
 
     // ── Generate preview (with AbortController) ─────────────────
@@ -736,11 +795,12 @@
         const progressFill = document.getElementById('allModesFill');
         progressBar.style.display = 'block';
 
-        const modes = ['STOIC', 'ROAST', 'ZEN', 'DAILY', 'BRIEFING', 'ARTWALL', 'RECIPE', 'FITNESS', 'POETRY', 'COUNTDOWN', 'WEATHER', 'MEMO', 'HABIT', 'RIDDLE', 'CHALLENGE', 'STORY', 'LIFEBAR', 'ALMANAC', 'THISDAY', 'LETTER', 'QUESTION', 'BIAS'];
+        const modes = ALL_PERSONA_MODES;
         for (let i = 0; i < modes.length; i++) {
           if (!allModesRunning) break;
 
           selectedPersona = modes[i];
+          ensurePersonaMoreVisibleForSelected(selectedPersona);
           document.querySelectorAll('.persona-grid .persona-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.persona === modes[i]);
           });
