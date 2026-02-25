@@ -30,7 +30,8 @@ class TestContentCache:
 
     @pytest.mark.asyncio
     async def test_get_returns_none_when_empty(self, cache, config):
-        result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config)
+        with patch.object(cache, "_get_from_db", new_callable=AsyncMock, return_value=None):
+            result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config)
         assert result is None
 
     @pytest.mark.asyncio
@@ -50,7 +51,9 @@ class TestContentCache:
         key = cache._get_cache_key("AA:BB:CC:DD:EE:FF", "STOIC")
         cache._cache[key] = (img, datetime.now() - timedelta(hours=10))
 
-        result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config)
+        # Simulate persistent cache miss to validate in-memory TTL expiry behavior.
+        with patch.object(cache, "_get_from_db", new_callable=AsyncMock, return_value=None):
+            result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config)
         assert result is None
 
     @pytest.mark.asyncio
@@ -63,7 +66,8 @@ class TestContentCache:
         assert result is not None
 
         # Should be expired with 0 minutes TTL
-        result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config, ttl_minutes=0)
+        with patch.object(cache, "_get_from_db", new_callable=AsyncMock, return_value=None):
+            result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config, ttl_minutes=0)
         assert result is None
 
     def test_cache_key_format(self, cache):
@@ -99,7 +103,8 @@ class TestContentCache:
 
     @pytest.mark.asyncio
     async def test_check_and_regenerate_all_triggers_on_miss(self, cache, config):
-        with patch.object(cache, "_generate_all_modes", new_callable=AsyncMock) as mock_gen:
+        with patch.object(cache, "_get_from_db", new_callable=AsyncMock, return_value=None), \
+             patch.object(cache, "_generate_all_modes", new_callable=AsyncMock) as mock_gen:
             result = await cache.check_and_regenerate_all(
                 "AA:BB:CC:DD:EE:FF", config, 3.3
             )

@@ -1,28 +1,22 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { Suspense } from "react";
 
 function WidgetContent() {
   const searchParams = useSearchParams();
   const mac = searchParams.get("mac") || "";
   const mode = searchParams.get("mode") || "";
   const size = searchParams.get("size") || "medium";
-  const [imgSrc, setImgSrc] = useState("");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!mac) {
-      setError("Missing mac parameter");
-      return;
-    }
+  const error = mac ? "" : "Missing mac parameter";
+  const imgSrc = (() => {
+    if (!mac) return "";
     const apiBase = process.env.NEXT_PUBLIC_API_BASE || "";
     const params = new URLSearchParams();
     if (mode) params.set("mode", mode);
     if (size) params.set("size", size);
-    const url = `${apiBase}/api/widget/${encodeURIComponent(mac)}?${params.toString()}`;
-    setImgSrc(url);
-  }, [mac, mode, size]);
+    return `${apiBase}/api/widget/${encodeURIComponent(mac)}?${params.toString()}`;
+  })();
 
   if (error) {
     return (
