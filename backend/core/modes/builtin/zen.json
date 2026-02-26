@@ -38,6 +38,10 @@
         "vertical_center": true
       },
       {
+        "type": "spacer",
+        "height": 10
+      },
+      {
         "type": "text",
         "field": "source",
         "font": "noto_serif_light",

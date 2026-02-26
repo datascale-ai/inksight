@@ -613,10 +613,28 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
     x = int(block.get("x", (ctx.screen_w - width) // 2))
     y = int(block.get("y", ctx.y))
     try:
-        with httpx.Client(timeout=8.0, follow_redirects=True) as client:
-            resp = client.get(image_url)
-        if resp.status_code >= 400:
-            raise ValueError(f"HTTP {resp.status_code}")
+        resp = None
+        last_error = None
+        attempts = [
+            {"trust_env": True, "timeout": httpx.Timeout(connect=8.0, read=12.0, write=8.0, pool=8.0)},
+            {"trust_env": False, "timeout": httpx.Timeout(connect=12.0, read=18.0, write=10.0, pool=10.0)},
+        ]
+        for opts in attempts:
+            try:
+                with httpx.Client(
+                    timeout=opts["timeout"],
+                    follow_redirects=True,
+                    trust_env=opts["trust_env"],
+                ) as client:
+                    resp = client.get(image_url)
+                if resp.status_code >= 400:
+                    raise ValueError(f"HTTP {resp.status_code}")
+                break
+            except Exception as e:
+                last_error = e
+                resp = None
+        if resp is None:
+            raise last_error if last_error else ValueError("image fetch failed")
         from io import BytesIO
         img = Image.open(BytesIO(resp.content)).convert("L").resize((width, height))
         mono = img.convert("1")

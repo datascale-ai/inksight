@@ -172,8 +172,10 @@ void updateTimeDisplay() {
 
     int charW = 5;
     int gap = 1;
-    int sx = 4;
-    int sy = (rgnH - 7) / 2;
+    int sx = int(W * 0.03f) - TIME_RGN_X0 - 4;
+    int sy = int(H * 0.03f) - TIME_RGN_Y0 + 5;
+    if (sx < 0) sx = 0;
+    if (sy < 0) sy = 0;
 
     for (int ci = 0; ci < 8; ci++) {
         const uint8_t *g = getGlyph(ts[ci]);

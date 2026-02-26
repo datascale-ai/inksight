@@ -268,7 +268,12 @@ async def get_weather_forecast(
 
 
 def calc_battery_pct(voltage: float) -> int:
-    return int(voltage / 3.30 * 100)
+    pct = int(voltage / 3.30 * 100)
+    if pct < 0:
+        return 0
+    if pct > 100:
+        return 100
+    return pct
 
 
 def choose_persona(weekday: int, hour: int) -> str:
