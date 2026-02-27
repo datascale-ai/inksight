@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import io
 import logging
 import os
@@ -47,6 +48,7 @@ class ContentCache:
         self, mac: str, persona: str,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> str:
+        persona = (persona or "").upper()
         if screen_w == SCREEN_WIDTH and screen_h == SCREEN_HEIGHT:
             return f"{mac}:{persona}"
         return f"{mac}:{persona}:{screen_w}x{screen_h}"
@@ -74,7 +76,7 @@ class ContentCache:
                 if ttl_minutes is None:
                     ttl_minutes = self._get_ttl_minutes(config)
                 if datetime.now() - timestamp < timedelta(minutes=ttl_minutes):
-                    return img
+                    return img.copy()
                 else:
                     logger.debug(f"[CACHE] {key} expired (TTL={ttl_minutes}min)")
                     del self._cache[key]
@@ -83,7 +85,7 @@ class ContentCache:
                 img = await self._get_from_db(key)
                 if img:
                     self._cache[key] = (img, datetime.now())
-                    return img
+                    return img.copy()
             except Exception:
                 pass
             return None
@@ -95,9 +97,10 @@ class ContentCache:
         """Store image in cache"""
         async with self._lock:
             key = self._get_cache_key(mac, persona, screen_w, screen_h)
-            self._cache[key] = (img, datetime.now())
+            img_copy = img.copy()
+            self._cache[key] = (img_copy, datetime.now())
             try:
-                await self._save_to_db(key, img)
+                await self._save_to_db(key, img_copy)
             except Exception:
                 pass
 
@@ -107,7 +110,7 @@ class ContentCache:
     ) -> bool:
         """Check if all modes are cached, if not, regenerate all modes"""
         cacheable = get_cacheable_modes()
-        modes = [m for m in config.get("modes", DEFAULT_MODES) if m in cacheable]
+        modes = [m.upper() for m in config.get("modes", DEFAULT_MODES) if m.upper() in cacheable]
 
         if not modes:
             return False
@@ -150,7 +153,7 @@ class ContentCache:
 
         tasks = [
             self._generate_single_mode(
-                mac, persona, battery_pct, config, date_ctx, weather,
+                mac, persona, battery_pct, copy.deepcopy(config), copy.deepcopy(date_ctx), copy.deepcopy(weather),
                 screen_w, screen_h,
             )
             for persona in modes
@@ -198,7 +201,9 @@ class ContentCache:
             if not row:
                 return None
             try:
-                return Image.open(io.BytesIO(row[0]))
+                img = Image.open(io.BytesIO(row[0]))
+                img.load()
+                return img
             except Exception:
                 return None
 

@@ -19,7 +19,7 @@ class TestCalcBatteryPct:
         assert calc_battery_pct(0.0) == 0
 
     def test_over_voltage(self):
-        assert calc_battery_pct(4.2) > 100
+        assert calc_battery_pct(4.2) == 100
 
 
 class TestResolveCity:

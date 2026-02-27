@@ -16,6 +16,7 @@ from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 import httpx
 from PIL import Image
+from PIL import ImageDraw
 
 logging.basicConfig(
     level=logging.INFO,
@@ -838,6 +839,24 @@ async def dashboard_page():
 @app.get("/editor", response_class=HTMLResponse)
 async def editor_page():
     return HTMLResponse(content=_load_web_page_html("editor.html"))
+
+
+@app.get("/thumbs/{filename}")
+async def get_thumb(filename: str):
+    project_root = Path(__file__).resolve().parent.parent.parent
+    thumb_path = project_root / "webconfig" / "thumbs" / filename
+    if thumb_path.exists() and thumb_path.is_file():
+        return Response(content=thumb_path.read_bytes(), media_type="image/png")
+
+    mode_name = Path(filename).stem.upper() if filename else "MODE"
+    img = Image.new("L", (400, 300), 248)
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([(18, 18), (382, 282)], outline=180, width=1)
+    draw.text((170, 130), mode_name[:16], fill=40)
+    draw.text((110, 165), "No static thumbnail", fill=110)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 def _load_web_page_html(filename: str) -> str:

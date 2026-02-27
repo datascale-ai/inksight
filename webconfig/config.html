@@ -608,6 +608,28 @@ function showToast(msg, type='info', duration=3000) {
   }, duration);
 }
 
+function formatApiError(payload) {
+  if (!payload) return '';
+  if (typeof payload === 'string') return payload;
+
+  if (Array.isArray(payload.detail) && payload.detail.length > 0) {
+    const first = payload.detail[0];
+    if (first?.msg && Array.isArray(first?.loc)) {
+      const fieldPath = first.loc
+        .slice(1)
+        .map((x, i) => (typeof x === 'number' ? `[${x}]` : (i === 0 ? String(x) : `.${x}`)))
+        .join('');
+      return `${fieldPath || 'body'}: ${first.msg}`;
+    }
+    if (first?.msg) return first.msg;
+  }
+
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (typeof payload.message === 'string') return payload.message;
+  if (typeof payload.error === 'string') return payload.error;
+  return '';
+}
+
 // ── Confirm dialog (replaces native confirm) ─────────────────
 
 let _confirmResolve = null;
@@ -658,6 +680,19 @@ function updateModels() {
   });
 }
 
+function normalizeArrayField(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  return [];
+}
+
 // ── Time slot rule editor ────────────────────────────────────
 
 function addTimeSlotRule(startHour=9, endHour=12, modes=[]) {
@@ -700,7 +735,7 @@ function getTimeSlotRules() {
 function fillTimeSlotRules(rules) {
   const container = document.getElementById('timeSlotRules');
   container.innerHTML = '';
-  (rules || []).forEach(r => {
+  normalizeArrayField(rules).forEach(r => {
     addTimeSlotRule(r.startHour || 0, r.endHour || 24, r.modes || []);
   });
 }
@@ -849,10 +884,10 @@ function fillForm(cfg) {
   document.getElementById('llmModel').value = cfg.llm_model || 'deepseek-chat';
 
   // Countdown events
-  fillCountdownEvents(cfg.countdown_events || cfg.countdownEvents || []);
+  fillCountdownEvents(cfg.countdownEvents ?? cfg.countdown_events ?? []);
 
   // Time slot rules
-  fillTimeSlotRules(cfg.time_slot_rules || cfg.timeSlotRules || []);
+  fillTimeSlotRules(cfg.time_slot_rules ?? cfg.timeSlotRules ?? []);
 
   // Memo text
   document.getElementById('memoText').value = cfg.memo_text || cfg.memoText || '';
@@ -870,7 +905,10 @@ function collectFormData() {
   document.querySelectorAll('#modes .ch.sel').forEach(el => modes.push(el.dataset.m));
 
   const characterTones = [];
-  document.querySelectorAll('#configForm .tc .ch.sel').forEach(el => characterTones.push(el.dataset.t));
+  document.querySelectorAll('#configForm .tc .ch.sel').forEach(el => {
+    const tone = (el.dataset.t || '').trim();
+    if (tone) characterTones.push(tone);
+  });
   const custTone = document.getElementById('custTone').value.trim();
   if (custTone) {
     custTone.split(/[,，、]/).forEach(t => { const trimmed = t.trim(); if (trimmed) characterTones.push(trimmed); });
@@ -912,8 +950,27 @@ async function saveConfig() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error('保存失败');
-    showToast('配置保存成功！设备将在下次刷新时应用', 'success');
+    if (!res.ok) {
+      let errMsg = '保存失败';
+      try {
+        const body = await res.json();
+        const detail = formatApiError(body);
+        if (detail) errMsg = detail;
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
+    // Best-effort auto refresh after successful save.
+    let refreshQueued = false;
+    try {
+      const refreshRes = await fetch(`${API_BASE}/api/device/${encodeURIComponent(data.mac)}/refresh`, { method: 'POST' });
+      refreshQueued = refreshRes.ok;
+    } catch (_) {}
+
+    if (refreshQueued) {
+      showToast('配置保存成功！已发送刷新指令，设备将尽快刷新（也可手动点击 BOOT 立即刷新）', 'success');
+    } else {
+      showToast('配置保存成功！设备将在下次刷新时应用', 'success');
+    }
   } catch (e) {
     showToast('保存失败: ' + e.message, 'error');
   }
@@ -926,9 +983,9 @@ async function triggerRefresh() {
   if (!mac) { showToast('请先输入 MAC 地址', 'error'); return; }
 
   try {
-    const res = await fetch(`${API_BASE}/api/device/${mac}/refresh`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/api/device/${encodeURIComponent(mac)}/refresh`, { method: 'POST' });
     if (!res.ok) throw new Error('请求失败');
-    showToast('刷新指令已发送，设备将在下次唤醒时刷新', 'success');
+    showToast('刷新指令已发送，设备将在下次唤醒时刷新（也可手动点击 BOOT 立即刷新）', 'success');
   } catch (e) {
     showToast('发送失败: ' + e.message, 'error');
   }
@@ -1061,7 +1118,7 @@ function getCountdownEvents() {
 function fillCountdownEvents(events) {
   const container = document.getElementById('countdownEvents');
   container.innerHTML = '';
-  (events || []).forEach(evt => {
+  normalizeArrayField(events).forEach(evt => {
     addCountdownEvent(evt.name || '', evt.date || '', evt.type || 'countdown');
   });
 }

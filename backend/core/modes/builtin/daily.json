@@ -67,11 +67,15 @@
         "right": [
           { "type": "text", "field": "quote", "font_size": 14, "align": "left", "margin_x": 6, "max_lines": 4 },
           { "type": "text", "template": "— {author}", "font_size": 11, "align": "right", "margin_x": 6, "max_lines": 1 },
-          { "type": "separator", "style": "short", "width": 80 },
+          { "type": "spacer", "height": 4 },
+          { "type": "separator", "style": "dashed", "margin_x": 12 },
+          { "type": "spacer", "height": 4 },
           { "type": "text", "field": "book_title", "font_size": 13, "align": "left", "margin_x": 6, "max_lines": 2 },
           { "type": "text", "field": "book_author", "font_size": 11, "align": "left", "margin_x": 6, "max_lines": 1 },
           { "type": "text", "field": "book_desc", "font_size": 11, "align": "left", "margin_x": 6, "max_lines": 2 },
-          { "type": "separator", "style": "short", "width": 80 },
+          { "type": "spacer", "height": 4 },
+          { "type": "separator", "style": "dashed", "margin_x": 12 },
+          { "type": "spacer", "height": 4 },
           { "type": "text", "field": "tip", "font_size": 11, "align": "left", "margin_x": 6, "max_lines": 2 }
         ]
       }

@@ -45,6 +45,8 @@ class TestConfigStore:
         assert config["nickname"] == "Test"
         assert "STOIC" in config["modes"]
         assert config["refresh_strategy"] == "cycle"
+        assert isinstance(config["countdown_events"], list)
+        assert isinstance(config["countdownEvents"], list)
 
     @pytest.mark.asyncio
     async def test_save_deactivates_old(self):
@@ -95,3 +97,24 @@ class TestConfigStore:
         await init_db()
         ok = await activate_config("AA:BB:CC:DD:EE:FF", 9999)
         assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_get_config_parses_legacy_json_string_fields(self):
+        await init_db()
+        mac = "11:22:33:44:55:66"
+        await save_config(
+            mac,
+            {
+                "modes": ["COUNTDOWN"],
+                "refreshStrategy": "random",
+                "countdownEvents": [{"name": "测试日", "date": "2030-01-01", "type": "countdown"}],
+                "timeSlotRules": [{"startHour": 9, "endHour": 12, "modes": ["DAILY"]}],
+            },
+        )
+
+        config = await get_active_config(mac)
+        assert isinstance(config["countdown_events"], list)
+        assert isinstance(config["countdownEvents"], list)
+        assert config["countdown_events"][0]["name"] == "测试日"
+        assert isinstance(config["time_slot_rules"], list)
+        assert config["time_slot_rules"][0]["modes"] == ["DAILY"]

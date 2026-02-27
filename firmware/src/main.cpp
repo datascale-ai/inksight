@@ -19,6 +19,7 @@ uint8_t imgBuf[IMG_BUF_LEN];
 static unsigned long cfgBtnPressStart   = 0;
 static unsigned long setupDoneMillis    = 0;
 static unsigned long lastShortPressTime = 0;
+static unsigned long lastClockTickMillis = 0;
 static int           clickCount         = 0;
 static bool          pendingRefresh     = false;
 static bool          pendingNextMode    = false;
@@ -144,19 +145,18 @@ void setup() {
     Serial.println("Display done");
 
     syncNTP();
+    updateTimeDisplay();
+    lastClockTickMillis = millis();
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 
-#if DEBUG_MODE
-    // DEBUG: stay awake with delay loop so USB CDC serial monitor keeps working.
-    // Deep sleep kills the USB connection on ESP32-C3, making serial output invisible.
     setupDoneMillis = millis();
+#if DEBUG_MODE
     Serial.printf("[DEBUG] Staying awake, refresh every %d min (user config: %d min)\n",
                   DEBUG_REFRESH_MIN, cfgSleepMin);
 #else
-    Serial.printf("Entering deep sleep for %d min\n", cfgSleepMin);
-    enterDeepSleep(cfgSleepMin);
+    Serial.printf("Staying awake, refresh every %d min\n", cfgSleepMin);
 #endif
 }
 
@@ -173,8 +173,6 @@ void loop() {
         return;
     }
 
-#if DEBUG_MODE
-    // DEBUG: delay-based polling keeps USB CDC alive for serial monitor
     checkConfigButton();
 
     // Handle button-triggered actions
@@ -191,19 +189,34 @@ void loop() {
         setupDoneMillis = millis();
     }
 
-    unsigned long refreshInterval = (unsigned long)DEBUG_REFRESH_MIN * 60000UL;
+    unsigned long now = millis();
+    bool timeChanged = false;
+    while (now - lastClockTickMillis >= 1000UL) {
+        tickTime();
+        lastClockTickMillis += 1000UL;
+        timeChanged = true;
+    }
+    if (timeChanged) {
+        updateTimeDisplay();
+    }
+
+    unsigned long refreshInterval = 0;
+#if DEBUG_MODE
+    refreshInterval = (unsigned long)DEBUG_REFRESH_MIN * 60000UL;
+#else
+    refreshInterval = (unsigned long)cfgSleepMin * 60000UL;
+#endif
     if (millis() - setupDoneMillis >= refreshInterval) {
+#if DEBUG_MODE
         Serial.printf("[DEBUG] %d min elapsed, refreshing content...\n", DEBUG_REFRESH_MIN);
+#else
+        Serial.printf("%d min elapsed, refreshing content...\n", cfgSleepMin);
+#endif
         triggerImmediateRefresh();
         setupDoneMillis = millis();
     }
 
     delay(50);
-#else
-    // Production: should never reach here — setup() enters deep sleep.
-    Serial.println("Unexpected loop() entry, entering deep sleep");
-    enterDeepSleep(cfgSleepMin);
-#endif
 }
 
 // ── Deep sleep helper ───────────────────────────────────────
@@ -254,6 +267,8 @@ static void triggerImmediateRefresh(bool nextMode) {
             ledFeedback("success");
             Serial.println("Display done");
             syncNTP();
+            updateTimeDisplay();
+            lastClockTickMillis = millis();
         } else {
             ledFeedback("fail");
             Serial.println("Fetch failed, keeping old content");
