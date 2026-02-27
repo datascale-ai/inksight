@@ -1,0 +1,91 @@
+{
+  "mode_id": "WORD_OF_THE_DAY",
+  "display_name": "每日一词",
+  "icon": "book",
+  "cacheable": true,
+  "description": "每日精选一个英语单词，展示其拼写与释义",
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位英语语言专家。根据当前情境，精选一个值得学习的英语单词，并提供其简明释义。\n用 JSON 输出：{{\"word\": \"单词拼写\", \"phonetic\": \"音标（可选）\", \"definition\": \"简明中文释义（15字以内）\", \"example\": \"简短英文例句（可选，20词以内）\"}}\n确保单词适合日常学习。\n环境：{context}",
+    "output_schema": {
+      "word": {
+        "type": "string",
+        "default": "Serendipity"
+      },
+      "phonetic": {
+        "type": "string",
+        "default": "/ˌser.ənˈdɪp.ə.ti/"
+      },
+      "definition": {
+        "type": "string",
+        "default": "意外发现美好事物的能力"
+      },
+      "example": {
+        "type": "string",
+        "default": "Traveling is full of serendipity."
+      }
+    },
+    "temperature": 0.8,
+    "fallback": {
+      "word": "Serendipity",
+      "phonetic": "/ˌser.ənˈdɪp.ə.ti/",
+      "definition": "意外发现美好事物的能力",
+      "example": "Traveling is full of serendipity."
+    }
+  },
+  "layout": {
+    "status_bar": {
+      "line_width": 1
+    },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "word",
+        "font": "noto_serif_bold",
+        "font_size": 64,
+        "max_width_ratio": 0.9,
+        "vertical_center": true
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "text",
+        "field": "phonetic",
+        "font": "noto_serif_light",
+        "font_size": 11,
+        "align": "center",
+        "max_lines": 1
+      },
+      {
+        "type": "spacer",
+        "height": 20
+      },
+      {
+        "type": "text",
+        "field": "definition",
+        "font": "noto_serif_regular",
+        "font_size": 16,
+        "align": "center",
+        "max_lines": 2
+      },
+      {
+        "type": "spacer",
+        "height": 15
+      },
+      {
+        "type": "text",
+        "field": "example",
+        "font": "lora_italic",
+        "font_size": 12,
+        "align": "center",
+        "max_lines": 2
+      }
+    ],
+    "footer": {
+      "label": "WORD",
+      "attribution_template": "— Daily Learning"
+    }
+  }
+}

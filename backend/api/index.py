@@ -738,6 +738,46 @@ async def delete_custom_mode(mode_id: str):
     return {"ok": True, "mode_id": mode_id}
 
 
+@app.post("/api/modes/generate")
+async def generate_mode(body: dict):
+    """Use AI to generate a mode definition from natural language description."""
+    description = body.get("description", "").strip()
+    if not description:
+        return JSONResponse({"error": "description is required"}, status_code=400)
+    if len(description) > 2000:
+        return JSONResponse(
+            {"error": "description too long (max 2000 chars)"}, status_code=400
+        )
+
+    image_base64 = body.get("image_base64")
+    if image_base64 and len(image_base64) > 5 * 1024 * 1024:
+        return JSONResponse(
+            {"error": "image too large (max 4MB)"}, status_code=400
+        )
+
+    provider = body.get("provider", "deepseek")
+    model = body.get("model", "deepseek-chat")
+
+    from core.mode_generator import generate_mode_definition
+
+    try:
+        result = await generate_mode_definition(
+            description=description,
+            image_base64=image_base64,
+            provider=provider,
+            model=model,
+        )
+        return result
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.exception("[MODE_GEN] Failed to generate mode")
+        return JSONResponse(
+            {"error": f"生成失败: {type(e).__name__}: {str(e)[:200]}"},
+            status_code=500,
+        )
+
+
 # ── Misc endpoints ───────────────────────────────────────────
 
 
