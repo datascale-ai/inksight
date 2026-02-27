@@ -71,6 +71,9 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .modal-content{background:#fff;border-radius:16px;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .modal-content h3{font-size:1.1rem;margin-bottom:12px}
 .modal-close{float:right;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gy)}
+/* Keep preview above mode editor when both are open */
+#modeEditorModal{z-index:1000}
+#previewModal{z-index:1010}
 
 /* Confirm dialog */
 .confirm-bar{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
@@ -98,6 +101,31 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .json-editor{width:100%;min-height:260px;font-family:'Menlo','Monaco','Courier New',monospace;font-size:.8rem;padding:12px;border:1px solid var(--bd);border-radius:10px;background:#fafaf7;resize:vertical;line-height:1.5;tab-size:2}
 .json-editor:focus{border-color:var(--bk);outline:none}
 .json-error{font-size:.75rem;color:var(--red);margin-top:4px;min-height:1.1em}
+
+/* Editor tabs & AI generate panel */
+.editor-tabs{display:flex;border-bottom:1px solid var(--bd);margin-bottom:12px}
+.editor-tab{padding:8px 16px;font-size:.85rem;cursor:pointer;border:none;border-bottom:2px solid transparent;color:var(--gy);background:none}
+.editor-tab:hover{color:var(--bk)}
+.editor-tab.active{color:var(--bk);border-bottom-color:var(--bk);font-weight:600}
+.ai-gen-panel,.manual-panel{display:none}
+.ai-gen-panel.active,.manual-panel.active{display:block}
+.ai-desc-input{width:100%;min-height:100px;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);font-size:.85rem;resize:vertical;font-family:inherit;line-height:1.5}
+.ai-desc-input:focus{border-color:var(--bk);outline:none}
+.ai-desc-input::placeholder{color:#bbb}
+.ai-img-upload{border:2px dashed var(--bd);border-radius:10px;padding:20px;text-align:center;cursor:pointer;color:var(--gy);font-size:.82rem;transition:border-color .2s}
+.ai-img-upload:hover{border-color:var(--bk)}
+.ai-img-upload.has-image{border-style:solid;padding:8px}
+.ai-img-preview{max-width:100%;max-height:150px;border-radius:6px;margin-top:8px}
+.ai-gen-btn{width:100%;padding:12px;font-size:.9rem;font-weight:600;color:#fff;background:var(--bk);border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.ai-gen-btn:hover{background:#333}
+.ai-gen-btn:disabled{opacity:.6;cursor:not-allowed}
+.ai-gen-btn .spinner{width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:aispin .6s linear infinite;display:none}
+.ai-gen-btn.loading .spinner{display:inline-block}
+.ai-gen-btn.loading .btn-text{display:none}
+@keyframes aispin{to{transform:rotate(360deg)}}
+.ai-gen-result{margin-top:12px;padding:12px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;display:none}
+.ai-gen-result.show{display:block}
+
 .tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px}
 .tpl-card{padding:10px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;background:#fff;text-align:center}
 .tpl-card:hover{border-color:var(--bk);background:var(--bg)}
@@ -466,26 +494,71 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <button class="modal-close" onclick="closeModeEditor()">&times;</button>
 <h3 id="modeEditorTitle">新建自定义模式</h3>
 
-<div style="margin:12px 0">
-<label class="lbl">从模板开始</label>
-<div class="tpl-grid">
-<div class="tpl-card" onclick="fillModeTemplate('quote')"><strong>语录模式</strong><span>居中文本 + 作者</span></div>
-<div class="tpl-card" onclick="fillModeTemplate('list')"><strong>列表模式</strong><span>标题 + 项目列表</span></div>
-<div class="tpl-card" onclick="fillModeTemplate('zen')"><strong>极简模式</strong><span>大字居中单字</span></div>
-<div class="tpl-card" onclick="fillModeTemplate('sections')"><strong>分栏模式</strong><span>多区块 + 图标</span></div>
-</div>
+<!-- Tabs -->
+<div class="editor-tabs">
+  <button class="editor-tab active" onclick="switchEditorTab('ai')" id="tabAi">AI 生成</button>
+  <button class="editor-tab" onclick="switchEditorTab('manual')" id="tabManual">手动编辑</button>
 </div>
 
-<div class="fg">
-<label class="lbl">模式定义 (JSON)</label>
-<textarea class="json-editor" id="modeJsonIn" spellcheck="false" oninput="validateModeJson()"></textarea>
-<div class="json-error" id="modeJsonError"></div>
+<!-- AI Generate Panel -->
+<div class="ai-gen-panel active" id="aiGenPanel">
+  <div class="fg">
+    <label class="lbl">描述你想要的模式</label>
+    <textarea class="ai-desc-input" id="aiDescInput" placeholder="例如：我想要一个每天显示一个英语单词和释义的模式，单词要大号字体居中显示，下面显示中文释义和一个例句。" maxlength="2000"></textarea>
+    <div style="font-size:.72rem;color:var(--gy);margin-top:4px">支持中文或英文描述，越详细效果越好（最多 2000 字）</div>
+  </div>
+
+  <div class="fg">
+    <label class="lbl">参考图片（可选）</label>
+    <div class="ai-img-upload" id="aiImgUpload" onclick="document.getElementById('aiImgFile').click()">
+      <div id="aiImgPlaceholder">点击上传参考图片<br><span style="font-size:.7rem">支持 PNG / JPG，最大 4MB</span></div>
+      <img id="aiImgPreview" class="ai-img-preview" style="display:none">
+      <input type="file" id="aiImgFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="handleAiImageUpload(event)">
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:4px">
+      <button id="aiImgClear" style="display:none;font-size:.72rem;color:var(--red);border:none;background:none;cursor:pointer" onclick="clearAiImage()">移除图片</button>
+    </div>
+  </div>
+
+  <button class="ai-gen-btn" id="aiGenBtn" onclick="generateModeWithAI()">
+    <span class="spinner"></span>
+    <span class="btn-text">AI 生成模式</span>
+  </button>
+
+  <div class="ai-gen-result" id="aiGenResult">
+    <div style="font-size:.82rem;font-weight:600;color:#15803d;margin-bottom:6px">生成成功！JSON 已填入编辑器</div>
+    <div style="font-size:.78rem;color:var(--gy)">请切换到「手动编辑」检查并调整，然后保存或预览。</div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-outline" onclick="switchEditorTab('manual')" style="flex:1;padding:8px;font-size:.82rem">查看 / 编辑 JSON</button>
+      <button class="btn" onclick="saveModeDefinition()" style="flex:1;padding:8px;font-size:.82rem">直接保存</button>
+    </div>
+  </div>
 </div>
 
-<div style="display:flex;gap:8px">
-<button class="btn" onclick="saveModeDefinition()" style="flex:1">保存模式</button>
-<button class="btn btn-outline" onclick="previewCustomMode()" style="flex:1">预览效果</button>
+<!-- Manual Edit Panel -->
+<div class="manual-panel" id="manualPanel">
+  <div style="margin:12px 0">
+    <label class="lbl">从模板开始</label>
+    <div class="tpl-grid">
+      <div class="tpl-card" onclick="fillModeTemplate('quote')"><strong>语录模式</strong><span>居中文本 + 作者</span></div>
+      <div class="tpl-card" onclick="fillModeTemplate('list')"><strong>列表模式</strong><span>标题 + 项目列表</span></div>
+      <div class="tpl-card" onclick="fillModeTemplate('zen')"><strong>极简模式</strong><span>大字居中单字</span></div>
+      <div class="tpl-card" onclick="fillModeTemplate('sections')"><strong>分栏模式</strong><span>多区块 + 图标</span></div>
+    </div>
+  </div>
+
+  <div class="fg">
+    <label class="lbl">模式定义 (JSON)</label>
+    <textarea class="json-editor" id="modeJsonIn" spellcheck="false" oninput="validateModeJson()"></textarea>
+    <div class="json-error" id="modeJsonError"></div>
+  </div>
+
+  <div style="display:flex;gap:8px">
+    <button class="btn" onclick="saveModeDefinition()" style="flex:1">保存模式</button>
+    <button class="btn btn-outline" onclick="previewCustomMode()" style="flex:1">预览效果</button>
+  </div>
 </div>
+
 </div>
 </div>
 
@@ -1302,7 +1375,18 @@ function openModeEditor(modeId) {
   document.getElementById('modeEditorTitle').textContent = modeId ? `编辑模式: ${modeId}` : '新建自定义模式';
   document.getElementById('modeJsonError').textContent = '';
 
-  if (!modeId) {
+  // Reset AI panel
+  document.getElementById('aiDescInput').value = '';
+  clearAiImage();
+  document.getElementById('aiGenResult').classList.remove('show');
+  const btn = document.getElementById('aiGenBtn');
+  btn.disabled = false;
+  btn.classList.remove('loading');
+
+  if (modeId) {
+    switchEditorTab('manual');
+  } else {
+    switchEditorTab('ai');
     document.getElementById('modeJsonIn').value = JSON.stringify(MODE_TEMPLATES.quote, null, 2);
   }
 
@@ -1323,9 +1407,108 @@ async function editCustomMode(modeId) {
     document.getElementById('modeEditorTitle').textContent = `编辑模式: ${modeId}`;
     document.getElementById('modeJsonIn').value = JSON.stringify(def, null, 2);
     document.getElementById('modeJsonError').textContent = '';
+    switchEditorTab('manual');
     document.getElementById('modeEditorModal').classList.add('active');
   } catch (e) {
     showToast('加载失败: ' + e.message, 'error');
+  }
+}
+
+// ── AI Mode Generator ────────────────────────────────────────
+
+let _aiImageBase64 = null;
+
+function switchEditorTab(tab) {
+  document.getElementById('tabAi').classList.toggle('active', tab === 'ai');
+  document.getElementById('tabManual').classList.toggle('active', tab === 'manual');
+  document.getElementById('aiGenPanel').classList.toggle('active', tab === 'ai');
+  document.getElementById('manualPanel').classList.toggle('active', tab === 'manual');
+}
+
+function handleAiImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) {
+    showToast('图片太大，请选择 4MB 以内的图片', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const maxDim = 800;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        const ratio = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      _aiImageBase64 = dataUrl.split(',')[1];
+      document.getElementById('aiImgPreview').src = dataUrl;
+      document.getElementById('aiImgPreview').style.display = 'block';
+      document.getElementById('aiImgPlaceholder').style.display = 'none';
+      document.getElementById('aiImgUpload').classList.add('has-image');
+      document.getElementById('aiImgClear').style.display = 'inline';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearAiImage() {
+  _aiImageBase64 = null;
+  document.getElementById('aiImgFile').value = '';
+  document.getElementById('aiImgPreview').style.display = 'none';
+  document.getElementById('aiImgPreview').src = '';
+  document.getElementById('aiImgPlaceholder').style.display = 'block';
+  document.getElementById('aiImgUpload').classList.remove('has-image');
+  document.getElementById('aiImgClear').style.display = 'none';
+}
+
+async function generateModeWithAI() {
+  const description = document.getElementById('aiDescInput').value.trim();
+  if (!description) { showToast('请描述你想要的模式', 'error'); return; }
+
+  const btn = document.getElementById('aiGenBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  document.getElementById('aiGenResult').classList.remove('show');
+
+  const provider = document.getElementById('llmProv')?.value || 'deepseek';
+  const model = document.getElementById('llmModel')?.value || 'deepseek-chat';
+
+  try {
+    const payload = { description, provider, model };
+    if (_aiImageBase64) payload.image_base64 = _aiImageBase64;
+
+    const res = await fetch(`${API_BASE}/api/modes/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!data.ok) throw new Error(data.error || '生成失败');
+
+    document.getElementById('modeJsonIn').value = JSON.stringify(data.mode_def, null, 2);
+    document.getElementById('modeJsonError').textContent = '';
+    document.getElementById('aiGenResult').classList.add('show');
+
+    if (data.warning) {
+      showToast(data.warning, 'info');
+    } else {
+      showToast('模式生成成功！', 'success');
+    }
+  } catch (e) {
+    showToast('AI 生成失败: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
   }
 }
 
