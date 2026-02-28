@@ -466,6 +466,13 @@ h1{font-size:1.8rem;margin-bottom:8px}
 <div style="font-size:.7rem;color:var(--gy);margin-top:4px">最多 10 个事件，倒计时显示最近 3 个</div>
 </div>
 
+<div class="fg">
+<label class="lbl">管理密钥 (Admin Token)</label>
+<input type="password" class="inp" id="adminToken" placeholder="留空表示无需认证"
+       onchange="setAdminToken(this.value)">
+<div style="font-size:.7rem;color:var(--gy);margin-top:4px">部署时设置 ADMIN_TOKEN 环境变量后，需要在此输入对应密钥</div>
+</div>
+
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn" onclick="saveConfig()" style="flex:1">保存配置</button>
 <button class="btn btn-outline" onclick="openPreviewModal()" style="flex:1">预览效果</button>
@@ -576,6 +583,20 @@ h1{font-size:1.8rem;margin-bottom:8px}
 
 <script>
 const API_BASE = window.location.origin;
+
+// ── 管理员鉴权 ──────────────────────────────────────────────
+function getAdminToken() {
+  return localStorage.getItem('inksight_admin_token') || '';
+}
+function setAdminToken(token) {
+  localStorage.setItem('inksight_admin_token', token);
+}
+function authHeaders() {
+  const token = getAdminToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
 
 const llmModels = {
   deepseek: [{v:'deepseek-chat',n:'DeepSeek Chat'}],
@@ -908,7 +929,7 @@ async function activateConfig(configId) {
   if (!ok) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api/config/${mac}/activate/${configId}`, { method: 'PUT' });
+    const res = await fetch(`${API_BASE}/api/config/${mac}/activate/${configId}`, { method: 'PUT', headers: authHeaders() });
     if (!res.ok) throw new Error('激活失败');
     showToast('配置已激活，设备将在下次刷新时应用', 'success');
     loadHistory();
@@ -1045,7 +1066,7 @@ async function saveConfig() {
   try {
     const res = await fetch(`${API_BASE}/api/config`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(data)
     });
     if (!res.ok) {
@@ -1060,7 +1081,7 @@ async function saveConfig() {
     // Best-effort auto refresh after successful save.
     let refreshQueued = false;
     try {
-      const refreshRes = await fetch(`${API_BASE}/api/device/${encodeURIComponent(data.mac)}/refresh`, { method: 'POST' });
+      const refreshRes = await fetch(`${API_BASE}/api/device/${encodeURIComponent(data.mac)}/refresh`, { method: 'POST', headers: authHeaders() });
       refreshQueued = refreshRes.ok;
     } catch (_) {}
 
@@ -1081,7 +1102,7 @@ async function triggerRefresh() {
   if (!mac) { showToast('请先输入 MAC 地址', 'error'); return; }
 
   try {
-    const res = await fetch(`${API_BASE}/api/device/${encodeURIComponent(mac)}/refresh`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/api/device/${encodeURIComponent(mac)}/refresh`, { method: 'POST', headers: authHeaders() });
     if (!res.ok) throw new Error('请求失败');
     showToast('刷新指令已发送，设备将在下次唤醒时刷新（也可手动点击 BOOT 立即刷新）', 'success');
   } catch (e) {
@@ -1513,7 +1534,7 @@ async function generateModeWithAI() {
 
     const res = await fetch(`${API_BASE}/api/modes/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(payload),
     });
     const data = await res.json();
@@ -1568,7 +1589,7 @@ async function saveModeDefinition() {
     const def = JSON.parse(document.getElementById('modeJsonIn').value);
     const res = await fetch(`${API_BASE}/api/modes/custom`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(def)
     });
     const data = await res.json();
@@ -1586,7 +1607,7 @@ async function deleteCustomMode(modeId) {
   if (!ok) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api/modes/custom/${modeId}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/api/modes/custom/${modeId}`, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) throw new Error('删除失败');
     showToast(`模式 ${modeId} 已删除`, 'success');
     refreshModeList();
@@ -1603,7 +1624,7 @@ async function previewCustomMode() {
     // Save temporarily, then preview
     const saveRes = await fetch(`${API_BASE}/api/modes/custom`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(def)
     });
     if (!saveRes.ok) {
@@ -1633,7 +1654,7 @@ async function previewCustomMode() {
 
 async function loadDeviceList() {
   try {
-    const res = await fetch(`${API_BASE}/api/stats/overview`);
+    const res = await fetch(`${API_BASE}/api/stats/overview`, { headers: authHeaders() });
     if (!res.ok) return;
     const data = await res.json();
     const devices = data.devices || [];
@@ -1697,6 +1718,7 @@ updateModels();
 refreshModeList();
 loadDeviceList();
 updateModeThumbnail(CORE_MODE_IDS[0]);
+document.getElementById('adminToken').value = getAdminToken();
 
 const urlParams = new URLSearchParams(window.location.search);
 const macParam = urlParams.get('mac');
