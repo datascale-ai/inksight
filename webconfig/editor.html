@@ -11,6 +11,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .toolbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--bk);color:#fff}
 .toolbar h1{font-size:1rem;font-weight:600}
 .toolbar select,.toolbar button{padding:6px 14px;border-radius:6px;font-size:.82rem;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer}
+.toolbar select option{background:#fff;color:#1a1a1a}
 .toolbar button{background:#22c55e;border-color:#22c55e;font-weight:600}
 .toolbar button:hover{background:#16a34a}
 .toolbar .btn-preview{background:#3b82f6;border-color:#3b82f6}
@@ -156,7 +157,9 @@ function doPreview(){
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({mode_def:def,w:dims[0],h:dims[1]})
   }).then(function(r){
-    if(!r.ok)throw new Error('Preview failed: '+r.status);
+    if(!r.ok){
+      return r.json().then(function(d){ throw new Error(d.error||('Preview failed: '+r.status)); }).catch(function(parseErr){ throw new Error('Preview failed: '+r.status); });
+    }
     return r.blob();
   }).then(function(blob){
     var url=URL.createObjectURL(blob);

@@ -1,4 +1,3 @@
-// ── InkSight Firmware ────────────────────────────────────────
 // Smart e-ink desktop companion powered by LLM
 // https://github.com/datascale-ai/inksight
 

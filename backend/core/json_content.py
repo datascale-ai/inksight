@@ -162,7 +162,7 @@ async def generate_json_mode_content(
         date_str, weather_str, festival, daily_word,
         upcoming_holiday, days_until_holiday,
     )
-    base_prompt = content_cfg.get("prompt_template", "").format(context=context)
+    base_prompt = content_cfg.get("prompt_template", "").replace("{context}", context)
 
     style = _build_style_instructions(character_tones, language, content_tone)
     if style:
