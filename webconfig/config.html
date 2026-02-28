@@ -744,6 +744,9 @@ function showConfirm(msg) {
     document.getElementById('confirmModal').classList.add('active');
   });
 }
+function ps(el) {
+  sp(el, 'screenSize');
+}
 function closeConfirm(result) {
   document.getElementById('confirmModal').classList.remove('active');
   if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
