@@ -354,7 +354,8 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         try:
             config = kwargs.get("config") or {}
             city = config.get("city")
-            data = await get_weather_forecast(city=city, days=3)
+            # 请求 5 天数据（今天 + 未来 4 天），便于多日卡片展示未来 4 天
+            data = await get_weather_forecast(city=city, days=4)
             if not data:
                 return dict(fallback)
             merged = dict(fallback)

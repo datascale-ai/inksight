@@ -142,10 +142,17 @@ def _render_for_persona(
     # JSON-defined mode
     if registry.is_json_mode(persona):
         jm = registry.get_json_mode(persona)
+        # Weather 模式下不在状态栏中间重复显示简略天气（只保留日期、电量等）
+        if persona.upper() == "WEATHER":
+            weather_str_for_bar = ""
+            weather_code_for_bar = -1
+        else:
+            weather_str_for_bar = weather_str
+            weather_code_for_bar = weather_code
         return render_json_mode(
             jm.definition, content,
-            date_str=date_str, weather_str=weather_str, battery_pct=battery_pct,
-            weather_code=weather_code, time_str=time_str,
+            date_str=date_str, weather_str=weather_str_for_bar, battery_pct=battery_pct,
+            weather_code=weather_code_for_bar, time_str=time_str,
             screen_w=screen_w, screen_h=screen_h,
         )
 

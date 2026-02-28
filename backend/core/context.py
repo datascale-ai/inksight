@@ -415,8 +415,8 @@ async def get_weather_forecast(
             "today_wind_level": today_wind_level,
             "sunrise": sunrise_str,
             "sunset": sunset_str,
-            # 返回完整预报列表（包括昨天、今天、明天等）
-            "forecast": full_forecast,
+            # 仅返回“未来 4 天”的预报（不含今天）
+            "forecast": full_forecast[1:5] if len(full_forecast) > 1 else [],
         }
     except Exception as e:
         logger.warning(f"[WeatherForecast] Failed to get weather forecast: {e}")
