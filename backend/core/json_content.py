@@ -351,14 +351,19 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
 
     if provider == "weather_forecast":
         from .context import get_weather_forecast
-        config = kwargs.get("config") or {}
-        city = config.get("city")
-        data = await get_weather_forecast(city=city, days=3)
-        if not data.get("today_temp") or data["today_temp"] == "--":
+        try:
+            config = kwargs.get("config") or {}
+            city = config.get("city")
+            # 请求 5 天数据（今天 + 未来 4 天），便于多日卡片展示未来 4 天
+            data = await get_weather_forecast(city=city, days=4)
+            if not data:
+                return dict(fallback)
+            merged = dict(fallback)
+            merged.update(data)
+            return merged
+        except Exception as e:
+            logger.warning(f"[JSONContent] Failed to get weather forecast: {e}")
             return dict(fallback)
-        merged = dict(fallback)
-        merged.update(data)
-        return merged
 
     return dict(fallback)
 
@@ -381,13 +386,18 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
     steps = content_cfg.get("steps", [])
     result: dict[str, Any] = {}
     for step in steps:
-        step_mode_def = {
-            "mode_id": mode_def.get("mode_id", "COMPOSITE"),
-            "content": step,
-        }
-        part = await generate_json_mode_content(step_mode_def, **kwargs)
-        if isinstance(part, dict):
-            result.update(part)
+        try:
+            step_mode_def = {
+                "mode_id": mode_def.get("mode_id", "COMPOSITE"),
+                "content": step,
+            }
+            part = await generate_json_mode_content(step_mode_def, **kwargs)
+            if isinstance(part, dict):
+                result.update(part)
+        except Exception as e:
+            logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}")
+            # Continue with next step instead of failing entirely
+            continue
     if not result:
         return dict(fallback)
     merged = dict(fallback)

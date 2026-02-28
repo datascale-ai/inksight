@@ -28,6 +28,7 @@ from .config import (
     OPEN_METEO_URL,
     HOLIDAY_WORK_API_URL,
     HOLIDAY_NEXT_API_URL,
+    DEFAULT_CITY,
 )
 
 _context_cache: dict[str, tuple[Any, float]] = {}
@@ -254,11 +255,25 @@ async def get_weather_forecast(
     city: str | None = None, days: int = 3
 ) -> dict:
     """Get multi-day weather forecast from Open-Meteo."""
-    lat, lon = _resolve_city(city)
+    # city 为空时，既要使用默认经纬度，也要在返回数据里给出一个可展示的城市名
+    display_city = city or DEFAULT_CITY
+    lat, lon = _resolve_city(display_city)
     params = {
         "latitude": lat,
         "longitude": lon,
-        "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+        # 预报字段：温度、天气代码、湿度、主导风向、风速、日出日落时间
+        "daily": ",".join(
+            [
+                "temperature_2m_max",
+                "temperature_2m_min",
+                "weather_code",
+                "relative_humidity_2m_mean",
+                "winddirection_10m_dominant",
+                "windspeed_10m_max",
+                "sunrise",
+                "sunset",
+            ]
+        ),
         "timezone": "auto",
         "forecast_days": days + 1,  # include today
     }
@@ -274,31 +289,147 @@ async def get_weather_forecast(
         t_max = daily.get("temperature_2m_max", [])
         t_min = daily.get("temperature_2m_min", [])
         codes = daily.get("weather_code", [])
+        humidities = daily.get("relative_humidity_2m_mean", [])
+        wind_dirs = daily.get("winddirection_10m_dominant", [])
+        wind_speeds = daily.get("windspeed_10m_max", [])
+        sunrises = daily.get("sunrise", [])
+        sunsets = daily.get("sunset", [])
 
         WEEKDAY_SHORT = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        forecast = []
+        now = datetime.now()
+        today_date = now.date()
+        
+        # 构建完整的预报列表，包括昨天、今天、明天、后天等
+        full_forecast = []
         for i in range(min(len(dates), days + 1)):
             d = datetime.strptime(dates[i], "%Y-%m-%d")
-            day_label = "今天" if i == 0 else ("明天" if i == 1 else WEEKDAY_SHORT[d.weekday()])
+            date_obj = d.date()
+            date_str = d.strftime("%m/%d")
+            
+            # 判断是昨天、今天、明天还是其他
+            delta = (date_obj - today_date).days
+            if delta == -1:
+                day_label = "昨天"
+            elif delta == 0:
+                day_label = "今天"
+            elif delta == 1:
+                day_label = "明天"
+            else:
+                day_label = WEEKDAY_SHORT[d.weekday()]
+            
             wcode = codes[i] if i < len(codes) else -1
             desc = _weather_code_to_desc(wcode)
-            forecast.append({
-                "day": day_label,
-                "temp_range": f"{round(t_min[i])}~{round(t_max[i])}°C"
-                if i < len(t_min) and i < len(t_max)
-                else "--",
-                "desc": desc,
-                "code": wcode,
-            })
+            
+            temp_min = round(t_min[i]) if i < len(t_min) else None
+            temp_max = round(t_max[i]) if i < len(t_max) else None
+            
+            if temp_min is not None and temp_max is not None:
+                temp_range = f"{temp_min}℃ / {temp_max}℃"
+            else:
+                temp_range = "--"
+            
+            full_forecast.append(
+                {
+                    "day": day_label,
+                    "date": date_str,
+                    "temp_range": temp_range,
+                    "temp_min": str(temp_min) if temp_min is not None else "--",
+                    "temp_max": str(temp_max) if temp_max is not None else "--",
+                    "desc": desc,
+                    "code": wcode,
+                }
+            )
 
-        today = forecast[0] if forecast else {}
+        # 今天的天气信息
+        today = full_forecast[0] if full_forecast else {}
+        today_high = today.get("temp_max", "--")
+        today_low = today.get("temp_min", "--")
+        today_temp = today_high  # 大号数字使用最高温
+        today_desc = today.get("desc", "")
+        today_code = today.get("code", -1)
+
+        if today_low != "--" and today_high != "--":
+            today_range = f"{today_low}°C / {today_high}°C"
+        else:
+            today_range = "-- / --"
+
+        # 今天的湿度
+        today_humidity = "--"
+        if humidities:
+            try:
+                today_humidity = str(int(round(humidities[0])))
+            except (TypeError, ValueError):
+                today_humidity = "--"
+
+        # 今天的风向和风力（等级粗略按风速估计）
+        def _deg_to_wind_dir(deg: float) -> str:
+            dirs = ["北风", "东北风", "东风", "东南风", "南风", "西南风", "西风", "西北风"]
+            try:
+                idx = int((deg % 360) / 45 + 0.5) % 8
+                return dirs[idx]
+            except Exception:
+                return ""
+
+        today_wind_dir = ""
+        if wind_dirs:
+            try:
+                today_wind_dir = _deg_to_wind_dir(float(wind_dirs[0]))
+            except (TypeError, ValueError):
+                today_wind_dir = ""
+
+        today_wind_level = ""
+        if wind_speeds:
+            try:
+                # 这里使用风速近似为等级（粗略）：m/s 四舍五入作为“几级”
+                level = max(1, min(12, int(round(float(wind_speeds[0]) / 2))))  # 简单映射
+                today_wind_level = f"{level}级"
+            except (TypeError, ValueError):
+                today_wind_level = ""
+
+        # 日出日落时间（取今天）
+        sunrise_str = ""
+        sunset_str = ""
+        if sunrises:
+            try:
+                sr = datetime.fromisoformat(sunrises[0])
+                sunrise_str = sr.strftime("%H:%M")
+            except Exception:
+                sunrise_str = ""
+        if sunsets:
+            try:
+                ss = datetime.fromisoformat(sunsets[0])
+                sunset_str = ss.strftime("%H:%M")
+            except Exception:
+                sunset_str = ""
+
         return {
-            "today_temp": str(round(t_max[0])) if t_max else "--",
-            "today_desc": today.get("desc", ""),
-            "forecast": forecast[1:] if len(forecast) > 1 else [],
+            "city": display_city,
+            "today_temp": today_temp,
+            "today_desc": today_desc,
+            "today_code": today_code,
+            "today_low": today_low,
+            "today_high": today_high,
+            "today_range": today_range,
+            "today_humidity": today_humidity,
+            "today_wind_dir": today_wind_dir,
+            "today_wind_level": today_wind_level,
+            "sunrise": sunrise_str,
+            "sunset": sunset_str,
+            # 仅返回“未来 4 天”的预报（不含今天）
+            "forecast": full_forecast[1:5] if len(full_forecast) > 1 else [],
         }
-    except Exception:
-        return {"today_temp": "--", "today_desc": "暂无数据", "forecast": []}
+    except Exception as e:
+        logger.warning(f"[WeatherForecast] Failed to get weather forecast: {e}")
+        return {
+            "city": city or DEFAULT_CITY,
+            "today_temp": "--",
+            "today_desc": "暂无数据",
+            "today_code": -1,
+            "today_low": "--",
+            "today_high": "--",
+            "today_range": "-- / --",
+            "forecast": [],
+        }
 
 
 def calc_battery_pct(voltage: float) -> int:

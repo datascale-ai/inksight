@@ -11,8 +11,13 @@
         "type": "external_data",
         "provider": "weather_forecast",
         "fallback": {
+          "city": "",
           "today_temp": "--",
           "today_desc": "暂无数据",
+          "today_code": -1,
+          "today_low": "--",
+          "today_high": "--",
+          "today_range": "-- / --",
           "forecast": []
         }
       },
@@ -26,29 +31,142 @@
       }
     ],
     "fallback": {
+      "city": "",
       "today_temp": "--",
       "today_desc": "暂无数据",
+      "today_code": -1,
+      "today_low": "--",
+      "today_high": "--",
+      "today_range": "-- / --",
       "advice": "注意根据天气添减衣物",
       "forecast": []
     },
     "fallback_pool": [
-      {"today_temp": "--", "today_desc": "暂无数据", "advice": "注意根据天气添减衣物", "forecast": []},
-      {"today_temp": "--", "today_desc": "暂无数据", "advice": "早晚温差大，记得带件外套", "forecast": []},
-      {"today_temp": "--", "today_desc": "暂无数据", "advice": "气温适宜，轻装出行", "forecast": []},
-      {"today_temp": "--", "today_desc": "暂无数据", "advice": "有雨记得带伞", "forecast": []},
-      {"today_temp": "--", "today_desc": "暂无数据", "advice": "天冷注意保暖", "forecast": []}
+      {"city": "", "today_temp": "--", "today_desc": "暂无数据", "today_code": -1, "today_low": "--", "today_high": "--", "today_range": "-- / --", "advice": "注意根据天气添减衣物", "forecast": []},
+      {"city": "", "today_temp": "--", "today_desc": "暂无数据", "today_code": -1, "today_low": "--", "today_high": "--", "today_range": "-- / --", "advice": "早晚温差大，记得带件外套", "forecast": []},
+      {"city": "", "today_temp": "--", "today_desc": "暂无数据", "today_code": -1, "today_low": "--", "today_high": "--", "today_range": "-- / --", "advice": "气温适宜，轻装出行", "forecast": []},
+      {"city": "", "today_temp": "--", "today_desc": "暂无数据", "today_code": -1, "today_low": "--", "today_high": "--", "today_range": "-- / --", "advice": "有雨记得带伞", "forecast": []},
+      {"city": "", "today_temp": "--", "today_desc": "暂无数据", "today_code": -1, "today_low": "--", "today_high": "--", "today_range": "-- / --", "advice": "天冷注意保暖", "forecast": []}
     ]
   },
   "layout": {
     "status_bar": {"line_width": 1, "dashed": false},
+    "body_align": "top",
     "body": [
-      {"type": "big_number", "field": "today_temp", "font_size": 42, "align": "center"},
-      {"type": "text", "field": "today_desc", "font_size": 14, "align": "center"},
-      {"type": "separator", "style": "dashed"},
-      {"type": "list", "field": "forecast", "max_items": 3, "item_template": "{day}: {temp_range} {desc}", "font_size": 12},
-      {"type": "separator", "style": "short", "width": 90},
-      {"type": "text", "field": "advice", "font_size": 12, "align": "center", "max_lines": 2}
+      {
+        "type": "text",
+        "field": "city",
+        "font_size": 16,
+        "align": "left",
+        "margin_x": 20,
+        "max_lines": 1
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "two_column",
+        "left_width": 170,
+        "gap": 6,
+        "left_x": 15,
+        "left": [
+          {
+            "type": "big_number",
+            "field": "today_temp",
+            "font_size": 52,
+            "align": "left",
+            "margin_x": 0,
+            "unit": "°C"
+          },
+          {
+            "type": "spacer",
+            "height": 2
+          },
+          {
+            "type": "weather_icon_text",
+            "code_field": "today_code",
+            "field": "today_desc",
+            "font_size": 16,
+            "icon_size": 24,
+            "align": "left",
+            "margin_x": 0
+          },
+          {
+            "type": "spacer",
+            "height": 4
+          },
+          {
+            "type": "text",
+            "field": "today_range",
+            "font_size": 14,
+            "align": "left",
+            "margin_x": 0,
+            "max_lines": 1
+          }
+        ],
+        "right": [
+          {
+            "type": "forecast_cards",
+            "field": "forecast",
+            "max_items": 4,
+            "margin_x": -4,
+            "gap": 4,
+            "icon_size": 32
+          }
+        ]
+      },
+      {
+        "type": "icon_text",
+        "icon": "humidity",
+        "text": "湿度 {today_humidity}%   {today_wind_dir} {today_wind_level}",
+        "font_size": 12,
+        "align": "left",
+        "margin_x": 15
+      },
+      {
+        "type": "spacer",
+        "height": 4
+      },
+      {
+        "type": "two_column",
+        "left_width": 220,
+        "gap": 4,
+        "left_x": 15,
+        "left": [
+          {
+            "type": "icon_text",
+            "icon": "sunrise",
+            "text": "日出 {sunrise} | 日落 {sunset}",
+            "font_size": 12,
+            "align": "left",
+            "margin_x": 0
+          }
+        ],
+        "right": []
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "separator",
+        "style": "solid",
+        "line_width": 1,
+        "margin_x": 20
+      },
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "text",
+        "field": "advice",
+        "font_size": 12,
+        "align": "center",
+        "max_lines": 2
+      }
     ],
-    "footer": {"label": "WEATHER"}
+    "footer": {"label": "WEATHER", "attribution_template": "— InkSight"}
   }
 }

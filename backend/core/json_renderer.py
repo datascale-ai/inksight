@@ -546,11 +546,71 @@ def _render_icon_text(ctx: RenderContext, block: dict) -> None:
     ctx.y += font_size + 6
 
 
+def _render_weather_icon_text(ctx: RenderContext, block: dict) -> None:
+    """Render dynamic weather icon (by code) with a text label on the same line."""
+    from .patterns.utils import get_weather_icon
+
+    code_field = block.get("code_field", "today_code")
+    text_field = block.get("field")
+    template = block.get("text", "")
+
+    code_val = ctx.get_field(code_field)
+    try:
+        if isinstance(code_val, str):
+            code_int = int(code_val)
+        else:
+            code_int = int(code_val)
+    except (TypeError, ValueError):
+        code_int = -1
+
+    if text_field:
+        text = str(ctx.get_field(text_field))
+    else:
+        text = template or ""
+        text = ctx.resolve(text)
+
+    if not text:
+        return
+
+    font_key = block.get("font", "noto_serif_regular")
+    font_size = int(block.get("font_size", 14) * ctx.scale)
+    icon_size = int(block.get("icon_size", 18) * ctx.scale)
+    margin_x = block.get("margin_x")
+    if margin_x is not None:
+        margin_x = int(margin_x * ctx.scale)
+    else:
+        margin_x = int(ctx.screen_w * 0.06)
+
+    if has_cjk(text):
+        font_key = _pick_cjk_font(font_key)
+    font = load_font(font_key, font_size)
+
+    x = ctx.x_offset + margin_x
+    y = ctx.y
+
+    if code_int >= 0:
+        icon_img = get_weather_icon(code_int)
+        if icon_img:
+            if icon_img.size[0] != icon_size:
+                icon_img = icon_img.resize((icon_size, icon_size), Image.LANCZOS)
+            ctx.img.paste(icon_img, (x, y))
+            x += icon_size + int(4 * ctx.scale)
+
+    ctx.draw.text((x, y), text, fill=EINK_FG, font=font)
+    ctx.y += font_size + 6
+
+
 def _render_big_number(ctx: RenderContext, block: dict) -> None:
     field_name = block.get("field", "")
     text = str(ctx.get_field(field_name))
-    if not text:
+    if not text or text == "--":
         return
+    
+    # 支持单位后缀
+    unit = block.get("unit", "")
+    if unit:
+        text = f"{text}{unit}"
+    
     font_size = int(block.get("font_size", 42) * ctx.scale)
     font_key = block.get("font", "lora_bold")
     if has_cjk(text):
@@ -592,6 +652,231 @@ def _render_progress_bar(ctx: RenderContext, block: dict) -> None:
     if fill_w > 0:
         ctx.draw.rectangle([x + 1, y + 1, x + 1 + fill_w, y + height - 1], fill=EINK_FG)
     ctx.y += height + 6
+
+
+def _render_temp_chart(ctx: RenderContext, block: dict) -> None:
+    """Render a temperature chart with optional high/low lines for multi-day forecast."""
+    field_name = block.get("field", "forecast")
+    items = ctx.get_field(field_name)
+    if not isinstance(items, list) or not items:
+        return
+
+    max_points = int(block.get("max_points", 4))
+    # 默认使用 temp_max / temp_min 作为高低温字段
+    high_field = block.get("high_field", block.get("temp_field", "temp_max"))
+    low_field = block.get("low_field", "temp_min")
+    label_field = block.get("label_field", "day")
+
+    highs: list[float] = []
+    lows: list[float] = []
+    labels = []
+
+    for item in items[:max_points]:
+        if not isinstance(item, dict):
+            continue
+        h_raw = item.get(high_field)
+        l_raw = item.get(low_field)
+        if h_raw is None or l_raw is None:
+            continue
+        h_val = _num(h_raw)
+        l_val = _num(l_raw)
+        highs.append(h_val)
+        lows.append(l_val)
+        labels.append(str(item.get(label_field, "")))
+
+    if not highs:
+        return
+
+    # 全局取 min / max，保证两条折线在同一坐标系内
+    all_temps = highs + lows
+    min_t = min(all_temps)
+    max_t = max(all_temps)
+    if max_t == min_t:
+        max_t = min_t + 1  # avoid divide-by-zero, draw a flat line
+
+    margin_x = block.get("margin_x")
+    if margin_x is not None:
+        margin_x = int(margin_x * ctx.scale)
+    else:
+        margin_x = int(ctx.screen_w * 0.08)
+
+    chart_height = int(block.get("height", 40) * ctx.scale)
+    # 在右侧预留一点空白，避免折线紧贴屏幕边缘被“截断”的视觉效果
+    extra_right_margin = int(block.get("right_margin", 8) * ctx.scale)
+    width = ctx.available_width - margin_x * 2 - extra_right_margin
+    if width <= 0:
+        return
+
+    x0 = ctx.x_offset + margin_x
+
+    # 通过 bottom_pad 将整个折线图（含数字和标签）整体上移一段距离
+    bottom_pad = int(block.get("bottom_pad", 0) * ctx.scale)
+    y_bottom = ctx.y + chart_height - bottom_pad
+    y_top = y_bottom - chart_height
+
+    n = len(highs)
+    if n == 1:
+        step = 0
+    else:
+        step = width / (n - 1)
+
+    high_coords: list[tuple[float, float]] = []
+    low_coords: list[tuple[float, float]] = []
+    for idx, (h_temp, l_temp) in enumerate(zip(highs, lows)):
+        x = x0 + step * idx
+        ratio_h = (h_temp - min_t) / (max_t - min_t)
+        ratio_l = (l_temp - min_t) / (max_t - min_t)
+        y_h = y_bottom - ratio_h * (chart_height - 8)
+        y_l = y_bottom - ratio_l * (chart_height - 8)
+        high_coords.append((x, y_h))
+        low_coords.append((x, y_l))
+
+    # Draw connecting lines
+    for i in range(1, len(high_coords)):
+        ctx.draw.line([high_coords[i - 1], high_coords[i]], fill=EINK_FG, width=1)
+    for i in range(1, len(low_coords)):
+        ctx.draw.line([low_coords[i - 1], low_coords[i]], fill=EINK_FG, width=1)
+
+    # Draw points and labels（只标注最高温数字，最低温仅用空心点表示）
+    font = load_font("noto_serif_light", int(10 * ctx.scale))
+    for (xh, yh), (xl, yl), h_temp, l_temp, label in zip(
+        high_coords, low_coords, highs, lows, labels
+    ):
+        r = int(2 * ctx.scale) or 1
+        # 最高温：实心圆点
+        ctx.draw.ellipse([xh - r, yh - r, xh + r, yh + r], fill=EINK_FG)
+        # 最低温：空心圆点
+        ctx.draw.ellipse([xl - r, yl - r, xl + r, yl + r], fill=EINK_BG)
+        ctx.draw.ellipse([xl - r, yl - r, xl + r, yl + r], outline=EINK_FG, width=1)
+
+        # 最高温数字（在图顶上方）
+        temp_text_high = str(int(round(h_temp)))
+        hbbox = font.getbbox(temp_text_high)
+        htw = hbbox[2] - hbbox[0]
+        hth = hbbox[3] - hbbox[1]
+        ctx.draw.text(
+            (xh - htw / 2, y_top - hth - 2),
+            temp_text_high,
+            fill=EINK_FG,
+            font=font,
+        )
+
+        if label:
+            lbbox = font.getbbox(label)
+            lw = lbbox[2] - lbbox[0]
+            ctx.draw.text((xh - lw / 2, y_bottom + 2), label, fill=EINK_FG, font=font)
+
+    ctx.y = y_bottom + int(18 * ctx.scale)
+
+
+def _render_forecast_cards(ctx: RenderContext, block: dict) -> None:
+    """Render multi-day forecast cards similar to the reference UI."""
+    field_name = block.get("field", "forecast")
+    items = ctx.get_field(field_name)
+    if not isinstance(items, list) or not items:
+        return
+
+    max_items = int(block.get("max_items", 4))
+    items = [it for it in items if isinstance(it, dict)][:max_items]
+    if not items:
+        return
+
+    scale = ctx.scale
+    margin_x = block.get("margin_x")
+    if margin_x is not None:
+        margin_x = int(margin_x * scale)
+    else:
+        margin_x = int(ctx.screen_w * 0.02)
+    gap = int(block.get("gap", 6) * scale)
+
+    total_width = ctx.available_width - margin_x * 2
+    n = len(items)
+    card_width = max(40, (total_width - gap * (n - 1)) // n)
+
+    # Fonts（增大字体，匹配绿框区域大小）
+    font_day = load_font("noto_serif_regular", int(14 * scale))
+    font_date = load_font("noto_serif_light", int(12 * scale))
+    font_desc = load_font("noto_serif_light", int(12 * scale))
+    font_temp = load_font("noto_serif_light", int(12 * scale))
+
+    from .patterns.utils import get_weather_icon
+
+    top_y = ctx.y
+    card_bottom_max = top_y
+
+    for idx, item in enumerate(items):
+        x0 = ctx.x_offset + margin_x + idx * (card_width + gap)
+        x_center = x0 + card_width // 2
+        y = top_y
+
+        day = str(item.get("day", ""))
+        date = str(item.get("date", ""))
+        desc = str(item.get("desc", ""))
+        # 为卡片单独构造更短的温度文案，避免跨卡片重叠
+        temp_min_raw = item.get("temp_min")
+        temp_max_raw = item.get("temp_max")
+        temp_label = ""
+        if temp_min_raw is not None and temp_max_raw is not None:
+            try:
+                tmin = int(round(_num(temp_min_raw)))
+                tmax = int(round(_num(temp_max_raw)))
+                temp_label = f"{tmin}/{tmax}°"
+            except (TypeError, ValueError):
+                temp_label = ""
+        if not temp_label:
+            temp_label = str(item.get("temp_range", ""))
+        code = item.get("code", -1)
+
+        # Day (e.g. 今天)
+        if day:
+            bbox = font_day.getbbox(day)
+            dw = bbox[2] - bbox[0]
+            ctx.draw.text((x_center - dw / 2, y), day, fill=EINK_FG, font=font_day)
+            y += (bbox[3] - bbox[1]) + int(3 * scale)
+
+        # Date (e.g. 04/22)
+        if date:
+            bbox = font_date.getbbox(date)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            ctx.draw.text((x_center - tw / 2, y), date, fill=EINK_FG, font=font_date)
+            y += th + int(5 * scale)
+
+        # Weather icon（增大图标）
+        icon_size = int(block.get("icon_size", 32) * scale)
+        try:
+            if isinstance(code, str):
+                code_int = int(code)
+            else:
+                code_int = int(code)
+        except (TypeError, ValueError):
+            code_int = -1
+        wx_icon = get_weather_icon(code_int) if code_int >= 0 else None
+        if wx_icon:
+            if wx_icon.size[0] != icon_size:
+                wx_icon = wx_icon.resize((icon_size, icon_size), Image.LANCZOS)
+            ctx.img.paste(wx_icon, (int(x_center - icon_size / 2), int(y)))
+            y += icon_size + int(4 * scale)
+
+        # Desc (e.g. 多云)
+        if desc:
+            bbox = font_desc.getbbox(desc)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            ctx.draw.text((x_center - tw / 2, y), desc, fill=EINK_FG, font=font_desc)
+            y += th + int(3 * scale)
+
+        # Temp range (e.g. 9/13°)
+        if temp_label:
+            bbox = font_temp.getbbox(temp_label)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            ctx.draw.text((x_center - tw / 2, y), temp_label, fill=EINK_FG, font=font_temp)
+            y += th
+
+        card_bottom_max = max(card_bottom_max, y)
+
+    ctx.y = card_bottom_max + int(4 * scale)
 
 
 def _render_two_column(ctx: RenderContext, block: dict) -> None:
@@ -668,6 +953,49 @@ def _render_group(ctx: RenderContext, block: dict) -> None:
         ctx.y += title_font_size + int(4 * ctx.scale)
     for child in block.get("children", []):
         _render_block(ctx, child)
+
+
+def _render_weather_icon(ctx: RenderContext, block: dict) -> None:
+    """Render weather icon based on weather_code field."""
+    from .patterns.utils import get_weather_icon
+    
+    field_name = block.get("field", "code")
+    weather_code = ctx.get_field(field_name)
+    
+    # 支持从数字字符串转换
+    try:
+        if isinstance(weather_code, str):
+            weather_code = int(weather_code)
+        elif not isinstance(weather_code, int):
+            weather_code = -1
+    except (ValueError, TypeError):
+        weather_code = -1
+    
+    if weather_code < 0:
+        return
+    
+    icon_size = int(block.get("icon_size", 48) * ctx.scale)
+    align = block.get("align", "left")
+    margin_x = block.get("margin_x")
+    if margin_x is not None:
+        margin_x = int(margin_x * ctx.scale)
+    else:
+        margin_x = int(ctx.screen_w * 0.06)
+    
+    weather_icon = get_weather_icon(weather_code)
+    if weather_icon:
+        # 调整图标大小
+        if weather_icon.size[0] != icon_size:
+            weather_icon = weather_icon.resize((icon_size, icon_size), Image.LANCZOS)
+        
+        x = ctx.x_offset + margin_x
+        if align == "center":
+            x = ctx.x_offset + (ctx.available_width - icon_size) // 2
+        elif align == "right":
+            x = ctx.x_offset + ctx.available_width - margin_x - icon_size
+        
+        ctx.img.paste(weather_icon, (x, ctx.y))
+        ctx.y += icon_size + int(block.get("margin_bottom", 6) * ctx.scale)
 
 
 def _render_icon_list(ctx: RenderContext, block: dict) -> None:
@@ -791,10 +1119,14 @@ _BLOCK_RENDERERS["vertical_stack"] = _render_vertical_stack
 _BLOCK_RENDERERS["conditional"] = _render_conditional
 _BLOCK_RENDERERS["spacer"] = _render_spacer
 _BLOCK_RENDERERS["icon_text"] = _render_icon_text
+_BLOCK_RENDERERS["weather_icon_text"] = _render_weather_icon_text
 _BLOCK_RENDERERS["two_column"] = _render_two_column
 _BLOCK_RENDERERS["image"] = _render_image
 _BLOCK_RENDERERS["progress_bar"] = _render_progress_bar
+_BLOCK_RENDERERS["temp_chart"] = _render_temp_chart
+_BLOCK_RENDERERS["forecast_cards"] = _render_forecast_cards
 _BLOCK_RENDERERS["big_number"] = _render_big_number
 _BLOCK_RENDERERS["icon_list"] = _render_icon_list
 _BLOCK_RENDERERS["key_value"] = _render_key_value
 _BLOCK_RENDERERS["group"] = _render_group
+_BLOCK_RENDERERS["weather_icon"] = _render_weather_icon
