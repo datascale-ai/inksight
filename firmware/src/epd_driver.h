@@ -3,19 +3,19 @@
 
 #include <Arduino.h>
 
-// Initialize GPIO pins for EPD and config button
+// Initialize GPIO pins and SPI for EPD
 void gpioInit();
 
-// Initialize EPD controller (Waveshare 4.2" V2, SSD1683) - full refresh mode
+// Initialize EPD controller (full refresh mode)
 void epdInit();
 
-// Initialize EPD controller in fast refresh mode (1.5s, reduced flashing)
+// Initialize EPD controller in fast refresh mode
 void epdInitFast();
 
 // Full-screen display with full refresh (clears ghosting, has black-white flash)
 void epdDisplay(const uint8_t *image);
 
-// Full-screen display with fast refresh (reduced flashing, ~1.5s)
+// Full-screen display with fast refresh (reduced flashing)
 void epdDisplayFast(const uint8_t *image);
 
 // Partial display refresh for a rectangular region

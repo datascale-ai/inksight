@@ -71,5 +71,42 @@
       "label": "ARTWALL",
       "attribution_template": "— Ink Art"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "image",
+          "field": "image_url",
+          "width": 260,
+          "height": 80
+        }
+      ],
+      "footer": { "label": "ARTWALL", "height": 20 }
+    },
+    "648x480": {
+      "body": [
+        {
+          "type": "text",
+          "field": "artwork_title",
+          "font_size": 18,
+          "align": "center",
+          "max_lines": 1
+        },
+        {
+          "type": "image",
+          "field": "image_url",
+          "width": 380,
+          "height": 280
+        },
+        {
+          "type": "text",
+          "field": "description",
+          "font_size": 14,
+          "align": "center",
+          "max_lines": 2
+        }
+      ]
+    }
   }
 }

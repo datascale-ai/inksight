@@ -241,6 +241,15 @@ def _validate_mode_def(definition: dict) -> bool:
     if not isinstance(body, list) or len(body) == 0:
         return False
 
+    # Validate optional layout_overrides
+    overrides = definition.get("layout_overrides")
+    if overrides is not None:
+        if not isinstance(overrides, dict):
+            return False
+        for key, val in overrides.items():
+            if not isinstance(val, dict):
+                return False
+
     return True
 
 

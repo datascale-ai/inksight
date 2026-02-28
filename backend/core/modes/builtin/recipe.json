@@ -71,5 +71,39 @@
       "label": "RECIPE",
       "attribution_template": "— Eat Well"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "season", "font": "noto_serif_bold", "font_size": 12, "align": "left", "margin_x": 8 },
+        { "type": "separator", "style": "short", "width": 30 },
+        { "type": "text", "template": "早：{breakfast}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 },
+        { "type": "text", "template": "午：{lunch}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 },
+        { "type": "text", "template": "晚：{dinner}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 }
+      ],
+      "footer": { "label": "RECIPE", "height": 20 }
+    },
+    "648x480": {
+      "body": [
+        { "type": "text", "field": "season", "font": "noto_serif_bold", "font_size": 22, "align": "center" },
+        { "type": "separator", "style": "short", "width": 110 },
+        { "type": "spacer", "height": 10 },
+        { "type": "group", "title": "早餐", "title_font_size": 18, "margin_x": 40, "children": [
+          { "type": "text", "field": "breakfast", "font_size": 17, "align": "left", "margin_x": 60, "max_lines": 2 }
+        ]},
+        { "type": "spacer", "height": 8 },
+        { "type": "group", "title": "午餐", "title_font_size": 18, "margin_x": 40, "children": [
+          { "type": "text", "field": "lunch", "font_size": 17, "align": "left", "margin_x": 60, "max_lines": 2 }
+        ]},
+        { "type": "spacer", "height": 8 },
+        { "type": "group", "title": "晚餐", "title_font_size": 18, "margin_x": 40, "children": [
+          { "type": "text", "field": "dinner", "font_size": 17, "align": "left", "margin_x": 60, "max_lines": 2 }
+        ]},
+        { "type": "spacer", "height": 10 },
+        { "type": "separator", "style": "dashed", "margin_x": 48 },
+        { "type": "spacer", "height": 6 },
+        { "type": "text", "field": "tip", "font": "noto_serif_light", "font_size": 16, "align": "center", "max_lines": 2 }
+      ]
+    }
   }
 }

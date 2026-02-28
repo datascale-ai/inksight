@@ -43,7 +43,10 @@ async def generate_and_render(
     weather_code = weather.get("weather_code", -1)
     cfg = config or {}
 
-    content = await _generate_content_for_persona(persona, cfg, date_ctx, weather_str, mac=mac)
+    content = await _generate_content_for_persona(
+        persona, cfg, date_ctx, weather_str, mac=mac,
+        screen_w=screen_w, screen_h=screen_h,
+    )
 
     img = _render_for_persona(
         persona, content,
@@ -60,6 +63,8 @@ async def _generate_content_for_persona(
     date_ctx: dict,
     weather_str: str,
     mac: str = "",
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
 ) -> dict:
     """Dispatch content generation to the appropriate handler."""
     from .mode_registry import ContentContext, get_registry
@@ -102,6 +107,8 @@ async def _generate_content_for_persona(
             llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
             llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
             mac=mac,
+            screen_w=screen_w,
+            screen_h=screen_h,
         )
 
     # Builtin Python mode - use specialized content functions
