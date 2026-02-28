@@ -677,6 +677,15 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
     height = int(block.get("height", 140) * ctx.scale)
     x = int(block.get("x", (ctx.screen_w - width) // 2))
     y = int(block.get("y", ctx.y))
+    # Try pre-fetched data first (async download from json_content.py)
+    prefetched = ctx.content.get(f"_prefetched_{field_name}")
+    if prefetched:
+        from io import BytesIO
+        img = Image.open(BytesIO(prefetched)).convert("L").resize((width, height))
+        mono = img.convert("1")
+        ctx.img.paste(mono, (x, y))
+        ctx.y = y + height + int(block.get("margin_bottom", 6))
+        return
     try:
         resp = None
         last_error = None

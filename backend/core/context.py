@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import logging
 import time
 import httpx
 import random
 from datetime import datetime
 from typing import Any
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 from zhdate import ZhDate
 
 from .config import (
@@ -24,6 +31,20 @@ from .config import (
 )
 
 _context_cache: dict[str, tuple[Any, float]] = {}
+
+logger = logging.getLogger(__name__)
+
+# Reusable retry decorator for external API calls
+_api_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=5),
+    retry=retry_if_exception_type((
+        httpx.ConnectError,
+        httpx.ReadTimeout,
+        httpx.ConnectTimeout,
+    )),
+    reraise=True,
+)
 
 
 def _cache_get(key: str, ttl: float) -> Any | None:
@@ -51,54 +72,64 @@ def _resolve_city(city: str | None) -> tuple[float, float]:
     return DEFAULT_LATITUDE, DEFAULT_LONGITUDE
 
 
+@_api_retry
+async def _fetch_holiday_info(date_str: str) -> dict:
+    """Fetch holiday info with retry."""
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        resp = await client.get(HOLIDAY_WORK_API_URL, params={"date": date_str})
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_holiday_info(date: datetime) -> dict:
     date_str = date.strftime("%Y-%m-%d")
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(HOLIDAY_WORK_API_URL, params={"date": date_str})
-            resp.raise_for_status()
-            result = resp.json()
-
-            if result.get("code") == 200 and result.get("data"):
-                data = result["data"]
-                is_work = data.get("work", True)
-                return {
-                        "is_holiday": not is_work,
-                        "holiday_name": "",
-                        "is_workday": is_work,
-                    }
-            else:
-                return {"is_holiday": False, "holiday_name": "", "is_workday": False}
+        result = await _fetch_holiday_info(date_str)
+        if result.get("code") == 200 and result.get("data"):
+            data = result["data"]
+            is_work = data.get("work", True)
+            return {
+                    "is_holiday": not is_work,
+                    "holiday_name": "",
+                    "is_workday": is_work,
+                }
+        else:
+            return {"is_holiday": False, "holiday_name": "", "is_workday": False}
     except Exception:
         return {"is_holiday": False, "holiday_name": "", "is_workday": False}
 
 
+@_api_retry
+async def _fetch_upcoming_holiday() -> dict:
+    """Fetch upcoming holiday info with retry."""
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        resp = await client.get(HOLIDAY_NEXT_API_URL)
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_upcoming_holiday(now: datetime) -> dict:
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(HOLIDAY_NEXT_API_URL)
-            resp.raise_for_status()
-            result = resp.json()
+        result = await _fetch_upcoming_holiday()
+        if result.get("code") == 200 and result.get("data"):
+            data = result["data"]
+            holiday_date_str = data.get("date", "")
 
-            if result.get("code") == 200 and result.get("data"):
-                data = result["data"]
-                holiday_date_str = data.get("date", "")
+            if holiday_date_str:
+                from datetime import datetime as dt
 
-                if holiday_date_str:
-                    from datetime import datetime as dt
+                holiday_date = dt.strptime(holiday_date_str, "%Y-%m-%d")
+                days_until = (holiday_date.date() - now.date()).days
 
-                    holiday_date = dt.strptime(holiday_date_str, "%Y-%m-%d")
-                    days_until = (holiday_date.date() - now.date()).days
-
-                    return {
-                        "days_until": days_until if days_until > 0 else 0,
-                        "holiday_name": data.get("name", ""),
-                        "date": holiday_date.strftime("%m月%d日"),
-                        "holiday_duration": data.get("days", 0),
-                    }
+                return {
+                    "days_until": days_until if days_until > 0 else 0,
+                    "holiday_name": data.get("name", ""),
+                    "date": holiday_date.strftime("%m月%d日"),
+                    "holiday_duration": data.get("days", 0),
+                }
     except Exception:
         pass
-    
+
     return {"days_until": 0, "holiday_name": "", "date": "", "holiday_duration": 0}
 
 
@@ -161,6 +192,15 @@ async def get_date_context_cached(ttl: float = 900) -> dict:
     return result
 
 
+@_api_retry
+async def _fetch_weather_data(url: str, params: dict) -> dict:
+    """Fetch weather data with retry."""
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_weather(
     lat: float | None = None, lon: float | None = None, city: str | None = None
 ) -> dict:
@@ -174,16 +214,13 @@ async def get_weather(
         "timezone": "auto",
     }
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(OPEN_METEO_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-            current = data["current"]
-            return {
-                "temp": round(current["temperature_2m"]),
-                "weather_code": current["weather_code"],
-                "weather_str": f"{round(current['temperature_2m'])}°C",
-            }
+        data = await _fetch_weather_data(OPEN_METEO_URL, params)
+        current = data["current"]
+        return {
+            "temp": round(current["temperature_2m"]),
+            "weather_code": current["weather_code"],
+            "weather_str": f"{round(current['temperature_2m'])}°C",
+        }
     except Exception:
         return {"temp": 0, "weather_code": -1, "weather_str": "--°C"}
 
@@ -231,38 +268,35 @@ async def get_weather_forecast(
             if "/current" in OPEN_METEO_URL
             else OPEN_METEO_URL
         )
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(forecast_url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-            daily = data.get("daily", {})
-            dates = daily.get("time", [])
-            t_max = daily.get("temperature_2m_max", [])
-            t_min = daily.get("temperature_2m_min", [])
-            codes = daily.get("weather_code", [])
+        data = await _fetch_weather_data(forecast_url, params)
+        daily = data.get("daily", {})
+        dates = daily.get("time", [])
+        t_max = daily.get("temperature_2m_max", [])
+        t_min = daily.get("temperature_2m_min", [])
+        codes = daily.get("weather_code", [])
 
-            WEEKDAY_SHORT = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-            forecast = []
-            for i in range(min(len(dates), days + 1)):
-                d = datetime.strptime(dates[i], "%Y-%m-%d")
-                day_label = "今天" if i == 0 else ("明天" if i == 1 else WEEKDAY_SHORT[d.weekday()])
-                wcode = codes[i] if i < len(codes) else -1
-                desc = _weather_code_to_desc(wcode)
-                forecast.append({
-                    "day": day_label,
-                    "temp_range": f"{round(t_min[i])}~{round(t_max[i])}°C"
-                    if i < len(t_min) and i < len(t_max)
-                    else "--",
-                    "desc": desc,
-                    "code": wcode,
-                })
+        WEEKDAY_SHORT = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        forecast = []
+        for i in range(min(len(dates), days + 1)):
+            d = datetime.strptime(dates[i], "%Y-%m-%d")
+            day_label = "今天" if i == 0 else ("明天" if i == 1 else WEEKDAY_SHORT[d.weekday()])
+            wcode = codes[i] if i < len(codes) else -1
+            desc = _weather_code_to_desc(wcode)
+            forecast.append({
+                "day": day_label,
+                "temp_range": f"{round(t_min[i])}~{round(t_max[i])}°C"
+                if i < len(t_min) and i < len(t_max)
+                else "--",
+                "desc": desc,
+                "code": wcode,
+            })
 
-            today = forecast[0] if forecast else {}
-            return {
-                "today_temp": str(round(t_max[0])) if t_max else "--",
-                "today_desc": today.get("desc", ""),
-                "forecast": forecast[1:] if len(forecast) > 1 else [],
-            }
+        today = forecast[0] if forecast else {}
+        return {
+            "today_temp": str(round(t_max[0])) if t_max else "--",
+            "today_desc": today.get("desc", ""),
+            "forecast": forecast[1:] if len(forecast) > 1 else [],
+        }
     except Exception:
         return {"today_temp": "--", "today_desc": "暂无数据", "forecast": []}
 

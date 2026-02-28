@@ -9,6 +9,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+from .db import get_main_db
 from .config import (
     DEFAULT_CITY,
     DEFAULT_LLM_PROVIDER,
@@ -25,6 +26,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "inksight.db")
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS configs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,59 +106,59 @@ async def save_config(mac: str, data: dict) -> int:
         f"[CONFIG SAVE] mac={mac}, refreshStrategy={refresh_strategy}, modes={data.get('modes')}"
     )
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Deactivate all existing configs
-        await db.execute("UPDATE configs SET is_active = 0 WHERE mac = ?", (mac,))
+    db = await get_main_db()
+    # Deactivate all existing configs
+    await db.execute("UPDATE configs SET is_active = 0 WHERE mac = ?", (mac,))
 
-        # Insert new config
-        countdown_events_json = json.dumps(
-            data.get("countdownEvents", []), ensure_ascii=False
-        )
-        time_slot_rules_json = json.dumps(
-            data.get("timeSlotRules", []), ensure_ascii=False
-        )
-        memo_text = data.get("memoText", "")
-        cursor = await db.execute(
-            """INSERT INTO configs
-               (mac, nickname, modes, refresh_strategy, character_tones,
-                language, content_tone, city, refresh_interval, llm_provider, llm_model,
-                countdown_events, time_slot_rules, memo_text, is_active, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
-            (
-                mac,
-                data.get("nickname", ""),
-                ",".join(data.get("modes", DEFAULT_MODES)),
-                refresh_strategy,
-                ",".join(data.get("characterTones", [])),
-                data.get("language", DEFAULT_LANGUAGE),
-                data.get("contentTone", DEFAULT_CONTENT_TONE),
-                data.get("city", DEFAULT_CITY),
-                data.get("refreshInterval", DEFAULT_REFRESH_INTERVAL),
-                data.get("llmProvider", DEFAULT_LLM_PROVIDER),
-                data.get("llmModel", DEFAULT_LLM_MODEL),
-                countdown_events_json,
-                time_slot_rules_json,
-                memo_text,
-                now,
-            ),
-        )
-        config_id = cursor.lastrowid
+    # Insert new config
+    countdown_events_json = json.dumps(
+        data.get("countdownEvents", []), ensure_ascii=False
+    )
+    time_slot_rules_json = json.dumps(
+        data.get("timeSlotRules", []), ensure_ascii=False
+    )
+    memo_text = data.get("memoText", "")
+    cursor = await db.execute(
+        """INSERT INTO configs
+           (mac, nickname, modes, refresh_strategy, character_tones,
+            language, content_tone, city, refresh_interval, llm_provider, llm_model,
+            countdown_events, time_slot_rules, memo_text, is_active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+        (
+            mac,
+            data.get("nickname", ""),
+            ",".join(data.get("modes", DEFAULT_MODES)),
+            refresh_strategy,
+            ",".join(data.get("characterTones", [])),
+            data.get("language", DEFAULT_LANGUAGE),
+            data.get("contentTone", DEFAULT_CONTENT_TONE),
+            data.get("city", DEFAULT_CITY),
+            data.get("refreshInterval", DEFAULT_REFRESH_INTERVAL),
+            data.get("llmProvider", DEFAULT_LLM_PROVIDER),
+            data.get("llmModel", DEFAULT_LLM_MODEL),
+            countdown_events_json,
+            time_slot_rules_json,
+            memo_text,
+            now,
+        ),
+    )
+    config_id = cursor.lastrowid
 
-        # Keep only the latest 5 configs per device
-        await db.execute(
-            """DELETE FROM configs 
-               WHERE mac = ? AND id NOT IN (
-                   SELECT id FROM configs 
-                   WHERE mac = ? 
-                   ORDER BY created_at DESC 
-                   LIMIT 5
-               )""",
-            (mac, mac),
-        )
+    # Keep only the latest 5 configs per device
+    await db.execute(
+        """DELETE FROM configs
+           WHERE mac = ? AND id NOT IN (
+               SELECT id FROM configs
+               WHERE mac = ?
+               ORDER BY created_at DESC
+               LIMIT 5
+           )""",
+        (mac, mac),
+    )
 
-        await db.commit()
-        logger.info(f"[CONFIG SAVE] ✓ Saved as id={config_id}, is_active=1")
-        return config_id
+    await db.commit()
+    logger.info(f"[CONFIG SAVE] ✓ Saved as id={config_id}, is_active=1")
+    return config_id
 
 
 def _row_to_dict(row, columns) -> dict:
@@ -191,150 +193,150 @@ def _row_to_dict(row, columns) -> dict:
 
 
 async def get_active_config(mac: str) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = None
-        cursor = await db.execute(
-            "SELECT * FROM configs WHERE mac = ? AND is_active = 1 ORDER BY id DESC LIMIT 1",
-            (mac,),
-        )
-        row = await cursor.fetchone()
-        if not row:
-            return None
-        columns = [desc[0] for desc in cursor.description]
-        config = _row_to_dict(row, columns)
-        logger.info(
-            f"[CONFIG LOAD] mac={mac}, id={config.get('id')}, refresh_strategy={config.get('refresh_strategy')}, modes={config.get('modes')}"
-        )
-        return config
+    db = await get_main_db()
+    db.row_factory = None
+    cursor = await db.execute(
+        "SELECT * FROM configs WHERE mac = ? AND is_active = 1 ORDER BY id DESC LIMIT 1",
+        (mac,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    columns = [desc[0] for desc in cursor.description]
+    config = _row_to_dict(row, columns)
+    logger.info(
+        f"[CONFIG LOAD] mac={mac}, id={config.get('id')}, refresh_strategy={config.get('refresh_strategy')}, modes={config.get('modes')}"
+    )
+    return config
 
 
 async def get_config_history(mac: str) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = None
-        cursor = await db.execute(
-            "SELECT * FROM configs WHERE mac = ? ORDER BY created_at DESC",
-            (mac,),
-        )
-        rows = await cursor.fetchall()
-        if not rows:
-            return []
-        columns = [desc[0] for desc in cursor.description]
-        return [_row_to_dict(r, columns) for r in rows]
+    db = await get_main_db()
+    db.row_factory = None
+    cursor = await db.execute(
+        "SELECT * FROM configs WHERE mac = ? ORDER BY created_at DESC",
+        (mac,),
+    )
+    rows = await cursor.fetchall()
+    if not rows:
+        return []
+    columns = [desc[0] for desc in cursor.description]
+    return [_row_to_dict(r, columns) for r in rows]
 
 
 async def activate_config(mac: str, config_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT id FROM configs WHERE id = ? AND mac = ?", (config_id, mac)
-        )
-        if not await cursor.fetchone():
-            return False
-        await db.execute("UPDATE configs SET is_active = 0 WHERE mac = ?", (mac,))
-        await db.execute("UPDATE configs SET is_active = 1 WHERE id = ?", (config_id,))
-        await db.commit()
-        return True
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT id FROM configs WHERE id = ? AND mac = ?", (config_id, mac)
+    )
+    if not await cursor.fetchone():
+        return False
+    await db.execute("UPDATE configs SET is_active = 0 WHERE mac = ?", (mac,))
+    await db.execute("UPDATE configs SET is_active = 1 WHERE id = ?", (config_id,))
+    await db.commit()
+    return True
 
 
 # ── Device state (cycle_index, pending_refresh, etc.) ──────
 
 
 async def get_cycle_index(mac: str) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT cycle_index FROM device_state WHERE mac = ?", (mac,)
-        )
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT cycle_index FROM device_state WHERE mac = ?", (mac,)
+    )
+    row = await cursor.fetchone()
+    return row[0] if row else 0
 
 
 async def set_cycle_index(mac: str, idx: int):
     now = datetime.now().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO device_state (mac, cycle_index, updated_at)
-               VALUES (?, ?, ?)
-               ON CONFLICT(mac) DO UPDATE SET cycle_index = ?, updated_at = ?""",
-            (mac, idx, now, idx, now),
-        )
-        await db.commit()
+    db = await get_main_db()
+    await db.execute(
+        """INSERT INTO device_state (mac, cycle_index, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(mac) DO UPDATE SET cycle_index = ?, updated_at = ?""",
+        (mac, idx, now, idx, now),
+    )
+    await db.commit()
 
 
 async def update_device_state(mac: str, **kwargs):
     """Update device state fields (last_persona, last_refresh_at, pending_refresh, etc.)."""
     now = datetime.now().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Ensure row exists
-        await db.execute(
-            """INSERT INTO device_state (mac, updated_at)
-               VALUES (?, ?)
-               ON CONFLICT(mac) DO UPDATE SET updated_at = ?""",
-            (mac, now, now),
-        )
-        for key, value in kwargs.items():
-            if key in ("last_persona", "last_refresh_at", "pending_refresh", "cycle_index", "pending_mode"):
-                await db.execute(
-                    f"UPDATE device_state SET {key} = ? WHERE mac = ?",
-                    (value, mac),
-                )
-        await db.commit()
+    db = await get_main_db()
+    # Ensure row exists
+    await db.execute(
+        """INSERT INTO device_state (mac, updated_at)
+           VALUES (?, ?)
+           ON CONFLICT(mac) DO UPDATE SET updated_at = ?""",
+        (mac, now, now),
+    )
+    for key, value in kwargs.items():
+        if key in ("last_persona", "last_refresh_at", "pending_refresh", "cycle_index", "pending_mode"):
+            await db.execute(
+                f"UPDATE device_state SET {key} = ? WHERE mac = ?",
+                (value, mac),
+            )
+    await db.commit()
 
 
 async def get_device_state(mac: str) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = None
-        cursor = await db.execute(
-            "SELECT * FROM device_state WHERE mac = ?", (mac,)
-        )
-        row = await cursor.fetchone()
-        if not row:
-            return None
-        columns = [desc[0] for desc in cursor.description]
-        return dict(zip(columns, row))
+    db = await get_main_db()
+    db.row_factory = None
+    cursor = await db.execute(
+        "SELECT * FROM device_state WHERE mac = ?", (mac,)
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    columns = [desc[0] for desc in cursor.description]
+    return dict(zip(columns, row))
 
 
 async def set_pending_refresh(mac: str, pending: bool = True):
     now = datetime.now().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO device_state (mac, pending_refresh, updated_at)
-               VALUES (?, ?, ?)
-               ON CONFLICT(mac) DO UPDATE SET pending_refresh = ?, updated_at = ?""",
-            (mac, int(pending), now, int(pending), now),
-        )
-        await db.commit()
+    db = await get_main_db()
+    await db.execute(
+        """INSERT INTO device_state (mac, pending_refresh, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(mac) DO UPDATE SET pending_refresh = ?, updated_at = ?""",
+        (mac, int(pending), now, int(pending), now),
+    )
+    await db.commit()
 
 
 async def consume_pending_refresh(mac: str) -> bool:
     """Check and clear pending refresh flag. Returns True if was pending."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT pending_refresh FROM device_state WHERE mac = ?", (mac,)
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT pending_refresh FROM device_state WHERE mac = ?", (mac,)
+    )
+    row = await cursor.fetchone()
+    if row and row[0]:
+        await db.execute(
+            "UPDATE device_state SET pending_refresh = 0 WHERE mac = ?", (mac,)
         )
-        row = await cursor.fetchone()
-        if row and row[0]:
-            await db.execute(
-                "UPDATE device_state SET pending_refresh = 0 WHERE mac = ?", (mac,)
-            )
-            await db.commit()
-            return True
-        return False
+        await db.commit()
+        return True
+    return False
 
 
 async def generate_device_token(mac: str) -> str:
     """Generate and store a new auth token for a device."""
     token = secrets.token_urlsafe(32)
     now = datetime.now().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            """UPDATE device_state SET auth_token = ?, updated_at = ? WHERE mac = ?""",
-            (token, now, mac),
+    db = await get_main_db()
+    cursor = await db.execute(
+        """UPDATE device_state SET auth_token = ?, updated_at = ? WHERE mac = ?""",
+        (token, now, mac),
+    )
+    if cursor.rowcount == 0:
+        await db.execute(
+            """INSERT INTO device_state (mac, auth_token, updated_at) VALUES (?, ?, ?)""",
+            (mac, token, now),
         )
-        if cursor.rowcount == 0:
-            await db.execute(
-                """INSERT INTO device_state (mac, auth_token, updated_at) VALUES (?, ?, ?)""",
-                (mac, token, now),
-            )
-        await db.commit()
+    await db.commit()
     return token
 
 
@@ -342,11 +344,11 @@ async def validate_device_token(mac: str, token: str) -> bool:
     """Validate a device's auth token."""
     if not token:
         return False
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT auth_token FROM device_state WHERE mac = ?", (mac,)
-        )
-        row = await cursor.fetchone()
-        if not row or not row[0]:
-            return False
-        return row[0] == token
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT auth_token FROM device_state WHERE mac = ?", (mac,)
+    )
+    row = await cursor.fetchone()
+    if not row or not row[0]:
+        return False
+    return row[0] == token

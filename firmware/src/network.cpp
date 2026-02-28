@@ -1,6 +1,7 @@
 #include "network.h"
 #include "config.h"
 #include "storage.h"
+#include "certs.h"
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -33,8 +34,31 @@ bool connectWiFi() {
 // ── Battery voltage ─────────────────────────────────────────
 
 float readBatteryVoltage() {
-    int raw = analogRead(PIN_BAT_ADC);
-    return raw * (3.3f / 4095.0f) * 2.0f;
+    const int SAMPLES = 16;
+    const int DISCARD = 2;  // Discard highest and lowest outliers
+    int readings[SAMPLES];
+
+    for (int i = 0; i < SAMPLES; i++) {
+        readings[i] = analogRead(PIN_BAT_ADC);
+        delayMicroseconds(100);
+    }
+
+    // Sort for outlier removal
+    for (int i = 0; i < SAMPLES - 1; i++)
+        for (int j = i + 1; j < SAMPLES; j++)
+            if (readings[i] > readings[j]) {
+                int tmp = readings[i];
+                readings[i] = readings[j];
+                readings[j] = tmp;
+            }
+
+    // Average middle readings (discard DISCARD highest and lowest)
+    long sum = 0;
+    for (int i = DISCARD; i < SAMPLES - DISCARD; i++)
+        sum += readings[i];
+
+    float avgRaw = (float)sum / (SAMPLES - 2 * DISCARD);
+    return avgRaw * (3.3f / 4095.0f) * 2.0f;
 }
 
 // ── Stream helper ───────────────────────────────────────────
@@ -80,7 +104,7 @@ bool fetchBMP(bool nextMode) {
     WiFiClientSecure secClient;
     HTTPClient http;
     if (useSSL) {
-        secClient.setInsecure();
+        secClient.setCACert(ROOT_CA);  // Verify server certificate against ISRG Root X1
         http.begin(secClient, url);
     } else {
         http.begin(plainClient, url);
@@ -176,7 +200,7 @@ void postConfigToBackend() {
     HTTPClient http;
     String url = cfgServer + "/api/config";
     if (useSSL) {
-        secClient.setInsecure();
+        secClient.setCACert(ROOT_CA);  // Verify server certificate against ISRG Root X1
         http.begin(secClient, url);
     } else {
         http.begin(plainClient, url);
