@@ -30,6 +30,32 @@ logger = logging.getLogger(__name__)
 
 STATUS_BAR_BOTTOM_DEFAULT = 36  # Used when screen_h unknown (e.g. dataclass default)
 
+_EMOJI_PATTERN = re.compile(
+    r"[\U0001F300-\U0001F9FF\u2600-\u26FF\u2700-\u27BF]+", re.UNICODE
+)
+
+
+def _strip_emoji(s: str) -> str:
+    """Remove emoji/symbols that typical CJK fonts don't render."""
+    if not s:
+        return s
+    return _EMOJI_PATTERN.sub("", s).strip()
+
+
+_LABEL_EMOJI_TO_ICON = {
+    "\U0001f4d6": "book",
+    "\U0001f4a1": "tips",
+    "\U0001f31f": "star",
+}
+
+
+def _section_icon_from_label(label: str) -> str | None:
+    """If label starts with a known emoji, return the corresponding icon name."""
+    for emoji, icon_name in _LABEL_EMOJI_TO_ICON.items():
+        if label.startswith(emoji) or emoji in label:
+            return icon_name
+    return None
+
 
 @dataclass
 class RenderContext:
@@ -219,7 +245,7 @@ def _render_centered_text(ctx: RenderContext, block: dict, *, use_full_body: boo
     if not text:
         return
 
-    font_size = int(block.get("font_size", 16) * ctx.scale)
+    font_size = max(10, int(block.get("font_size", 16) * ctx.scale))
     font_name = block.get("font_name")
     font_key = block.get("font", "noto_serif_light")
     max_ratio = block.get("max_width_ratio", 0.88)
@@ -227,6 +253,10 @@ def _render_centered_text(ctx: RenderContext, block: dict, *, use_full_body: boo
 
     body_height = ctx.footer_top - ctx.y
     max_w = int(ctx.available_width * max_ratio)
+    lines = []
+    font = None
+    line_h = font_size + line_spacing
+    total_h = 0
     while font_size >= 10:
         if font_name:
             if has_cjk(text) and "Noto" not in font_name:
@@ -333,8 +363,11 @@ def _render_separator(ctx: RenderContext, block: dict) -> None:
 
 
 def _render_section(ctx: RenderContext, block: dict) -> None:
-    title = block.get("title", "")
+    raw_title = block.get("title") or block.get("label", "")
     icon_name = block.get("icon")
+    if not icon_name:
+        icon_name = _section_icon_from_label(raw_title)
+    title = _strip_emoji(raw_title)
     title_font_key = block.get("title_font", "noto_serif_regular")
     title_font_size = int(block.get("title_font_size", 14) * ctx.scale)
 
@@ -354,7 +387,7 @@ def _render_section(ctx: RenderContext, block: dict) -> None:
     ctx.draw.text((x, ctx.y), title, fill=EINK_FG, font=font)
     ctx.y += title_font_size + int(6 * ctx.scale)
 
-    for child in block.get("children", []):
+    for child in block.get("children") or block.get("blocks", []):
         if ctx.y >= ctx.footer_top - 10:
             break
         _render_block(ctx, child)
