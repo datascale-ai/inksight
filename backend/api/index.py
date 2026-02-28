@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 from typing import Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Request, Response
+from fastapi import FastAPI, Query, Request, Response, Depends, Header
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 import httpx
 from PIL import Image
@@ -73,6 +73,7 @@ from core.stats_store import (
     check_habit,
     get_habit_status,
 )
+from core.auth import validate_mac_param, require_device_token, require_admin
 
 
 @asynccontextmanager
@@ -475,7 +476,10 @@ async def render(
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
     next_mode: Optional[int] = Query(default=None, alias="next", description="1 = advance to next mode (double-click)"),
+    x_device_token: Optional[str] = Header(default=None),
 ):
+    if mac:
+        await require_device_token(mac, x_device_token)
     start_time = time.time()
     force_next = (next_mode == 1)
     logger.debug(f"[RENDER] Request started: mac={mac}, v={v}, persona={persona}, next={force_next}, size={w}x{h}")
@@ -520,10 +524,12 @@ async def get_widget(
     w: int = 400,
     h: int = 300,
     size: str = "",
+    x_device_token: Optional[str] = Header(default=None),
 ):
     """Read-only widget endpoint for embedding InkSight content.
     Does NOT update device state or trigger refreshes.
     """
+    await require_device_token(mac, x_device_token)
     # Size presets
     if size == "small":
         w, h = 200, 150
@@ -588,7 +594,7 @@ async def preview(
 
 
 @app.post("/api/config")
-async def post_config(body: ConfigRequest):
+async def post_config(body: ConfigRequest, admin_auth: None = Depends(require_admin)):
     data = body.model_dump()
     mac = data["mac"]
     config_id = await save_config(mac, data)
@@ -604,7 +610,8 @@ async def post_config(body: ConfigRequest):
 
 
 @app.get("/api/config/{mac}")
-async def get_config(mac: str):
+async def get_config(mac: str, x_device_token: Optional[str] = Header(default=None)):
+    await require_device_token(mac, x_device_token)
     config = await get_active_config(mac)
     if not config:
         return JSONResponse({"error": "no config found"}, status_code=404)
@@ -612,13 +619,14 @@ async def get_config(mac: str):
 
 
 @app.get("/api/config/{mac}/history")
-async def get_config_hist(mac: str):
+async def get_config_hist(mac: str, x_device_token: Optional[str] = Header(default=None)):
+    await require_device_token(mac, x_device_token)
     history = await get_config_history(mac)
     return {"mac": mac, "configs": history}
 
 
 @app.put("/api/config/{mac}/activate/{config_id}")
-async def put_activate(mac: str, config_id: int):
+async def put_activate(mac: str, config_id: int, admin_auth: None = Depends(require_admin)):
     ok = await activate_config(mac, config_id)
     if not ok:
         return JSONResponse({"error": "config not found"}, status_code=404)
@@ -646,7 +654,7 @@ async def list_modes():
 
 
 @app.post("/api/modes/custom/preview")
-async def custom_mode_preview(body: dict):
+async def custom_mode_preview(body: dict, admin_auth: None = Depends(require_admin)):
     """Render a preview for a custom mode definition without saving."""
     mode_def = body.get("mode_def", body)
     if not mode_def.get("mode_id"):
@@ -681,7 +689,7 @@ async def custom_mode_preview(body: dict):
 
 
 @app.post("/api/modes/custom")
-async def create_custom_mode(body: dict):
+async def create_custom_mode(body: dict, admin_auth: None = Depends(require_admin)):
     """Upload a JSON mode definition."""
     import json as _json
     from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def
@@ -725,7 +733,7 @@ async def get_custom_mode(mode_id: str):
 
 
 @app.delete("/api/modes/custom/{mode_id}")
-async def delete_custom_mode(mode_id: str):
+async def delete_custom_mode(mode_id: str, admin_auth: None = Depends(require_admin)):
     """Delete a custom mode."""
     mode_id = mode_id.upper()
     registry = get_registry()
@@ -745,7 +753,7 @@ async def delete_custom_mode(mode_id: str):
 
 
 @app.post("/api/modes/generate")
-async def generate_mode(body: dict):
+async def generate_mode(body: dict, admin_auth: None = Depends(require_admin)):
     """Use AI to generate a mode definition from natural language description."""
     description = body.get("description", "").strip()
     if not description:
@@ -918,16 +926,18 @@ def _load_web_page_html(filename: str) -> str:
 
 
 @app.post("/api/device/{mac}/refresh")
-async def trigger_refresh(mac: str):
+async def trigger_refresh(mac: str, x_device_token: Optional[str] = Header(default=None)):
     """Mark a device for immediate refresh on next wake-up."""
+    await require_device_token(mac, x_device_token)
     await set_pending_refresh(mac, True)
     logger.info(f"[DEVICE] Pending refresh set for {mac}")
     return {"ok": True, "message": "Refresh queued for next wake-up"}
 
 
 @app.get("/api/device/{mac}/state")
-async def device_state(mac: str):
+async def device_state(mac: str, x_device_token: Optional[str] = Header(default=None)):
     """Get device runtime state."""
+    await require_device_token(mac, x_device_token)
     state = await get_device_state(mac)
     if not state:
         return JSONResponse({"error": "no device state found"}, status_code=404)
@@ -935,8 +945,9 @@ async def device_state(mac: str):
 
 
 @app.post("/api/device/{mac}/switch")
-async def switch_mode(mac: str, body: dict):
+async def switch_mode(mac: str, body: dict, x_device_token: Optional[str] = Header(default=None)):
     """Set a pending mode for the device to use on next refresh."""
+    await require_device_token(mac, x_device_token)
     mode = body.get("mode", "").upper()
     registry = get_registry()
     if not mode or not registry.is_supported(mode):
@@ -947,8 +958,9 @@ async def switch_mode(mac: str, body: dict):
 
 
 @app.post("/api/device/{mac}/favorite")
-async def favorite_content(mac: str):
+async def favorite_content(mac: str, x_device_token: Optional[str] = Header(default=None)):
     """Favorite the most recently rendered content for this device."""
+    await require_device_token(mac, x_device_token)
     latest = await get_latest_render_content(mac)
     if not latest:
         state = await get_device_state(mac)
@@ -965,8 +977,10 @@ async def favorite_content(mac: str):
 async def list_favorites(
     mac: str,
     limit: int = Query(default=30, ge=1, le=100),
+    x_device_token: Optional[str] = Header(default=None),
 ):
     """Get favorites for a device."""
+    await require_device_token(mac, x_device_token)
     favorites = await get_favorites(mac, limit)
     return {"mac": mac, "favorites": favorites}
 
@@ -977,15 +991,18 @@ async def content_history(
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     mode: Optional[str] = Query(default=None, description="Filter by mode"),
+    x_device_token: Optional[str] = Header(default=None),
 ):
     """Get content history for a device."""
+    await require_device_token(mac, x_device_token)
     history = await get_content_history(mac, limit, offset, mode)
     return {"mac": mac, "history": history}
 
 
 @app.post("/api/device/{mac}/habit/check")
-async def habit_check(mac: str, body: dict):
+async def habit_check(mac: str, body: dict, x_device_token: Optional[str] = Header(default=None)):
     """Record a habit check."""
+    await require_device_token(mac, x_device_token)
     habit_name = body.get("habit", "").strip()
     if not habit_name:
         return JSONResponse({"error": "habit name is required"}, status_code=400)
@@ -995,24 +1012,42 @@ async def habit_check(mac: str, body: dict):
 
 
 @app.get("/api/device/{mac}/habit/status")
-async def habit_status(mac: str):
+async def habit_status(mac: str, x_device_token: Optional[str] = Header(default=None)):
     """Get habit status for the current week."""
+    await require_device_token(mac, x_device_token)
     habits = await get_habit_status(mac)
     return {"mac": mac, "habits": habits}
+
+
+@app.post("/api/device/{mac}/token")
+async def provision_device_token(mac: str):
+    """分发或获取设备 Token。
+
+    - 新设备（无状态）：生成并返回新 Token
+    - 已有设备：返回已有 Token
+    """
+    state = await get_device_state(mac)
+    if state and state.get("auth_token"):
+        return {"token": state["auth_token"], "new": False}
+
+    token = await generate_device_token(mac)
+    logger.info(f"[AUTH] 为设备 {mac} 分发了新 Token")
+    return {"token": token, "new": True}
 
 
 # ── Stats endpoints ──────────────────────────────────────────
 
 
 @app.get("/api/stats/overview")
-async def stats_overview():
+async def stats_overview(admin_auth: None = Depends(require_admin)):
     """Global statistics overview."""
     return await get_stats_overview()
 
 
 @app.get("/api/stats/{mac}")
-async def stats_device(mac: str):
+async def stats_device(mac: str, x_device_token: Optional[str] = Header(default=None)):
     """Device-specific statistics."""
+    await require_device_token(mac, x_device_token)
     return await get_device_stats(mac)
 
 
@@ -1021,8 +1056,10 @@ async def stats_renders(
     mac: str,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    x_device_token: Optional[str] = Header(default=None),
 ):
     """Render history for a device with pagination."""
+    await require_device_token(mac, x_device_token)
     renders = await get_render_history(mac, limit, offset)
     return {"mac": mac, "renders": renders}
 
@@ -1034,8 +1071,10 @@ async def stats_renders(
 async def device_qr(
     mac: str,
     base_url: Optional[str] = Query(default=None, description="Override base URL for remote page"),
+    x_device_token: Optional[str] = Header(default=None),
 ):
     """Generate a QR code BMP for device binding (scan to open remote control)."""
+    await require_device_token(mac, x_device_token)
     import qrcode
     from io import BytesIO
 
@@ -1063,8 +1102,10 @@ async def share_image(
     mac: str,
     w: int = Query(default=800, ge=400, le=1600),
     h: int = Query(default=450, ge=300, le=900),
+    x_device_token: Optional[str] = Header(default=None),
 ):
     """Generate a shareable image (16:9) with InkSight watermark."""
+    await require_device_token(mac, x_device_token)
     latest = await get_latest_render_content(mac)
     if not latest:
         return JSONResponse({"error": "no content to share"}, status_code=404)

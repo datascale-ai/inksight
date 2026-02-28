@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkSight - Modes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #f6f4f0;
+    font-family: 'Inter', sans-serif;
+    position: relative;
+  }
+
+  /* Paper texture */
+  body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .container {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    padding: 72px 120px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 56px;
+  }
+
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .brand-mark {
+    font-family: 'Lora', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a1a;
+    letter-spacing: -0.5px;
+  }
+
+  .section-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 40px;
+    font-weight: 600;
+    color: #1a1a1a;
+    letter-spacing: 1px;
+  }
+
+  .section-subtitle {
+    font-family: 'Lora', serif;
+    font-size: 15px;
+    font-style: italic;
+    color: #999;
+  }
+
+  .header-right {
+    text-align: right;
+    padding-top: 8px;
+  }
+
+  .header-stat {
+    font-family: 'Lora', serif;
+    font-size: 48px;
+    font-weight: 700;
+    color: #1a1a1a;
+    line-height: 1;
+  }
+
+  .header-stat-label {
+    font-size: 13px;
+    color: #999;
+    letter-spacing: 2px;
+    margin-top: 4px;
+  }
+
+  /* Grid */
+  .modes-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 20px;
+    flex: 1;
+  }
+
+  .mode-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid rgba(26,26,26,0.06);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease;
+  }
+
+  .mode-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #1a1a1a;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .mode-card:hover::before {
+    opacity: 1;
+  }
+
+  .mode-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  .mode-icon svg {
+    width: 28px;
+    height: 28px;
+    stroke: #1a1a1a;
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  .mode-name-zh {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 4px;
+  }
+
+  .mode-name-en {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: #bbb;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .mode-desc {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 13px;
+    color: #888;
+    line-height: 1.6;
+  }
+
+  /* Special highlight card */
+  .mode-card.featured {
+    background: #1a1a1a;
+    border-color: transparent;
+  }
+
+  .mode-card.featured .mode-icon svg {
+    stroke: #f6f4f0;
+  }
+
+  .mode-card.featured .mode-name-zh {
+    color: #f6f4f0;
+  }
+
+  .mode-card.featured .mode-name-en {
+    color: rgba(255,255,255,0.35);
+  }
+
+  .mode-card.featured .mode-desc {
+    color: rgba(255,255,255,0.5);
+  }
+
+  .mode-card.featured::before {
+    background: #f6f4f0;
+  }
+
+  /* Bottom note */
+  .bottom-note {
+    margin-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .bottom-note-text {
+    font-size: 13px;
+    color: #bbb;
+    letter-spacing: 0.5px;
+  }
+
+  .bottom-note-text strong {
+    color: #888;
+    font-weight: 500;
+  }
+
+  .more-modes {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .more-tag {
+    font-size: 11px;
+    color: #bbb;
+    padding: 4px 12px;
+    border: 1px solid rgba(26,26,26,0.1);
+    border-radius: 100px;
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-left">
+        <div class="brand-mark">InkSight</div>
+        <div class="section-title">内容模式一览</div>
+        <div class="section-subtitle">10 core modes, curated for your day</div>
+      </div>
+      <div class="header-right">
+        <div class="header-stat">22</div>
+        <div class="header-stat-label">TOTAL MODES</div>
+      </div>
+    </div>
+
+    <div class="modes-grid">
+      <!-- Row 1 -->
+      <div class="mode-card featured">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="mode-name-zh">每日推荐</div>
+          <div class="mode-name-en">DAILY</div>
+        </div>
+        <div class="mode-desc">日期、金句、天气、资讯一屏尽览</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/></svg>
+          </div>
+          <div class="mode-name-zh">天气</div>
+          <div class="mode-name-en">WEATHER</div>
+        </div>
+        <div class="mode-desc">实时天气、温度、穿衣建议</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div class="mode-name-zh">禅意</div>
+          <div class="mode-name-en">ZEN</div>
+        </div>
+        <div class="mode-desc">当下即是全部，一字一境的禅宗智慧</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          </div>
+          <div class="mode-name-zh">简报</div>
+          <div class="mode-name-en">BRIEFING</div>
+        </div>
+        <div class="mode-desc">AI 精选科技资讯摘要</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 9h.01M15 9h.01M8 14s1.5 2 4 2 4-2 4-2"/></svg>
+          </div>
+          <div class="mode-name-zh">斯多葛</div>
+          <div class="mode-name-en">STOIC</div>
+        </div>
+        <div class="mode-desc">每日斯多葛哲学沉思录</div>
+      </div>
+
+      <!-- Row 2 -->
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div class="mode-name-zh">诗词</div>
+          <div class="mode-name-en">POETRY</div>
+        </div>
+        <div class="mode-desc">中英经典诗词，品味文字之美</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div class="mode-name-zh">AI 画廊</div>
+          <div class="mode-name-en">ARTWALL</div>
+        </div>
+        <div class="mode-desc">AI 生成艺术画作装点桌面</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+          <div class="mode-name-zh">黄历</div>
+          <div class="mode-name-en">ALMANAC</div>
+        </div>
+        <div class="mode-desc">传统黄历宜忌，AI 趣味解读</div>
+      </div>
+
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+          </div>
+          <div class="mode-name-zh">食谱</div>
+          <div class="mode-name-en">RECIPE</div>
+        </div>
+        <div class="mode-desc">时令菜谱推荐，健康饮食灵感</div>
+      </div>
+
+      <div class="mode-card featured">
+        <div>
+          <div class="mode-icon">
+            <svg viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+          </div>
+          <div class="mode-name-zh">倒计时</div>
+          <div class="mode-name-en">COUNTDOWN</div>
+        </div>
+        <div class="mode-desc">重要日期倒数，不错过每个时刻</div>
+      </div>
+    </div>
+
+    <div class="bottom-note">
+      <div class="bottom-note-text">
+        <strong>JSON 驱动</strong> &mdash; 所有模式均通过 JSON 配置，无需编写代码即可自定义
+      </div>
+      <div class="more-modes">
+        <span class="more-tag">MEMO</span>
+        <span class="more-tag">HABIT</span>
+        <span class="more-tag">RIDDLE</span>
+        <span class="more-tag">ROAST</span>
+        <span class="more-tag">+12 more</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

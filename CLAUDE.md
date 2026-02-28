@@ -77,6 +77,19 @@ The backend is a single FastAPI app (`api/index.py`) that serves both API endpoi
 - `content.prompt_template` + `content.fallback` (required for `llm`/`llm_json` types)
 - `layout.body` — list of block renderers (non-empty)
 
+Optional JSON mode fields worth knowing:
+- `content.output_schema` — for `llm_json`: maps field names to default values; enables structured LLM output
+- `content.post_process` — field transformations after LLM response (e.g. `first_char`)
+- `content.temperature` — LLM temperature (0.0–1.0)
+- `layout_overrides` — screen-size-specific layout overrides (e.g. key `"296x128"` for small displays)
+- `layout.status_bar` / `layout.footer` — customize the top/bottom bars
+
+**Refresh strategies** (set per device in config):
+- `random` — random mode each cycle
+- `cycle` — sequential, persists index across deep sleep (via `storage.cpp`)
+- `time_slot` — user-defined time-based rules
+- `smart` — automatic time-based mode matching
+
 **Data stores** — two SQLite databases:
 - `inksight.db` — device configs, config history, device state (managed by `core/config_store.py`)
 - `cache.db` — rendered image cache (managed by `core/cache.py`)
@@ -111,9 +124,10 @@ All LLM calls use the OpenAI-compatible SDK. The `ARTWALL` mode calls Alibaba's 
 ### Web Config (`webconfig/`)
 
 Static HTML pages served by the FastAPI app:
-- `config.html` — device configuration manager
-- `preview.html` — render preview console
-- `dashboard.html` — statistics dashboard
+- `config.html` — device configuration manager (mode selection, refresh strategy, time-slot rules, language/tone)
+- `preview.html` — render preview console (test modes before saving, history, resolution simulation)
+- `dashboard.html` — statistics dashboard (battery trends, mode usage, cache hit rate, render log)
+- `editor.html` — custom JSON mode editor with template scaffolding and live preview integration
 
 ### Web App (`webapp/`)
 
@@ -127,7 +141,9 @@ PlatformIO / Arduino project for ESP32-C3. Main files:
 - `src/main.cpp` — main loop, button handling (short/double/long press), deep sleep + wake logic
 - `src/network.cpp` — WiFi connection, HTTP fetch from backend, NTP time sync, RSSI reporting
 - `src/display.cpp` — GxEPD2 e-ink display driver
+- `src/epd_driver.cpp` — raw e-ink display control (low-level SPI commands)
 - `src/portal.cpp` — Captive Portal for WiFi provisioning
+- `src/storage.cpp` — NVS (flash) storage for persisting device state across deep sleep
 
 ## Testing
 
@@ -159,3 +175,26 @@ Place a `.json` file in `backend/core/modes/custom/`. Minimum structure:
 ```
 
 The mode registry reloads on server restart. Mode IDs must not conflict with existing builtin IDs. See `backend/core/modes/custom/my_quote.json` for a working example.
+
+### JSON Renderer Block Types
+
+`core/json_renderer.py` registers 16 block types in `_BLOCK_RENDERERS`:
+
+| Block type | Purpose |
+|---|---|
+| `centered_text` | Centered text with auto-scaling |
+| `text` | Left/center/right aligned text with wrapping |
+| `separator` | Solid, dashed, or short horizontal lines |
+| `section` | Title + optional icon + child blocks |
+| `group` | Lightweight title + child blocks |
+| `list` | Numbered/unnumbered list with `field_template` and `max_items` |
+| `vertical_stack` | Stack child blocks vertically with spacing |
+| `two_column` | Left/right layout (auto-degrades on narrow screens) |
+| `conditional` | Render children only when a condition is met (`exists`, `eq`, `gt`, `lt`, `len_gt`, etc.) |
+| `spacer` | Vertical whitespace |
+| `icon_text` | Icon + text pair |
+| `icon_list` | Multiple icons with associated text |
+| `key_value` | Label: value pairs (dict values rendered as "a · b · c") |
+| `big_number` | Large font number with alignment options |
+| `progress_bar` | Value/max-based bar |
+| `image` | Remote image (fetched + converted to 1-bit) with fallback placeholder |

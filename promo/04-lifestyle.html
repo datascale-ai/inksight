@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkSight - Lifestyle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #f6f4f0;
+    font-family: 'Inter', sans-serif;
+    position: relative;
+  }
+
+  /* Split layout */
+  .layout {
+    display: flex;
+    height: 100%;
+    position: relative;
+  }
+
+  /* Left: Illustration area */
+  .left-panel {
+    width: 55%;
+    background: #0d0d0f;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Ambient desk scene */
+  .desk-scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Abstract desk elements */
+  .desk-surface {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 45%;
+    background: linear-gradient(to bottom, #151517, #1a1a1e);
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* Ambient light from screen */
+  .ambient-light {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px;
+    height: 400px;
+    background: radial-gradient(ellipse, rgba(246,244,240,0.06) 0%, transparent 70%);
+  }
+
+  /* E-ink device on desk */
+  .device-on-desk {
+    position: relative;
+    z-index: 3;
+    margin-top: -40px;
+  }
+
+  .device-body {
+    width: 320px;
+    background: #222;
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 -2px 20px rgba(246,244,240,0.03);
+  }
+
+  .device-screen {
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #f2f0ec;
+    border-radius: 6px;
+    padding: 20px 22px;
+    position: relative;
+  }
+
+  .device-screen .ds-time {
+    font-family: 'Inter', sans-serif;
+    font-size: 8px;
+    color: #999;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .device-screen .ds-zen {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 52px;
+    font-weight: 700;
+    color: #1a1a1a;
+    text-align: center;
+    margin-top: 40px;
+    line-height: 1;
+  }
+
+  .device-screen .ds-zen-sub {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+    margin-top: 12px;
+  }
+
+  .device-screen .ds-mode {
+    position: absolute;
+    bottom: 14px;
+    right: 16px;
+    font-family: 'Inter', sans-serif;
+    font-size: 8px;
+    color: #bbb;
+    letter-spacing: 1px;
+  }
+
+  /* LED indicator */
+  .device-led {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34,197,94,0.5);
+    margin: 10px auto 0;
+  }
+
+  /* Desk items */
+  .desk-item {
+    position: absolute;
+    z-index: 2;
+  }
+
+  .coffee-mug {
+    bottom: 28%;
+    right: 12%;
+    width: 50px;
+    height: 44px;
+    border: 2px solid rgba(255,255,255,0.06);
+    border-radius: 4px 4px 6px 6px;
+    position: relative;
+  }
+
+  .coffee-mug::after {
+    content: '';
+    position: absolute;
+    right: -12px;
+    top: 8px;
+    width: 12px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.06);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .plant-pot {
+    bottom: 28%;
+    left: 10%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .plant-leaves {
+    width: 40px;
+    height: 30px;
+    position: relative;
+  }
+
+  .plant-leaves::before,
+  .plant-leaves::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 16px;
+    height: 24px;
+    border: 2px solid rgba(34,197,94,0.15);
+    border-radius: 50% 50% 0 0;
+  }
+
+  .plant-leaves::before { left: 4px; transform: rotate(-15deg); }
+  .plant-leaves::after { right: 4px; transform: rotate(15deg); }
+
+  .plant-pot-body {
+    width: 24px;
+    height: 18px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px 2px 4px 4px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* Steam animation */
+  .steam {
+    position: absolute;
+    bottom: calc(28% + 44px);
+    right: calc(12% + 14px);
+    display: flex;
+    gap: 6px;
+  }
+
+  .steam-line {
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(to top, rgba(255,255,255,0.06), transparent);
+    border-radius: 1px;
+    animation: steam-rise 3s ease-in-out infinite;
+  }
+
+  .steam-line:nth-child(2) { animation-delay: 0.5s; height: 16px; }
+  .steam-line:nth-child(3) { animation-delay: 1s; height: 12px; }
+
+  @keyframes steam-rise {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50% { opacity: 0.8; transform: translateY(-6px); }
+  }
+
+  /* Right: Text content */
+  .right-panel {
+    width: 45%;
+    padding: 100px 80px 80px 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+  }
+
+  .right-brand {
+    font-family: 'Lora', serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: #bbb;
+    margin-bottom: 40px;
+    letter-spacing: -0.5px;
+  }
+
+  .right-headline {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 52px;
+    font-weight: 700;
+    color: #1a1a1a;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+
+  .right-headline-en {
+    font-family: 'Lora', serif;
+    font-size: 18px;
+    font-style: italic;
+    color: #bbb;
+    margin-bottom: 64px;
+  }
+
+  /* Benefits */
+  .benefits {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    margin-bottom: 72px;
+  }
+
+  .benefit-item {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .benefit-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .benefit-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: #f6f4f0;
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  .benefit-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .benefit-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+
+  .benefit-desc {
+    font-size: 13px;
+    color: #999;
+    line-height: 1.6;
+  }
+
+  /* CTA */
+  .cta-section {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .cta-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 32px;
+    background: #1a1a1a;
+    color: #f6f4f0;
+    border-radius: 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    border: none;
+  }
+
+  .cta-button svg {
+    width: 18px;
+    height: 18px;
+    fill: #f6f4f0;
+  }
+
+  .cta-divider {
+    width: 1px;
+    height: 32px;
+    background: #ddd;
+  }
+
+  .cta-info {
+    font-size: 13px;
+    color: #bbb;
+    line-height: 1.5;
+  }
+
+  .cta-info strong {
+    color: #888;
+    font-weight: 500;
+  }
+
+  /* Decorative vertical line */
+  .vertical-line {
+    position: absolute;
+    left: 0;
+    top: 15%;
+    bottom: 15%;
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, #ddd, transparent);
+  }
+</style>
+</head>
+<body>
+  <div class="layout">
+    <div class="left-panel">
+      <div class="desk-surface"></div>
+      <div class="ambient-light"></div>
+
+      <div class="desk-scene">
+        <div class="device-on-desk">
+          <div class="device-body">
+            <div class="device-screen">
+              <div class="ds-time">
+                <span>14:30 周六</span>
+                <span>晴 22°C</span>
+              </div>
+              <div class="ds-zen">静</div>
+              <div class="ds-zen-sub">心若止水，万物自清</div>
+              <div class="ds-mode">ZEN</div>
+            </div>
+            <div class="device-led"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desk items -->
+      <div class="desk-item coffee-mug"></div>
+      <div class="steam">
+        <div class="steam-line"></div>
+        <div class="steam-line"></div>
+        <div class="steam-line"></div>
+      </div>
+      <div class="desk-item plant-pot">
+        <div class="plant-leaves"></div>
+        <div class="plant-pot-body"></div>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="vertical-line"></div>
+      <div class="right-brand">InkSight</div>
+      <div class="right-headline">慢信息<br>快生活</div>
+      <div class="right-headline-en">Slow information, mindful living.</div>
+
+      <div class="benefits">
+        <div class="benefit-item">
+          <div class="benefit-icon">
+            <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">超长续航，无感陪伴</div>
+            <div class="benefit-desc">LiFePO4 电池 + 深度睡眠，3-6个月无需充电</div>
+          </div>
+        </div>
+
+        <div class="benefit-item">
+          <div class="benefit-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">AI 个性化内容生成</div>
+            <div class="benefit-desc">接入主流 LLM，根据时间、天气、节气智能推送内容</div>
+          </div>
+        </div>
+
+        <div class="benefit-item">
+          <div class="benefit-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">墨水屏，护眼零干扰</div>
+            <div class="benefit-desc">无背光、无蓝光，静默显示不打扰专注工作</div>
+          </div>
+        </div>
+
+        <div class="benefit-item">
+          <div class="benefit-icon">
+            <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">开源可定制，JSON 驱动</div>
+            <div class="benefit-desc">MIT 协议，通过 JSON 配置自定义内容模式，无需编码</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-section">
+        <div class="cta-button">
+          <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Star on GitHub
+        </div>
+        <div class="cta-divider"></div>
+        <div class="cta-info">
+          <strong>100% 开源</strong><br>
+          DIY 硬件成本 &lt; ¥100
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

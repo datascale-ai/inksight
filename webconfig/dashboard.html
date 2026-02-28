@@ -174,12 +174,21 @@ canvas{display:block;width:100%}
 
 <script>
 const API_BASE = window.location.origin;
+function getAdminToken() {
+  return localStorage.getItem('inksight_admin_token') || '';
+}
+function authHeaders() {
+  const token = getAdminToken();
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
 const COLORS = ['#171717','#4b5563','#6b7280','#9ca3af','#d1d5db','#374151','#1f2937','#525252','#a3a3a3','#e5e7eb'];
 
 // Load global overview on page load
 async function loadOverview() {
   try {
-    const res = await fetch(`${API_BASE}/api/stats/overview`);
+    const res = await fetch(`${API_BASE}/api/stats/overview`, { headers: authHeaders() });
     if (!res.ok) return;
     const d = await res.json();
     document.getElementById('statDevices').textContent = d.total_devices || 0;
