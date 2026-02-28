@@ -741,31 +741,38 @@ async def custom_mode_preview(body: dict, admin_auth: None = Depends(require_adm
         mode_def = dict(mode_def, mode_id="PREVIEW")
     screen_w = body.get("w", SCREEN_WIDTH)
     screen_h = body.get("h", SCREEN_HEIGHT)
-    from core.json_content import generate_json_mode_content
-    from core.json_renderer import render_json_mode
+    try:
+        from core.json_content import generate_json_mode_content
+        from core.json_renderer import render_json_mode
 
-    date_ctx = await get_date_context()
-    weather = await get_weather()
-    content = await generate_json_mode_content(
-        mode_def,
-        date_ctx=date_ctx,
-        date_str=date_ctx["date_str"],
-        weather_str=weather["weather_str"],
-        screen_w=screen_w,
-        screen_h=screen_h,
-    )
-    img = render_json_mode(
-        mode_def, content,
-        date_str=date_ctx["date_str"],
-        weather_str=weather["weather_str"],
-        battery_pct=100.0,
-        screen_w=screen_w,
-        screen_h=screen_h,
-    )
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return StreamingResponse(iter([buf.getvalue()]), media_type="image/png")
+        date_ctx = await get_date_context()
+        weather = await get_weather()
+        content = await generate_json_mode_content(
+            mode_def,
+            date_ctx=date_ctx,
+            date_str=date_ctx["date_str"],
+            weather_str=weather["weather_str"],
+            screen_w=screen_w,
+            screen_h=screen_h,
+        )
+        img = render_json_mode(
+            mode_def, content,
+            date_str=date_ctx["date_str"],
+            weather_str=weather["weather_str"],
+            battery_pct=100.0,
+            screen_w=screen_w,
+            screen_h=screen_h,
+        )
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return StreamingResponse(iter([buf.getvalue()]), media_type="image/png")
+    except Exception as e:
+        logger.exception("[CUSTOM_PREVIEW] Preview failed")
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500,
+        )
 
 
 @app.post("/api/modes/custom")
@@ -957,6 +964,11 @@ async def firmware_validate_url(url: str = Query(..., description="Firmware .bin
 
 @app.get("/", response_class=HTMLResponse)
 async def preview_page():
+    return HTMLResponse(content=_load_web_page_html("preview.html"))
+
+
+@app.get("/preview", response_class=HTMLResponse)
+async def preview_page_alias():
     return HTMLResponse(content=_load_web_page_html("preview.html"))
 
 
