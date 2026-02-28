@@ -117,24 +117,34 @@ static int textWidth(int charCount, int scale) {
 void showSetupScreen(const char *apName) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    // Title: "Setup WiFi" (scale 3, centered)
+    // Adaptive text scale based on screen height
+    int titleScale = (H < 200) ? 2 : 3;
+    int bodyScale  = (H < 200) ? 1 : 2;
+
+    // Proportional Y positions (percentage of screen height)
+    int titleY = H * 13 / 100;
+    int line1Y = H * 37 / 100;
+    int apY    = H * 48 / 100;
+    int line3Y = H * 67 / 100;
+
+    // Title: "Setup WiFi" (centered)
     const char *title = "Setup WiFi";
-    int titleX = (W - textWidth(strlen(title), 3)) / 2;
-    drawText(title, titleX, 40, 3);
+    int titleX = (W - textWidth(strlen(title), titleScale)) / 2;
+    drawText(title, titleX, titleY, titleScale);
 
-    // "Connect phone to" (scale 2, centered)
+    // "Connect phone to" (centered)
     const char *line1 = "Connect phone to";
-    int line1X = (W - textWidth(strlen(line1), 2)) / 2;
-    drawText(line1, line1X, 110, 2);
+    int line1X = (W - textWidth(strlen(line1), bodyScale)) / 2;
+    drawText(line1, line1X, line1Y, bodyScale);
 
-    // AP name (scale 3, centered)
-    int apX = (W - textWidth(strlen(apName), 3)) / 2;
-    drawText(apName, apX, 145, 3);
+    // AP name (centered)
+    int apX = (W - textWidth(strlen(apName), titleScale)) / 2;
+    drawText(apName, apX, apY, titleScale);
 
-    // "Open browser" (scale 2, centered)
+    // "Open browser" (centered)
     const char *line3 = "Open browser";
-    int line3X = (W - textWidth(strlen(line3), 2)) / 2;
-    drawText(line3, line3X, 200, 2);
+    int line3X = (W - textWidth(strlen(line3), bodyScale)) / 2;
+    drawText(line3, line3X, line3Y, bodyScale);
 
     epdDisplay(imgBuf);
     Serial.printf("Setup screen shown: %s\n", apName);
@@ -145,10 +155,10 @@ void showSetupScreen(const char *apName) {
 void showError(const char *msg) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    int scale = 2;
+    int scale = (H < 200) ? 1 : 2;
     int len = strlen(msg);
     int startX = (W - textWidth(len, scale)) / 2;
-    int startY = H / 2 - 7;
+    int startY = H / 2 - (7 * scale) / 2;
 
     drawText(msg, startX, startY, scale);
 
@@ -200,17 +210,18 @@ void updateTimeDisplay() {
 void showModePreview(const char *modeName) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
+    int nameScale = (H < 200) ? 2 : 3;
+    int loadScale = (H < 200) ? 1 : 2;
+
     int len = strlen(modeName);
-    int scale = 3;
-    int nameX = (W - textWidth(len, scale)) / 2;
-    int nameY = H / 2 - 30;
-    drawText(modeName, nameX, nameY, scale);
+    int nameX = (W - textWidth(len, nameScale)) / 2;
+    int nameY = H / 2 - (H < 200 ? 15 : 30);
+    drawText(modeName, nameX, nameY, nameScale);
 
     const char *loading = "loading...";
-    int loadScale = 2;
     int loadLen = strlen(loading);
     int loadX = (W - textWidth(loadLen, loadScale)) / 2;
-    int loadY = H / 2 + 20;
+    int loadY = H / 2 + (H < 200 ? 10 : 20);
     drawText(loading, loadX, loadY, loadScale);
 
     epdDisplayFast(imgBuf);

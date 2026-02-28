@@ -243,5 +243,58 @@
       "label": "FITNESS",
       "attribution_template": "Stay Healthy"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "workout_name", "font": "noto_serif_bold", "font_size": 13, "align": "left", "margin_x": 8 },
+        { "type": "text", "field": "duration", "font_size": 10, "align": "left", "margin_x": 8 },
+        { "type": "separator", "style": "short", "width": 40 },
+        {
+          "type": "list",
+          "field": "exercises",
+          "max_items": 3,
+          "item_template": "{name}",
+          "right_field": "reps",
+          "font_size": 11,
+          "item_spacing": 14,
+          "margin_x": 8,
+          "numbered": true
+        }
+      ],
+      "footer": { "label": "FITNESS", "height": 20 }
+    },
+    "648x480": {
+      "body": [
+        { "type": "spacer", "height": 20 },
+        { "type": "text", "field": "workout_name", "font": "noto_serif_bold", "font_size": 22, "align": "center" },
+        { "type": "text", "field": "duration", "font": "noto_serif_regular", "font_size": 18, "align": "center" },
+        { "type": "spacer", "height": 4 },
+        { "type": "separator", "style": "solid", "margin_x": 40, "line_width": 1 },
+        { "type": "icon_text", "icon": "exercise", "text": "训练动作", "font": "noto_serif_regular", "font_size": 18, "margin_x": 40 },
+        {
+          "type": "list",
+          "field": "exercises",
+          "max_items": 8,
+          "item_template": "{name}",
+          "right_field": "reps",
+          "font": "noto_serif_regular",
+          "font_size": 17,
+          "item_spacing": 22,
+          "margin_x": 50,
+          "numbered": true
+        },
+        { "type": "spacer", "height": 6 },
+        { "type": "separator", "style": "solid", "margin_x": 40, "line_width": 1 },
+        {
+          "type": "section",
+          "title": "",
+          "icon": "tips",
+          "children": [
+            { "type": "text", "field": "tip", "font": "noto_serif_light", "font_size": 16, "align": "left", "margin_x": 60, "max_lines": 3 }
+          ]
+        }
+      ]
+    }
   }
 }

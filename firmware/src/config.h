@@ -18,9 +18,10 @@
 // Default for 4.2" E-Paper (400x300, 1-bit).
 // Override via build flags: -D EPD_WIDTH=800 -D EPD_HEIGHT=480
 // Supported configurations:
-//   4.2" (400x300) - default
-//   7.5" (800x480)
-//   2.9" (296x128)
+//   4.2"  (400x300) - default
+//   2.9"  (296x128)
+//   5.83" (648x480)
+//   7.5"  (800x480)
 #ifndef EPD_WIDTH
 #define EPD_WIDTH  400
 #endif
@@ -61,9 +62,10 @@ static const int DEBUG_REFRESH_MIN = 1;  // 1 minute for debugging
 #endif
 
 // ── Time display region (partial refresh area) ──────────────
-#define TIME_RGN_X0   8
-#define TIME_RGN_X1   64
-#define TIME_RGN_Y0   6
-#define TIME_RGN_Y1   24
+// Proportional to screen size (scales across 2.9"/4.2"/7.5")
+#define TIME_RGN_X0   (W * 2 / 100)
+#define TIME_RGN_X1   (W * 16 / 100)
+#define TIME_RGN_Y0   (H * 2 / 100)
+#define TIME_RGN_Y1   (H * 8 / 100)
 
 #endif // INKSIGHT_CONFIG_H

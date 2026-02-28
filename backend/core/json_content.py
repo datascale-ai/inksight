@@ -63,6 +63,8 @@ async def generate_json_mode_content(
     llm_provider: str = "",
     llm_model: str = "",
     mac: str = "",
+    screen_w: int = 400,
+    screen_h: int = 300,
 ) -> dict:
     """Generate content for a JSON-defined mode.
 
@@ -119,6 +121,10 @@ async def generate_json_mode_content(
     style = _build_style_instructions(character_tones, language, content_tone)
     if style:
         base_prompt += style
+
+    # Hint for small screens: ask LLM to keep content shorter
+    if screen_h < 200:
+        base_prompt += "\n注意：内容将显示在极小屏幕上（296×128像素），所有文字请尽量简短。"
 
     mode_id = mode_def.get("mode_id", "CUSTOM")
     logger.info(f"[JSONContent] Generating content for {mode_id} via {provider}/{model}")

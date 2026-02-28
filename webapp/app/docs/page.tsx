@@ -34,7 +34,7 @@ export default function DocsPage() {
         </li>
         <li>
           <strong>4.2 英寸电子墨水屏 (SPI 接口)</strong> — 400&times;300
-          分辨率，SSD1683 驱动，约 110 元
+          分辨率，SSD1683 驱动，约 110 元。也支持 2.9&quot;(296&times;128)、5.83&quot;(648&times;480)、7.5&quot;(800&times;480) 等尺寸
         </li>
         <li>
           <strong>USB-C 数据线</strong> — 用于供电和固件烧录（确保支持数据传输）

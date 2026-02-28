@@ -80,5 +80,50 @@
       "attribution_template": "— {solar_term}",
       "line_width": 2
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "status_bar": { "line_width": 1, "dashed": false },
+      "body": [
+        { "type": "text", "field": "lunar_date", "font_size": 11, "align": "left", "margin_x": 8, "max_lines": 1 },
+        { "type": "text", "template": "{solar_term} · 吉方 {direction}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 },
+        { "type": "separator", "style": "short", "width": 40 },
+        { "type": "text", "template": "宜：{yi}", "font_size": 11, "align": "left", "margin_x": 8, "max_lines": 1 },
+        { "type": "text", "template": "忌：{ji}", "font_size": 11, "align": "left", "margin_x": 8, "max_lines": 1 }
+      ],
+      "footer": { "label": "黄历", "height": 20, "line_width": 1 }
+    },
+    "648x480": {
+      "body": [
+        {
+          "type": "two_column",
+          "left_width": 195,
+          "gap": 14,
+          "left": [
+            { "type": "text", "field": "lunar_date", "font_size": 16, "align": "center", "margin_x": 12 },
+            { "type": "big_number", "field": "day", "font_size": 76, "align": "center" },
+            { "type": "text", "field": "month_cn", "font_size": 20, "align": "center", "margin_x": 12 },
+            { "type": "text", "field": "weekday_cn", "font_size": 16, "align": "center", "margin_x": 12 },
+            { "type": "separator", "style": "short", "width": 80 },
+            { "type": "text", "field": "solar_term", "font": "noto_serif_bold", "font_size": 22, "align": "center", "margin_x": 12 }
+          ],
+          "right": [
+            { "type": "spacer", "height": 8 },
+            { "type": "group", "title": "宜", "title_font_size": 18, "margin_x": 12, "children": [
+              { "type": "text", "field": "yi", "font_size": 16, "align": "left", "margin_x": 12, "max_lines": 2 }
+            ]},
+            { "type": "spacer", "height": 10 },
+            { "type": "group", "title": "忌", "title_font_size": 18, "margin_x": 12, "children": [
+              { "type": "text", "field": "ji", "font_size": 16, "align": "left", "margin_x": 12, "max_lines": 2 }
+            ]},
+            { "type": "spacer", "height": 8 },
+            { "type": "separator", "style": "dashed", "margin_x": 12 },
+            { "type": "spacer", "height": 8 },
+            { "type": "text", "template": "吉方 {direction}", "font_size": 15, "align": "left", "margin_x": 12 },
+            { "type": "text", "field": "health_tip", "font": "noto_serif_light", "font_size": 14, "align": "left", "margin_x": 12, "max_lines": 2 }
+          ]
+        }
+      ]
+    }
   }
 }

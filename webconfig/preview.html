@@ -556,6 +556,7 @@
               <div class="res-grid">
                 <button class="res-btn active" data-w="400" data-h="300" onclick="selectResolution(this)">4.2" 400×300</button>
                 <button class="res-btn" data-w="296" data-h="128" onclick="selectResolution(this)">2.9" 296×128</button>
+                <button class="res-btn" data-w="648" data-h="480" onclick="selectResolution(this)">5.83" 648×480</button>
                 <button class="res-btn" data-w="800" data-h="480" onclick="selectResolution(this)">7.5" 800×480</button>
               </div>
             </div>
@@ -664,7 +665,7 @@
 
       const v = parseFloat(voltageSlider.value).toFixed(2);
       const persona = selectedPersona === 'AUTO' ? '' : selectedPersona;
-      let url = `/api/preview?v=${v}`;
+      let url = `/api/preview?v=${v}&w=${currentResolution.w}&h=${currentResolution.h}`;
       if (persona) url += `&persona=${persona}`;
 
       document.getElementById('infoUrl').textContent = url;

@@ -151,8 +151,10 @@ def draw_status_bar(
     font_cn = load_font("noto_serif_extralight", int(FONT_SIZES["status_bar"]["cn"] * scale))
     font_en = load_font("inter_medium", int(FONT_SIZES["status_bar"]["en"] * scale))
 
-    pad_y = int(screen_h * 0.03)
-    pad_x = int(screen_w * 0.03)
+    # Tighter padding on small screens
+    pad_pct = 0.02 if screen_h < 200 else 0.03
+    pad_y = int(screen_h * pad_pct)
+    pad_x = int(screen_w * pad_pct)
     y = pad_y
     x = pad_x
     if time_str:
@@ -214,7 +216,9 @@ def draw_footer(
     if attr_font_size is None:
         attr_font_size = int(FONT_SIZES["footer"]["attribution"] * scale)
 
-    y_line = screen_h - int(screen_h * 0.10)
+    # Smaller footer on short screens
+    footer_pct = 0.08 if screen_h < 200 else 0.10
+    y_line = screen_h - int(screen_h * footer_pct)
     if dashed:
         draw_dashed_line(
             draw, (0, y_line), (screen_w, y_line), fill=EINK_FG, width=line_width

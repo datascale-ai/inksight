@@ -39,6 +39,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <option value="zen">禅意模板 (Zen)</option>
     <option value="sections">综合模板 (Sections)</option>
   </select>
+  <select id="screenSizeSelect" style="padding:6px 10px;border-radius:6px;border:1px solid #d1d5db;font-size:.82rem">
+    <option value="400x300">4.2" 400×300</option>
+    <option value="296x128">2.9" 296×128</option>
+    <option value="800x480">7.5" 800×480</option>
+  </select>
   <button class="btn-preview" onclick="doPreview()">▶ 预览</button>
   <button class="btn-save" onclick="doSave()">💾 保存模式</button>
 </div>
@@ -145,10 +150,11 @@ editor.addEventListener('keydown',function(e){
 function doPreview(){
   if(!validateJSON())return;
   var def=JSON.parse(editor.value);
+  var dims=document.getElementById('screenSizeSelect').value.split('x').map(Number);
   document.getElementById('previewArea').innerHTML='<div class="preview-placeholder">加载中...</div>';
   fetch('/api/modes/custom/preview',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({mode_def:def})
+    body:JSON.stringify({mode_def:def,w:dims[0],h:dims[1]})
   }).then(function(r){
     if(!r.ok)throw new Error('Preview failed: '+r.status);
     return r.blob();

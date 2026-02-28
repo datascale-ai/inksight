@@ -84,5 +84,48 @@
       "label": "DAILY",
       "attribution_template": "— InkSight"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "big_number", "field": "day", "font_size": 36, "align": "left", "margin_x": 8 },
+        { "type": "text", "template": "{month_cn} {weekday_cn}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 },
+        { "type": "separator", "style": "short", "width": 40 },
+        { "type": "text", "field": "quote", "font_size": 11, "align": "left", "margin_x": 8, "max_lines": 2 },
+        { "type": "text", "template": "— {author}", "font_size": 9, "align": "right", "margin_x": 8, "max_lines": 1 }
+      ],
+      "footer": { "label": "DAILY", "height": 20 }
+    },
+    "648x480": {
+      "body": [
+        {
+          "type": "two_column",
+          "left_width": 185,
+          "gap": 14,
+          "left": [
+            { "type": "text", "field": "year", "font_size": 14, "align": "center", "margin_x": 12 },
+            { "type": "big_number", "field": "day", "font_size": 72, "align": "center" },
+            { "type": "text", "field": "month_cn", "font_size": 18, "align": "center", "margin_x": 12 },
+            { "type": "text", "field": "weekday_cn", "font_size": 16, "align": "center", "margin_x": 12 },
+            { "type": "progress_bar", "field": "day_of_year", "max_field": "days_in_year", "width": 130, "margin_x": 12 },
+            { "type": "text", "field": "season_text", "font_size": 13, "align": "center", "margin_x": 12, "max_lines": 2 }
+          ],
+          "right": [
+            { "type": "text", "field": "quote", "font_size": 20, "align": "left", "margin_x": 8, "max_lines": 4 },
+            { "type": "text", "template": "— {author}", "font_size": 14, "align": "right", "margin_x": 8, "max_lines": 1 },
+            { "type": "spacer", "height": 8 },
+            { "type": "separator", "style": "dashed", "margin_x": 16 },
+            { "type": "spacer", "height": 8 },
+            { "type": "text", "field": "book_title", "font_size": 18, "align": "left", "margin_x": 8, "max_lines": 2 },
+            { "type": "text", "field": "book_author", "font_size": 14, "align": "left", "margin_x": 8, "max_lines": 1 },
+            { "type": "text", "field": "book_desc", "font_size": 14, "align": "left", "margin_x": 8, "max_lines": 2 },
+            { "type": "spacer", "height": 8 },
+            { "type": "separator", "style": "dashed", "margin_x": 16 },
+            { "type": "spacer", "height": 8 },
+            { "type": "text", "field": "tip", "font_size": 14, "align": "left", "margin_x": 8, "max_lines": 3 }
+          ]
+        }
+      ]
+    }
   }
 }
