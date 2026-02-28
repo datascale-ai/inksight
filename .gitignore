@@ -222,6 +222,10 @@ __marimo__/
 # SQLite database files
 *.db
 *.sqlite
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 
 # PlatformIO build artifacts
 .pio/
@@ -237,6 +241,8 @@ webapp/.vercel/
 webapp/*.tsbuildinfo
 
 # Internal documents (not for public release)
+promo/*
+prototype*.html
 需求文档.md
 API 接口文档.md
 PROJECT_STATUS.md
