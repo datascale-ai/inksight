@@ -4,6 +4,9 @@
 
 static Preferences prefs;
 
+// Config version — bump when NVS schema changes
+static const int CONFIG_VERSION = 1;
+
 // ── Runtime config variables ────────────────────────────────
 String cfgSSID;
 String cfgPass;
@@ -16,6 +19,21 @@ String cfgDeviceToken;
 
 void loadConfig() {
     prefs.begin("inksight", true);  // read-only
+
+    int version = prefs.getInt("cfg_version", 0);
+    if (version != CONFIG_VERSION) {
+        Serial.printf("Config version mismatch (%d != %d), using defaults\n",
+                      version, CONFIG_VERSION);
+        prefs.end();
+        cfgSSID = "";
+        cfgPass = "";
+        cfgServer = DEFAULT_SERVER;
+        cfgSleepMin = 60;
+        cfgConfigJson = "";
+        cfgDeviceToken = "";
+        return;
+    }
+
     cfgSSID         = prefs.getString("ssid", "");
     cfgPass         = prefs.getString("pass", "");
     cfgServer       = prefs.getString("server", DEFAULT_SERVER);
@@ -23,6 +41,14 @@ void loadConfig() {
     cfgConfigJson   = prefs.getString("config_json", "");
     cfgDeviceToken  = prefs.getString("device_token", "");
     prefs.end();
+
+    // Sanity checks
+    if (cfgSleepMin < 10 || cfgSleepMin > 1440) {
+        cfgSleepMin = 60;
+    }
+    if (cfgServer.length() > 200) {
+        cfgServer = DEFAULT_SERVER;
+    }
 }
 
 // ── Retry counter ───────────────────────────────────────────
@@ -48,6 +74,7 @@ void resetRetryCount() {
 
 void saveWiFiConfig(const String &ssid, const String &pass) {
     prefs.begin("inksight", false);  // read-write
+    prefs.putInt("cfg_version", CONFIG_VERSION);
     prefs.putString("ssid", ssid);
     prefs.putString("pass", pass);
     prefs.end();
@@ -59,6 +86,7 @@ void saveWiFiConfig(const String &ssid, const String &pass) {
 
 void saveServerUrl(const String &url) {
     prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
     prefs.putString("server", url);
     prefs.end();
     cfgServer = url;
@@ -68,6 +96,7 @@ void saveServerUrl(const String &url) {
 
 void saveUserConfig(const String &configJson) {
     prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
     prefs.putString("config_json", configJson);
 
     // Extract refreshInterval from JSON and persist as sleep_min
@@ -92,6 +121,7 @@ void saveUserConfig(const String &configJson) {
 
 void saveDeviceToken(const String &token) {
     prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
     prefs.putString("device_token", token);
     prefs.end();
     cfgDeviceToken = token;

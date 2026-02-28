@@ -25,6 +25,14 @@ _VALID_TONES = {"positive", "neutral", "deep", "humor"}
 # 允许的刷新策略
 _VALID_STRATEGIES = {"random", "cycle", "time_slot", "smart"}
 
+# 角色调性白名单：只允许中英文、数字、空格和基本标点
+_SAFE_TONE_RE = re.compile(
+    r"^[\u4e00-\u9fff\u3400-\u4dbf"   # CJK Unified Ideographs
+    r"a-zA-Z0-9"
+    r"\s·\-\.\u3001\u3002"             # space, middot, dash, period, CN punctuation
+    r"]{1,20}$"
+)
+
 
 class ConfigRequest(BaseModel):
     """设备配置请求体"""
@@ -114,4 +122,14 @@ class ConfigRequest(BaseModel):
     @field_validator("characterTones")
     @classmethod
     def validate_character_tones(cls, v: list[str]) -> list[str]:
-        return [t.strip()[:20] for t in v if t.strip()]
+        cleaned = []
+        for t in v:
+            t = t.strip()[:20]
+            if not t:
+                continue
+            if not _SAFE_TONE_RE.match(t):
+                raise ValueError(
+                    f"角色调性包含非法字符: {t!r}，只允许中英文、数字和基本标点"
+                )
+            cleaned.append(t)
+        return cleaned

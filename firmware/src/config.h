@@ -50,7 +50,8 @@ static const int   SHORT_PRESS_MIN_MS = 50;   // Minimum short press duration (d
 static const int   DOUBLE_CLICK_MS = 500;     // Max interval between clicks for double-click
 static const int   TRIPLE_CLICK_MS = 500;     // Max interval for third click (favorite)
 static const int   MAX_RETRY_COUNT = 5;       // Max retries before deep sleep
-static const int   RETRY_DELAY_SEC = 10;      // Delay between retries (seconds)
+// Progressive retry delays in seconds: 5s, 15s, 30s, 60s, 120s
+static const int   RETRY_DELAYS[] = {5, 15, 30, 60, 120};
 
 // ── Time zone ───────────────────────────────────────────────
 #define NTP_UTC_OFFSET  (8 * 3600)  // UTC+8 (China Standard Time), adjust for your region

@@ -1,0 +1,2681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkSight 墨鱼 — 产品原型设计图</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg-deep: #0a0c10;
+    --bg-panel: #12151c;
+    --bg-card: #181c26;
+    --bg-hover: #1e2330;
+    --accent-cyan: #00e5ff;
+    --accent-orange: #ff6d2e;
+    --accent-green: #39ff85;
+    --accent-purple: #a78bfa;
+    --accent-yellow: #ffd43b;
+    --accent-red: #ff4757;
+    --text-primary: #e8ecf4;
+    --text-secondary: #8892a8;
+    --text-dim: #4a5268;
+    --border: #252a38;
+    --border-glow: rgba(0,229,255,0.15);
+    --glass: rgba(18,21,28,0.85);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'Noto Sans SC', 'JetBrains Mono', sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ── Grid Background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+    background: rgba(10,12,16,0.88);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--bg-deep);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .header h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  .header h1 span {
+    color: var(--accent-cyan);
+  }
+
+  .header-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(0,229,255,0.1);
+    border: 1px solid rgba(0,229,255,0.25);
+    color: var(--accent-cyan);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .header-right {
+    display: flex;
+    gap: 8px;
+  }
+
+  .header-right .spec-chip {
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Navigation Tabs ── */
+  .nav-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 40px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-tab {
+    padding: 14px 28px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.25s;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px;
+    user-select: none;
+  }
+
+  .nav-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .nav-tab.active {
+    color: var(--accent-cyan);
+    border-bottom-color: var(--accent-cyan);
+  }
+
+  /* ── Section Container ── */
+  .section {
+    display: none;
+    padding: 40px;
+    position: relative;
+    z-index: 1;
+    animation: fadeUp 0.4s ease;
+  }
+
+  .section.active {
+    display: block;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .section-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .section-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 36px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ═══════════════════════════════════════════
+     SECTION 1: 3D ASSEMBLED VIEW
+  ═══════════════════════════════════════════ */
+  .viewer-container {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    min-height: 600px;
+  }
+
+  .viewer-3d {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    perspective: 1200px;
+    cursor: grab;
+    min-height: 560px;
+  }
+
+  .viewer-3d:active { cursor: grabbing; }
+
+  .viewer-3d .axis-indicator {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 10;
+  }
+
+  .viewer-3d .view-label {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    z-index: 10;
+  }
+
+  /* ── 3D Device ── */
+  .device-scene {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1200px;
+  }
+
+  .device-pivot {
+    transform-style: preserve-3d;
+    transition: transform 0.05s linear;
+  }
+
+  .device-body {
+    width: 340px;
+    height: 260px;
+    position: relative;
+    transform-style: preserve-3d;
+  }
+
+  /* Front face — e-ink screen */
+  .face-front {
+    position: absolute;
+    width: 340px;
+    height: 260px;
+    background: #f5f0e8;
+    border: 3px solid #2a2a2a;
+    border-radius: 10px;
+    transform: translateZ(12px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.05);
+    overflow: hidden;
+  }
+
+  .screen-bezel {
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    border: 14px solid #1a1a1a;
+    pointer-events: none;
+  }
+
+  .screen-content {
+    width: 280px;
+    height: 210px;
+    background: #f8f4ec;
+    border: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    font-family: 'Noto Sans SC', serif;
+    color: #1a1a1a;
+    position: relative;
+  }
+
+  .screen-content .sc-header {
+    font-size: 9px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .screen-content .sc-zen {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 72px;
+    font-weight: 300;
+    color: #1a1a1a;
+    letter-spacing: 8px;
+  }
+
+  .screen-content .sc-footer {
+    font-size: 8px;
+    color: #aaa;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Back face */
+  .face-back {
+    position: absolute;
+    width: 340px;
+    height: 260px;
+    background: linear-gradient(145deg, #1a6b3a, #0d4a25);
+    border-radius: 10px;
+    transform: rotateY(180deg) translateZ(12px);
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .pcb-traces {
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .pcb-traces::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 8px, rgba(255,215,0,0.1) 8px, rgba(255,215,0,0.1) 9px),
+      repeating-linear-gradient(90deg, transparent, transparent 12px, rgba(255,215,0,0.08) 12px, rgba(255,215,0,0.08) 13px);
+  }
+
+  .pcb-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #ffd700;
+    margin-bottom: 8px;
+  }
+
+  .pcb-component {
+    position: absolute;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .pcb-esp32 {
+    width: 50px;
+    height: 30px;
+    background: #111;
+    border: 1px solid #333;
+    color: #0ff;
+    top: 30px;
+    left: 140px;
+  }
+
+  .pcb-tp5000 {
+    width: 40px;
+    height: 22px;
+    background: #1a1a4a;
+    border: 1px solid #444;
+    color: #a78bfa;
+    bottom: 30px;
+    left: 20px;
+  }
+
+  .pcb-usbc {
+    width: 30px;
+    height: 14px;
+    background: #555;
+    border: 1px solid #777;
+    color: #fff;
+    bottom: 10px;
+    left: 25px;
+    border-radius: 4px;
+  }
+
+  .pcb-battery-conn {
+    width: 26px;
+    height: 16px;
+    background: #8b0000;
+    border: 1px solid #aa2222;
+    color: #ff6666;
+    top: 100px;
+    right: 20px;
+  }
+
+  .pcb-resistor {
+    width: 18px;
+    height: 8px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #aaa;
+    font-size: 5px;
+    top: 70px;
+    left: 100px;
+  }
+
+  .pcb-led {
+    width: 10px;
+    height: 10px;
+    background: #003300;
+    border: 1px solid #006600;
+    border-radius: 50%;
+    top: 70px;
+    right: 80px;
+    box-shadow: 0 0 6px rgba(0,255,100,0.3);
+  }
+
+  .pcb-spi-header {
+    width: 60px;
+    height: 12px;
+    background: #222;
+    border: 1px solid #444;
+    top: 12px;
+    right: 30px;
+    color: #ffd700;
+    font-size: 6px;
+  }
+
+  /* Top face */
+  .face-top {
+    position: absolute;
+    width: 340px;
+    height: 24px;
+    background: linear-gradient(180deg, #222, #1a1a1a);
+    transform: rotateX(90deg) translateZ(0px);
+    transform-origin: bottom;
+    border-radius: 10px 10px 0 0;
+  }
+
+  /* Bottom face with USB port */
+  .face-bottom {
+    position: absolute;
+    width: 340px;
+    height: 24px;
+    background: linear-gradient(0deg, #222, #1a1a1a);
+    bottom: 0;
+    transform: rotateX(-90deg) translateZ(0px);
+    transform-origin: top;
+    border-radius: 0 0 10px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .usb-port {
+    width: 28px;
+    height: 10px;
+    background: #555;
+    border-radius: 3px;
+    border: 1px solid #777;
+    position: relative;
+    margin-left: -120px;
+  }
+
+  .usb-port::after {
+    content: '';
+    position: absolute;
+    inset: 2px 4px;
+    background: #333;
+    border-radius: 1px;
+  }
+
+  /* Left face with button */
+  .face-left {
+    position: absolute;
+    width: 24px;
+    height: 260px;
+    background: linear-gradient(90deg, #1e1e1e, #252525);
+    left: 0;
+    transform: rotateY(-90deg) translateZ(0px);
+    transform-origin: right;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .boot-button {
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle, #555, #333);
+    border-radius: 50%;
+    border: 2px solid #666;
+    box-shadow: 0 0 4px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.1);
+    position: relative;
+  }
+
+  .boot-button::after {
+    content: 'BOOT';
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 5px;
+    color: #888;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+  }
+
+  /* Right face */
+  .face-right {
+    position: absolute;
+    width: 24px;
+    height: 260px;
+    right: 0;
+    background: linear-gradient(-90deg, #1e1e1e, #252525);
+    transform: rotateY(90deg) translateZ(0px);
+    transform-origin: left;
+  }
+
+  /* ── Dimension Annotations ── */
+  .dim-annotation {
+    position: absolute;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-cyan);
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  .dim-h {
+    right: -70px;
+    top: 50%;
+    transform: translateY(-50%) translateZ(14px);
+    writing-mode: vertical-lr;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .dim-w {
+    bottom: -36px;
+    left: 50%;
+    transform: translateX(-50%) translateZ(14px);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .dim-d {
+    right: -60px;
+    bottom: -10px;
+    transform: translateZ(14px);
+  }
+
+  .dim-line {
+    flex: 1;
+    min-width: 30px;
+    min-height: 30px;
+    border-top: 1px solid var(--accent-cyan);
+    position: relative;
+  }
+
+  .dim-line.vertical {
+    border-top: none;
+    border-left: 1px solid var(--accent-cyan);
+    min-width: 0;
+    min-height: 40px;
+  }
+
+  /* ── Side Panel ── */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .info-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: border-color 0.3s;
+  }
+
+  .info-card:hover {
+    border-color: rgba(0,229,255,0.3);
+  }
+
+  .info-card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--accent-cyan);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .info-card h3 .icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  .spec-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+  }
+
+  .spec-row:last-child { border-bottom: none; }
+
+  .spec-row .label {
+    color: var(--text-secondary);
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .spec-row .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .spec-row .value.highlight {
+    color: var(--accent-green);
+  }
+
+  /* ── View Controls ── */
+  .view-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .view-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .view-btn:hover, .view-btn.active {
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+    background: rgba(0,229,255,0.06);
+  }
+
+  /* ═══════════════════════════════════════════
+     SECTION 2: EXPLODED VIEW
+  ═══════════════════════════════════════════ */
+  .exploded-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 700px;
+    position: relative;
+    perspective: 1400px;
+  }
+
+  .exploded-stack {
+    transform-style: preserve-3d;
+    transform: rotateX(-15deg) rotateY(-25deg);
+    position: relative;
+    width: 340px;
+    height: 260px;
+  }
+
+  .exploded-layer {
+    position: absolute;
+    width: 300px;
+    height: 220px;
+    left: 20px;
+    border-radius: 10px;
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-style: preserve-3d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .exploded-layer .layer-label {
+    position: absolute;
+    right: -180px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .exploded-layer .layer-label::before {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: var(--text-dim);
+  }
+
+  .layer-label .tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+
+  /* Layer: Top Cover */
+  .layer-cover {
+    background: rgba(30,30,30,0.95);
+    border: 2px solid #444;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.4);
+    transform: translateZ(160px);
+    color: #888;
+  }
+
+  .layer-cover .cover-holes {
+    position: absolute;
+  }
+
+  .cover-hole {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    border: 1px solid #666;
+    background: #111;
+    position: absolute;
+  }
+
+  /* Layer: E-ink Display */
+  .layer-eink {
+    background: #f0ece0;
+    border: 2px solid #ccc;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.2);
+    transform: translateZ(110px);
+    color: #333;
+    font-size: 11px;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .eink-resolution {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+
+  .eink-spec {
+    font-size: 10px;
+    color: #888;
+  }
+
+  /* Layer: FPC Cable */
+  .layer-fpc {
+    width: 80px;
+    height: 30px;
+    left: 110px;
+    background: linear-gradient(90deg, #d4a017, #f0c040, #d4a017);
+    border-radius: 4px;
+    transform: translateZ(80px);
+    color: #333;
+    font-size: 8px;
+    box-shadow: 0 1px 8px rgba(212,160,23,0.3);
+  }
+
+  /* Layer: PCB Board */
+  .layer-pcb {
+    background: linear-gradient(145deg, #1a6b3a, #0d5e2d);
+    border: 2px solid #2a8b4a;
+    box-shadow: 0 2px 20px rgba(0,100,0,0.3);
+    transform: translateZ(40px);
+    color: #ffd700;
+    position: relative;
+  }
+
+  .layer-pcb .chip-icon {
+    width: 40px;
+    height: 26px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    color: #0ff;
+    position: absolute;
+    left: 30px;
+    top: 40px;
+  }
+
+  .layer-pcb .chip-icon.tp5000 {
+    width: 32px;
+    height: 20px;
+    right: 40px;
+    left: auto;
+    bottom: 40px;
+    top: auto;
+    color: #a78bfa;
+    background: #1a1a3a;
+  }
+
+  .layer-pcb .usbc-icon {
+    width: 24px;
+    height: 10px;
+    background: #777;
+    border-radius: 3px;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .layer-pcb .spi-pins {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    display: flex;
+    gap: 3px;
+  }
+
+  .layer-pcb .spi-pin {
+    width: 4px;
+    height: 10px;
+    background: #ffd700;
+    border-radius: 1px;
+  }
+
+  .layer-pcb .led-dot {
+    width: 6px;
+    height: 6px;
+    background: #003300;
+    border: 1px solid #006600;
+    border-radius: 50%;
+    position: absolute;
+    top: 50px;
+    right: 40px;
+    box-shadow: 0 0 4px rgba(0,255,100,0.4);
+  }
+
+  .layer-pcb .btn-boot {
+    width: 10px;
+    height: 10px;
+    background: #555;
+    border: 1px solid #777;
+    border-radius: 50%;
+    position: absolute;
+    top: 100px;
+    left: 15px;
+  }
+
+  /* Layer: Battery */
+  .layer-battery {
+    width: 200px;
+    height: 60px;
+    left: 50px;
+    background: linear-gradient(180deg, #3a3a4a, #2a2a3a);
+    border: 2px solid #555;
+    border-radius: 8px;
+    transform: translateZ(-20px);
+    color: #ff9f43;
+    font-size: 11px;
+    position: relative;
+  }
+
+  .battery-terminal {
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 20px;
+    background: #777;
+    border-radius: 0 3px 3px 0;
+  }
+
+  .battery-label-inside {
+    position: absolute;
+    bottom: 6px;
+    right: 12px;
+    font-size: 8px;
+    color: #666;
+  }
+
+  /* Layer: Back Cover */
+  .layer-backcover {
+    background: rgba(30,30,30,0.95);
+    border: 2px solid #444;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.4);
+    transform: translateZ(-80px);
+    color: #666;
+  }
+
+  .layer-backcover .vent-slots {
+    display: flex;
+    gap: 4px;
+    flex-direction: column;
+  }
+
+  .vent-slot {
+    width: 60px;
+    height: 2px;
+    background: #555;
+    border-radius: 1px;
+  }
+
+  /* Exploded state */
+  .exploded-container.collapsed .layer-cover { transform: translateZ(14px); }
+  .exploded-container.collapsed .layer-eink { transform: translateZ(12px); }
+  .exploded-container.collapsed .layer-fpc { transform: translateZ(10px); }
+  .exploded-container.collapsed .layer-pcb { transform: translateZ(0px); }
+  .exploded-container.collapsed .layer-battery { transform: translateZ(-6px); }
+  .exploded-container.collapsed .layer-backcover { transform: translateZ(-14px); }
+
+  .explode-toggle {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 28px;
+    border: 1px solid var(--accent-cyan);
+    background: rgba(0,229,255,0.08);
+    color: var(--accent-cyan);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 10;
+  }
+
+  .explode-toggle:hover {
+    background: rgba(0,229,255,0.15);
+    box-shadow: 0 0 20px rgba(0,229,255,0.2);
+  }
+
+  /* ═══════════════════════════════════════════
+     SECTION 3: PIN DIAGRAM
+  ═══════════════════════════════════════════ */
+  .pin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .pin-diagram-main {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    min-height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .esp32-board {
+    width: 180px;
+    height: 340px;
+    background: linear-gradient(180deg, #111518, #0d1014);
+    border: 2px solid #333;
+    border-radius: 8px;
+    position: relative;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.5);
+  }
+
+  .esp32-board .board-label {
+    text-align: center;
+    padding-top: 14px;
+    font-size: 10px;
+    color: #0ff;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  .esp32-board .chip {
+    width: 60px;
+    height: 60px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    color: #555;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .esp32-board .usb-connector {
+    width: 26px;
+    height: 8px;
+    background: #666;
+    border-radius: 2px;
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .pin-row {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .pin-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid;
+    flex-shrink: 0;
+  }
+
+  .pin-line {
+    width: 30px;
+    height: 1px;
+    flex-shrink: 0;
+  }
+
+  .pin-name {
+    font-weight: 500;
+  }
+
+  .pin-func {
+    color: var(--text-dim);
+    font-size: 9px;
+  }
+
+  /* Pin colors */
+  .pin-spi .pin-dot { border-color: var(--accent-cyan); background: rgba(0,229,255,0.2); }
+  .pin-spi .pin-line { background: var(--accent-cyan); }
+  .pin-spi .pin-name { color: var(--accent-cyan); }
+
+  .pin-adc .pin-dot { border-color: var(--accent-orange); background: rgba(255,109,46,0.2); }
+  .pin-adc .pin-line { background: var(--accent-orange); }
+  .pin-adc .pin-name { color: var(--accent-orange); }
+
+  .pin-gpio .pin-dot { border-color: var(--accent-green); background: rgba(57,255,133,0.2); }
+  .pin-gpio .pin-line { background: var(--accent-green); }
+  .pin-gpio .pin-name { color: var(--accent-green); }
+
+  .pin-power .pin-dot { border-color: var(--accent-red); background: rgba(255,71,87,0.2); }
+  .pin-power .pin-line { background: var(--accent-red); }
+  .pin-power .pin-name { color: var(--accent-red); }
+
+  .pin-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .pin-table {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .pin-table-header {
+    display: grid;
+    grid-template-columns: 60px 80px 1fr;
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .pin-table-row {
+    display: grid;
+    grid-template-columns: 60px 80px 1fr;
+    padding: 10px 16px;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    transition: background 0.2s;
+  }
+
+  .pin-table-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .pin-table-row:last-child { border-bottom: none; }
+
+  .pin-table-row .gpio {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+  }
+
+  .pin-table-row .signal {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+  }
+
+  .pin-table-row .desc {
+    color: var(--text-secondary);
+  }
+
+  /* ═══════════════════════════════════════════
+     SECTION 4: BUTTON LAYOUT
+  ═══════════════════════════════════════════ */
+  .button-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .button-visual {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 36px;
+  }
+
+  .device-side-view {
+    width: 100%;
+    height: 300px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .side-view-body {
+    width: 24px;
+    height: 260px;
+    background: linear-gradient(90deg, #252525, #1e1e1e, #252525);
+    border-radius: 4px;
+    position: relative;
+    border: 1px solid #444;
+  }
+
+  .side-btn {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .side-btn-boot {
+    top: 110px;
+    background: radial-gradient(circle at 40% 40%, #777, #444);
+    border: 2px solid #888;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.2);
+  }
+
+  .side-btn-boot:hover {
+    box-shadow: 0 2px 8px rgba(0,229,255,0.3), inset 0 1px 2px rgba(255,255,255,0.2);
+    border-color: var(--accent-cyan);
+  }
+
+  .side-btn-boot:active {
+    transform: translateX(-50%) scale(0.9);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+
+  .btn-annotation {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .btn-annotation.left {
+    right: calc(100% + 30px);
+    text-align: right;
+  }
+
+  .btn-annotation.right {
+    left: calc(100% + 30px);
+  }
+
+  .btn-annotation .ann-line {
+    display: block;
+    width: 20px;
+    height: 1px;
+    position: absolute;
+    top: 50%;
+  }
+
+  .btn-annotation .ann-label {
+    font-weight: 600;
+    color: var(--accent-cyan);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .btn-annotation .ann-desc {
+    color: var(--text-secondary);
+    font-size: 10px;
+    display: block;
+  }
+
+  .button-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .action-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s;
+    cursor: default;
+  }
+
+  .action-card:hover {
+    border-color: rgba(0,229,255,0.3);
+    transform: translateX(4px);
+  }
+
+  .action-card .action-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .action-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .action-icon.press { background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.2); }
+  .action-icon.double { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); }
+  .action-icon.triple { background: rgba(255,212,59,0.1); border: 1px solid rgba(255,212,59,0.2); }
+  .action-icon.long { background: rgba(255,71,87,0.1); border: 1px solid rgba(255,71,87,0.2); }
+
+  .action-title {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .action-timing {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .action-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding-left: 48px;
+  }
+
+  .action-led {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(57,255,133,0.06);
+    border: 1px solid rgba(57,255,133,0.15);
+    font-size: 10px;
+    color: var(--accent-green);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .led-blink {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    animation: blink 1s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  /* ═══════════════════════════════════════════
+     SECTION 5: BOM & DIMENSIONS
+  ═══════════════════════════════════════════ */
+  .bom-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 36px;
+  }
+
+  .bom-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .bom-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .bom-card.mcu::before { background: var(--accent-cyan); }
+  .bom-card.display::before { background: var(--accent-purple); }
+  .bom-card.battery::before { background: var(--accent-orange); }
+  .bom-card.charger::before { background: var(--accent-green); }
+  .bom-card.enclosure::before { background: var(--accent-yellow); }
+  .bom-card.misc::before { background: var(--accent-red); }
+
+  .bom-card:hover {
+    border-color: rgba(255,255,255,0.1);
+    transform: translateY(-2px);
+  }
+
+  .bom-card .bom-icon {
+    font-size: 28px;
+    margin-bottom: 12px;
+  }
+
+  .bom-card .bom-name {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .bom-card .bom-model {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 12px;
+  }
+
+  .bom-card .bom-specs {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  .bom-card .bom-price {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--accent-yellow);
+  }
+
+  .bom-card .bom-price span {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+
+  .bom-total {
+    background: linear-gradient(135deg, rgba(0,229,255,0.08), rgba(167,139,250,0.08));
+    border: 1px solid rgba(0,229,255,0.2);
+    border-radius: 12px;
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .bom-total .total-label {
+    font-size: 16px;
+    font-weight: 600;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .bom-total .total-price {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+  }
+
+  .bom-total .total-price span {
+    font-size: 16px;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  /* ── Dimensions Visual ── */
+  .dims-visual {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+  }
+
+  .dim-view {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .dim-view h4 {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .dim-drawing {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dim-rect {
+    border: 2px solid var(--accent-cyan);
+    border-radius: 6px;
+    position: relative;
+  }
+
+  .dim-rect .dim-label {
+    position: absolute;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-cyan);
+    background: var(--bg-card);
+    padding: 0 6px;
+  }
+
+  .dim-rect .dim-label.top {
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .dim-rect .dim-label.right {
+    right: -40px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .dim-rect .dim-label.bottom {
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* ── Footer ── */
+  .page-footer {
+    padding: 30px 40px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    position: relative;
+    z-index: 1;
+  }
+
+  .page-footer a {
+    color: var(--accent-cyan);
+    text-decoration: none;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .viewer-container { grid-template-columns: 1fr; }
+    .pin-grid { grid-template-columns: 1fr; }
+    .button-section { grid-template-columns: 1fr; }
+    .dims-visual { grid-template-columns: 1fr; }
+    .header { padding: 12px 20px; }
+    .section { padding: 24px 20px; }
+    .nav-tabs { padding: 0 20px; overflow-x: auto; }
+  }
+
+  /* ── Assembly Flow ── */
+  .assembly-flow {
+    margin-top: 40px;
+  }
+
+  .assembly-steps {
+    display: flex;
+    gap: 0;
+    position: relative;
+  }
+
+  .assembly-steps::before {
+    content: '';
+    position: absolute;
+    top: 36px;
+    left: 36px;
+    right: 36px;
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+
+  .assembly-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-number {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+
+  .step-text {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-width: 120px;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .step-icon {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Wiring Diagram ── */
+  .wiring-svg {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+    display: block;
+  }
+
+  /* ── Animations ── */
+  .pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 5px rgba(0,229,255,0.2); }
+    50% { box-shadow: 0 0 20px rgba(0,229,255,0.4); }
+  }
+
+  .float-anim {
+    animation: floatY 3s ease-in-out infinite;
+  }
+
+  @keyframes floatY {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+
+  /* ── Power Flow ── */
+  .power-flow {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+
+  .pf-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+
+  .pf-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+  }
+
+  .pf-label {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .pf-spec {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .pf-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 18px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo-mark">墨</div>
+    <h1>Ink<span>Sight</span> 墨鱼</h1>
+    <span class="header-badge">PROTOTYPE v0.1</span>
+  </div>
+  <div class="header-right">
+    <span class="spec-chip">ESP32-C3</span>
+    <span class="spec-chip">4.2" E-Ink</span>
+    <span class="spec-chip">LiFePO4</span>
+    <span class="spec-chip">400×300px</span>
+  </div>
+</div>
+
+<!-- ═══ TABS ═══ -->
+<div class="nav-tabs">
+  <div class="nav-tab active" data-tab="assembled">3D 装配视图</div>
+  <div class="nav-tab" data-tab="exploded">爆炸分解图</div>
+  <div class="nav-tab" data-tab="pinout">引脚接线图</div>
+  <div class="nav-tab" data-tab="buttons">按钮布局</div>
+  <div class="nav-tab" data-tab="bom">物料 & 尺寸</div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 1: 3D ASSEMBLED VIEW
+═══════════════════════════════════════════ -->
+<div class="section active" id="section-assembled">
+  <div class="section-title">3D 装配视图</div>
+  <div class="section-subtitle">// Drag to rotate · Scroll to zoom · Click preset views</div>
+
+  <div class="viewer-container">
+    <div class="viewer-3d" id="viewer3d">
+      <div class="view-label">PERSPECTIVE VIEW</div>
+      <div class="device-scene">
+        <div class="device-pivot" id="devicePivot">
+          <div class="device-body">
+
+            <!-- Front: E-Ink Screen -->
+            <div class="face-front">
+              <div class="screen-bezel"></div>
+              <div class="screen-content">
+                <div class="sc-header">
+                  <span>02/28 周五 · 雨夹雪</span>
+                  <span>15:42</span>
+                </div>
+                <div class="sc-zen">静</div>
+                <div class="sc-footer">InkSight · ZEN Mode · 400×300</div>
+              </div>
+            </div>
+
+            <!-- Back: PCB -->
+            <div class="face-back">
+              <div class="pcb-traces"></div>
+              <div class="pcb-label">InkSight PCB Rev.1</div>
+              <div class="pcb-component pcb-esp32">ESP32</div>
+              <div class="pcb-component pcb-tp5000">TP5K</div>
+              <div class="pcb-component pcb-usbc">USB</div>
+              <div class="pcb-component pcb-battery-conn">BAT</div>
+              <div class="pcb-component pcb-resistor">100K</div>
+              <div class="pcb-component pcb-led"></div>
+              <div class="pcb-component pcb-spi-header">SPI HDR</div>
+            </div>
+
+            <!-- Top -->
+            <div class="face-top"></div>
+            <!-- Bottom with USB -->
+            <div class="face-bottom">
+              <div class="usb-port"></div>
+            </div>
+            <!-- Left with button -->
+            <div class="face-left">
+              <div class="boot-button"></div>
+            </div>
+            <!-- Right -->
+            <div class="face-right"></div>
+
+            <!-- Dimensions -->
+            <div class="dim-annotation dim-w">← 120mm →</div>
+            <div class="dim-annotation dim-h">↑ 90mm ↓</div>
+            <div class="dim-annotation dim-d">18mm</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side Panel -->
+    <div class="side-panel">
+      <div class="info-card">
+        <h3><span class="icon" style="background:rgba(0,229,255,0.1)">◈</span> 视角预设</h3>
+        <div class="view-controls">
+          <button class="view-btn active" onclick="setView(-20,-25)">透视</button>
+          <button class="view-btn" onclick="setView(0,0)">正面</button>
+          <button class="view-btn" onclick="setView(0,180)">背面</button>
+          <button class="view-btn" onclick="setView(0,-90)">左侧</button>
+          <button class="view-btn" onclick="setView(0,90)">右侧</button>
+          <button class="view-btn" onclick="setView(-90,0)">俯视</button>
+          <button class="view-btn" onclick="setView(90,0)">仰视</button>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="icon" style="background:rgba(57,255,133,0.1)">◉</span> 核心规格</h3>
+        <div class="spec-row">
+          <span class="label">主控芯片</span>
+          <span class="value">ESP32-C3 SuperMini</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">处理器</span>
+          <span class="value">RISC-V 160MHz</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">屏幕</span>
+          <span class="value">4.2" E-Ink SSD1683</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">分辨率</span>
+          <span class="value">400 × 300 px</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">色深</span>
+          <span class="value">1-bit 黑白</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">接口</span>
+          <span class="value">SPI (6-wire)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">WiFi</span>
+          <span class="value">802.11 b/g/n</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="icon" style="background:rgba(255,109,46,0.1)">⚡</span> 电源系统</h3>
+        <div class="spec-row">
+          <span class="label">电池</span>
+          <span class="value">LiFePO4 3.2V</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">容量</span>
+          <span class="value">1500mAh</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">充电芯片</span>
+          <span class="value">TP5000 USB-C</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">待机电流</span>
+          <span class="value highlight">~5μA</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">续航</span>
+          <span class="value highlight">~180天</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="icon" style="background:rgba(167,139,250,0.1)">▣</span> 外形尺寸</h3>
+        <div class="spec-row">
+          <span class="label">整机</span>
+          <span class="value">120 × 90 × 18mm</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">屏幕模组</span>
+          <span class="value">120 × 90 × 5mm</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">固定方式</span>
+          <span class="value">M3 铜柱 × 4</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">重量</span>
+          <span class="value">~85g (含电池)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 2: EXPLODED VIEW
+═══════════════════════════════════════════ -->
+<div class="section" id="section-exploded">
+  <div class="section-title">爆炸分解图</div>
+  <div class="section-subtitle">// Toggle to see component assembly layers</div>
+
+  <div class="exploded-container" id="explodedView">
+    <div class="exploded-stack">
+      <!-- Layer 1: Top Cover -->
+      <div class="exploded-layer layer-cover">
+        <div style="text-align:center">
+          <div style="font-size:14px;font-weight:600;color:#aaa">顶部盖板</div>
+          <div style="font-size:9px;color:#666;margin-top:4px">3D打印 / 亚克力</div>
+        </div>
+        <div class="cover-holes">
+          <div class="cover-hole" style="top:12px;left:12px"></div>
+          <div class="cover-hole" style="top:12px;right:12px"></div>
+          <div class="cover-hole" style="bottom:12px;left:12px"></div>
+          <div class="cover-hole" style="bottom:12px;right:12px"></div>
+        </div>
+        <div class="layer-label">
+          <span class="tag" style="background:rgba(255,255,255,0.1);color:#aaa">顶盖 Top Cover</span>
+        </div>
+      </div>
+
+      <!-- Layer 2: E-Ink Display -->
+      <div class="exploded-layer layer-eink">
+        <div class="eink-resolution">400 × 300</div>
+        <div class="eink-spec">4.2" E-Paper · SSD1683 · 1-bit</div>
+        <div class="layer-label">
+          <span class="tag" style="background:rgba(167,139,250,0.1);color:var(--accent-purple)">墨水屏 E-Ink Display</span>
+        </div>
+      </div>
+
+      <!-- Layer 3: FPC Cable -->
+      <div class="exploded-layer layer-fpc">
+        FPC
+        <div class="layer-label" style="right:-200px">
+          <span class="tag" style="background:rgba(255,212,59,0.1);color:var(--accent-yellow)">排线 FPC Cable</span>
+        </div>
+      </div>
+
+      <!-- Layer 4: PCB -->
+      <div class="exploded-layer layer-pcb">
+        <div class="chip-icon">ESP32-C3</div>
+        <div class="chip-icon tp5000">TP5K</div>
+        <div class="usbc-icon"></div>
+        <div class="spi-pins">
+          <div class="spi-pin"></div>
+          <div class="spi-pin"></div>
+          <div class="spi-pin"></div>
+          <div class="spi-pin"></div>
+          <div class="spi-pin"></div>
+          <div class="spi-pin"></div>
+        </div>
+        <div class="led-dot"></div>
+        <div class="btn-boot"></div>
+        <div class="layer-label">
+          <span class="tag" style="background:rgba(0,229,255,0.1);color:var(--accent-cyan)">主板 PCB Board</span>
+        </div>
+      </div>
+
+      <!-- Layer 5: Battery -->
+      <div class="exploded-layer layer-battery">
+        <div>LiFePO4 · 3.2V · 1500mAh</div>
+        <div class="battery-terminal"></div>
+        <div class="battery-label-inside">18650</div>
+        <div class="layer-label" style="right:-200px">
+          <span class="tag" style="background:rgba(255,109,46,0.1);color:var(--accent-orange)">电池 Battery</span>
+        </div>
+      </div>
+
+      <!-- Layer 6: Back Cover -->
+      <div class="exploded-layer layer-backcover">
+        <div class="vent-slots">
+          <div class="vent-slot"></div>
+          <div class="vent-slot"></div>
+          <div class="vent-slot"></div>
+        </div>
+        <div class="layer-label">
+          <span class="tag" style="background:rgba(255,255,255,0.1);color:#888">底盖 Back Cover</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="explode-toggle" onclick="toggleExplode()">切换 爆炸 / 组装</button>
+  </div>
+
+  <!-- Assembly Steps -->
+  <div class="assembly-flow">
+    <h3 style="font-size:16px;font-weight:600;margin-bottom:24px;font-family:'Noto Sans SC',sans-serif">装配流程</h3>
+    <div class="assembly-steps">
+      <div class="assembly-step">
+        <div class="step-icon">🔧</div>
+        <div class="step-number">1</div>
+        <div class="step-text">焊接 TP5000 充电模块到 PCB</div>
+      </div>
+      <div class="assembly-step">
+        <div class="step-icon">🔌</div>
+        <div class="step-number">2</div>
+        <div class="step-text">连接电池正极到 3.3V，负极到 GND</div>
+      </div>
+      <div class="assembly-step">
+        <div class="step-icon">⚡</div>
+        <div class="step-number">3</div>
+        <div class="step-text">焊接 100KΩ 电阻 ADC 分压器</div>
+      </div>
+      <div class="assembly-step">
+        <div class="step-icon">🔗</div>
+        <div class="step-number">4</div>
+        <div class="step-text">接线 SPI 6根线 (CLK/MOSI/CS/DC/RST/BUSY)</div>
+      </div>
+      <div class="assembly-step">
+        <div class="step-icon">💡</div>
+        <div class="step-number">5</div>
+        <div class="step-text">连接 LED 到 GPIO3 (220Ω 限流)</div>
+      </div>
+      <div class="assembly-step">
+        <div class="step-icon">📦</div>
+        <div class="step-number">6</div>
+        <div class="step-text">M3 铜柱固定，装入外壳</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 3: PIN DIAGRAM
+═══════════════════════════════════════════ -->
+<div class="section" id="section-pinout">
+  <div class="section-title">引脚接线图</div>
+  <div class="section-subtitle">// ESP32-C3 SuperMini → E-Ink Display & Peripherals</div>
+
+  <div class="pin-grid">
+    <div class="pin-diagram-main">
+      <!-- SVG Wiring Diagram -->
+      <svg class="wiring-svg" viewBox="0 0 600 460" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- ESP32-C3 Board -->
+        <rect x="220" y="60" width="160" height="340" rx="8" fill="#111518" stroke="#333" stroke-width="2"/>
+        <text x="300" y="86" text-anchor="middle" fill="#0ff" font-family="JetBrains Mono" font-size="10" font-weight="600">ESP32-C3</text>
+        <text x="300" y="100" text-anchor="middle" fill="#555" font-family="JetBrains Mono" font-size="8">SuperMini</text>
+
+        <!-- Chip -->
+        <rect x="260" y="190" width="80" height="80" rx="4" fill="#1a1a1a" stroke="#333" stroke-width="1"/>
+        <text x="300" y="235" text-anchor="middle" fill="#444" font-family="JetBrains Mono" font-size="7">RISC-V</text>
+
+        <!-- USB-C -->
+        <rect x="285" y="392" width="30" height="12" rx="3" fill="#666" stroke="#888" stroke-width="1"/>
+        <text x="300" y="418" text-anchor="middle" fill="#666" font-family="JetBrains Mono" font-size="8">USB-C</text>
+
+        <!-- Left Pins -->
+        <!-- GPIO 0 - ADC -->
+        <circle cx="220" cy="140" r="4" fill="rgba(255,109,46,0.3)" stroke="#ff6d2e" stroke-width="1.5"/>
+        <line x1="216" y1="140" x2="100" y2="140" stroke="#ff6d2e" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="143" text-anchor="end" fill="#ff6d2e" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 0</text>
+        <text x="95" y="155" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">BAT ADC</text>
+
+        <!-- GPIO 1 - DC -->
+        <circle cx="220" cy="180" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <line x1="216" y1="180" x2="100" y2="180" stroke="#00e5ff" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="183" text-anchor="end" fill="#00e5ff" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 1</text>
+        <text x="95" y="195" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">EPD DC</text>
+
+        <!-- GPIO 2 - RST -->
+        <circle cx="220" cy="220" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <line x1="216" y1="220" x2="100" y2="220" stroke="#00e5ff" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="223" text-anchor="end" fill="#00e5ff" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 2</text>
+        <text x="95" y="235" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">EPD RST</text>
+
+        <!-- GPIO 3 - LED -->
+        <circle cx="220" cy="260" r="4" fill="rgba(57,255,133,0.3)" stroke="#39ff85" stroke-width="1.5"/>
+        <line x1="216" y1="260" x2="100" y2="260" stroke="#39ff85" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="263" text-anchor="end" fill="#39ff85" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 3</text>
+        <text x="95" y="275" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">LED</text>
+
+        <!-- GPIO 4 - SCK -->
+        <circle cx="220" cy="300" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <line x1="216" y1="300" x2="100" y2="300" stroke="#00e5ff" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="303" text-anchor="end" fill="#00e5ff" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 4</text>
+        <text x="95" y="315" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">SPI SCK</text>
+
+        <!-- 3V3 -->
+        <circle cx="220" cy="340" r="4" fill="rgba(255,71,87,0.3)" stroke="#ff4757" stroke-width="1.5"/>
+        <line x1="216" y1="340" x2="100" y2="340" stroke="#ff4757" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="343" text-anchor="end" fill="#ff4757" font-family="JetBrains Mono" font-size="10" font-weight="500">3V3</text>
+        <text x="95" y="355" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">VCC Power</text>
+
+        <!-- GND -->
+        <circle cx="220" cy="370" r="4" fill="rgba(255,71,87,0.3)" stroke="#ff4757" stroke-width="1.5"/>
+        <line x1="216" y1="370" x2="100" y2="370" stroke="#ff4757" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="95" y="373" text-anchor="end" fill="#ff4757" font-family="JetBrains Mono" font-size="10" font-weight="500">GND</text>
+        <text x="95" y="385" text-anchor="end" fill="#4a5268" font-family="JetBrains Mono" font-size="8">Ground</text>
+
+        <!-- Right Pins -->
+        <!-- GPIO 6 - MOSI -->
+        <circle cx="380" cy="140" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <line x1="384" y1="140" x2="500" y2="140" stroke="#00e5ff" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="505" y="143" fill="#00e5ff" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 6</text>
+        <text x="505" y="155" fill="#4a5268" font-family="JetBrains Mono" font-size="8">SPI MOSI</text>
+
+        <!-- GPIO 7 - CS -->
+        <circle cx="380" cy="180" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <line x1="384" y1="180" x2="500" y2="180" stroke="#00e5ff" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="505" y="183" fill="#00e5ff" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 7</text>
+        <text x="505" y="195" fill="#4a5268" font-family="JetBrains Mono" font-size="8">EPD CS</text>
+
+        <!-- GPIO 9 - Button -->
+        <circle cx="380" cy="220" r="4" fill="rgba(57,255,133,0.3)" stroke="#39ff85" stroke-width="1.5"/>
+        <line x1="384" y1="220" x2="500" y2="220" stroke="#39ff85" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="505" y="223" fill="#39ff85" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 9</text>
+        <text x="505" y="235" fill="#4a5268" font-family="JetBrains Mono" font-size="8">BOOT BTN</text>
+
+        <!-- GPIO 10 - BUSY -->
+        <circle cx="380" cy="260" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <line x1="384" y1="260" x2="500" y2="260" stroke="#00e5ff" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="505" y="263" fill="#00e5ff" font-family="JetBrains Mono" font-size="10" font-weight="500">GPIO 10</text>
+        <text x="505" y="275" fill="#4a5268" font-family="JetBrains Mono" font-size="8">EPD BUSY</text>
+
+        <!-- E-Ink Display Module (right side) -->
+        <rect x="470" y="300" width="110" height="90" rx="6" fill="#f0ece0" stroke="#ccc" stroke-width="1.5"/>
+        <text x="525" y="330" text-anchor="middle" fill="#333" font-family="JetBrains Mono" font-size="9" font-weight="600">4.2" E-INK</text>
+        <text x="525" y="345" text-anchor="middle" fill="#888" font-family="JetBrains Mono" font-size="7">400×300 SPI</text>
+        <text x="525" y="360" text-anchor="middle" fill="#888" font-family="JetBrains Mono" font-size="7">SSD1683</text>
+        <text x="525" y="380" text-anchor="middle" fill="#aaa" font-family="JetBrains Mono" font-size="7">WAVESHARE V2</text>
+
+        <!-- Battery (left side, bottom) -->
+        <rect x="20" y="60" width="50" height="110" rx="6" fill="#3a3a4a" stroke="#555" stroke-width="1.5"/>
+        <text x="45" y="100" text-anchor="middle" fill="#ff9f43" font-family="JetBrains Mono" font-size="8" font-weight="600" transform="rotate(-90 45 100)">LiFePO4</text>
+        <text x="45" y="140" text-anchor="middle" fill="#666" font-family="JetBrains Mono" font-size="7">3.2V</text>
+        <text x="45" y="155" text-anchor="middle" fill="#666" font-family="JetBrains Mono" font-size="7">1500mAh</text>
+
+        <!-- Connections from Battery to pins -->
+        <path d="M70 100 L100 100 L100 140" stroke="#ff6d2e" stroke-width="1" stroke-dasharray="3 2" fill="none"/>
+        <path d="M70 120 L85 120 L85 340 L100 340" stroke="#ff4757" stroke-width="1" stroke-dasharray="3 2" fill="none"/>
+
+        <!-- LED indicator -->
+        <circle cx="45" cy="260" r="8" fill="#003300" stroke="#006600" stroke-width="1"/>
+        <text x="45" y="264" text-anchor="middle" fill="#39ff85" font-family="JetBrains Mono" font-size="6">LED</text>
+        <line x1="53" y1="260" x2="100" y2="260" stroke="#39ff85" stroke-width="1" stroke-dasharray="3 2"/>
+
+        <!-- Legend -->
+        <rect x="20" y="420" width="560" height="35" rx="6" fill="#181c26" stroke="#252a38" stroke-width="1"/>
+        <circle cx="50" cy="438" r="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="1.5"/>
+        <text x="60" y="441" fill="#00e5ff" font-family="JetBrains Mono" font-size="9">SPI</text>
+        <circle cx="120" cy="438" r="4" fill="rgba(255,109,46,0.3)" stroke="#ff6d2e" stroke-width="1.5"/>
+        <text x="130" y="441" fill="#ff6d2e" font-family="JetBrains Mono" font-size="9">ADC</text>
+        <circle cx="190" cy="438" r="4" fill="rgba(57,255,133,0.3)" stroke="#39ff85" stroke-width="1.5"/>
+        <text x="200" y="441" fill="#39ff85" font-family="JetBrains Mono" font-size="9">GPIO</text>
+        <circle cx="260" cy="438" r="4" fill="rgba(255,71,87,0.3)" stroke="#ff4757" stroke-width="1.5"/>
+        <text x="270" y="441" fill="#ff4757" font-family="JetBrains Mono" font-size="9">Power</text>
+        <text x="370" y="441" fill="#4a5268" font-family="JetBrains Mono" font-size="9">--- Dashed = Signal Trace</text>
+      </svg>
+    </div>
+
+    <!-- Pin Reference Table -->
+    <div class="pin-legend">
+      <div class="pin-table">
+        <div class="pin-table-header">
+          <span>GPIO</span>
+          <span>Signal</span>
+          <span>Description</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-cyan)">GPIO 4</span>
+          <span class="signal" style="color:var(--accent-cyan)">SCK</span>
+          <span class="desc">SPI 时钟信号</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-cyan)">GPIO 6</span>
+          <span class="signal" style="color:var(--accent-cyan)">MOSI</span>
+          <span class="desc">SPI 数据输出</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-cyan)">GPIO 7</span>
+          <span class="signal" style="color:var(--accent-cyan)">CS</span>
+          <span class="desc">片选信号</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-cyan)">GPIO 1</span>
+          <span class="signal" style="color:var(--accent-cyan)">DC</span>
+          <span class="desc">数据/命令选择</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-cyan)">GPIO 2</span>
+          <span class="signal" style="color:var(--accent-cyan)">RST</span>
+          <span class="desc">复位信号</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-cyan)">GPIO 10</span>
+          <span class="signal" style="color:var(--accent-cyan)">BUSY</span>
+          <span class="desc">忙状态信号</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-orange)">GPIO 0</span>
+          <span class="signal" style="color:var(--accent-orange)">ADC</span>
+          <span class="desc">电池电压检测 (100KΩ分压)</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-green)">GPIO 3</span>
+          <span class="signal" style="color:var(--accent-green)">LED</span>
+          <span class="desc">状态指示灯 (220Ω限流)</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-green)">GPIO 9</span>
+          <span class="signal" style="color:var(--accent-green)">BTN</span>
+          <span class="desc">BOOT 按钮 (内部上拉)</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-red)">3V3</span>
+          <span class="signal" style="color:var(--accent-red)">VCC</span>
+          <span class="desc">3.3V 电源</span>
+        </div>
+        <div class="pin-table-row">
+          <span class="gpio" style="color:var(--accent-red)">GND</span>
+          <span class="signal" style="color:var(--accent-red)">GND</span>
+          <span class="desc">公共接地</span>
+        </div>
+      </div>
+
+      <!-- Power Flow -->
+      <div class="info-card">
+        <h3><span class="icon" style="background:rgba(255,109,46,0.1)">⚡</span> 供电链路</h3>
+        <div class="power-flow" style="grid-template-columns: repeat(3, 1fr); padding: 16px; margin:0;">
+          <div class="pf-node">
+            <div class="pf-icon" style="background:rgba(255,109,46,0.1);border:1px solid rgba(255,109,46,0.2)">🔋</div>
+            <div class="pf-label" style="color:var(--accent-orange)">LiFePO4</div>
+            <div class="pf-spec">3.2V / 1500mAh</div>
+          </div>
+          <div class="pf-arrow">→</div>
+          <div class="pf-node">
+            <div class="pf-icon" style="background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.2)">⚙</div>
+            <div class="pf-label" style="color:var(--accent-cyan)">ESP32-C3</div>
+            <div class="pf-spec">3.0-3.6V</div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:12px;font-family:'JetBrains Mono',monospace;line-height:1.7">
+          LiFePO4 直供 3V3，无需 LDO/DC-DC<br>
+          TP5000 USB-C 充电 (需跳线至 3.6V 模式)<br>
+          ADC: V = raw × (3.3/4095) × 2.0
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 4: BUTTON LAYOUT
+═══════════════════════════════════════════ -->
+<div class="section" id="section-buttons">
+  <div class="section-title">按钮布局</div>
+  <div class="section-subtitle">// BOOT button (GPIO 9) — single physical button with multi-gesture control</div>
+
+  <div class="button-section">
+    <div class="button-visual">
+      <h3 style="font-size:14px;color:var(--text-secondary);font-family:'JetBrains Mono',monospace">侧面视图 — SIDE VIEW</h3>
+
+      <div class="device-side-view">
+        <!-- Device body side view -->
+        <div style="display:flex; align-items:center; gap: 0; position: relative;">
+          <!-- Left side strip (with button) -->
+          <div style="position: relative;">
+            <div class="side-view-body">
+              <!-- BOOT button -->
+              <div class="side-btn side-btn-boot" id="bootBtn"></div>
+
+              <!-- Annotations -->
+              <div class="btn-annotation right" style="top: 108px; left: 50px;">
+                <span class="ann-label">BOOT 按钮</span>
+                <span class="ann-desc">GPIO 9 · 内部上拉 · 低电平有效</span>
+              </div>
+
+              <div class="btn-annotation right" style="top: 4px; left: 50px;">
+                <span class="ann-label" style="color:var(--text-dim)">↑ 顶部</span>
+              </div>
+
+              <div class="btn-annotation right" style="bottom: 4px; left: 50px;">
+                <span class="ann-label" style="color:var(--text-dim)">↓ 底部 (USB-C)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Screen preview attached -->
+          <div style="width: 200px; height: 260px; background: #f5f0e8; border: 2px solid #333; border-left: none; border-radius: 0 8px 8px 0; display:flex; align-items:center; justify-content:center; position:relative;">
+            <div style="font-size: 56px; color: #1a1a1a; font-family: 'Noto Sans SC',serif; font-weight:300">静</div>
+            <div style="position:absolute; top:8px; left:8px; font-size:7px; color:#aaa; font-family:'JetBrains Mono',monospace">4.2" E-Ink · 400×300</div>
+            <div style="position:absolute;bottom:8px;right:8px;font-size:7px;color:#bbb;font-family:'JetBrains Mono',monospace">ZEN MODE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="button-actions">
+      <div class="action-card">
+        <div class="action-header">
+          <div class="action-icon press" style="color:var(--accent-cyan)">●</div>
+          <div>
+            <div class="action-title">短按刷新</div>
+            <div class="action-timing">50ms ~ 2000ms</div>
+          </div>
+        </div>
+        <div class="action-desc">
+          立即获取新内容并刷新屏幕显示。设备唤醒 → WiFi连接 → 请求后端 → 渲染图像 → 显示 → 深度睡眠
+          <div class="action-led"><span class="led-blink"></span> ack: 2× 快闪 (80ms)</div>
+        </div>
+      </div>
+
+      <div class="action-card">
+        <div class="action-header">
+          <div class="action-icon double" style="color:var(--accent-purple)">●●</div>
+          <div>
+            <div class="action-title">双击切换模式</div>
+            <div class="action-timing">2× within 500ms</div>
+          </div>
+        </div>
+        <div class="action-desc">
+          切换到下一个已启用的内容模式并刷新。循环轮换模式下，cycle_index 通过 NVS 存储持久化，重启不丢失
+          <div class="action-led"><span class="led-blink"></span> ack + connecting</div>
+        </div>
+      </div>
+
+      <div class="action-card">
+        <div class="action-header">
+          <div class="action-icon triple" style="color:var(--accent-yellow)">●●●</div>
+          <div>
+            <div class="action-title">三击收藏</div>
+            <div class="action-timing">3× within 500ms</div>
+          </div>
+        </div>
+        <div class="action-desc">
+          标记当前显示内容为收藏。POST 请求发送到后端保存当前渲染快照
+          <div class="action-led"><span class="led-blink"></span> favorite: 1× 长亮 (2000ms)</div>
+        </div>
+      </div>
+
+      <div class="action-card">
+        <div class="action-header">
+          <div class="action-icon long" style="color:var(--accent-red)">━━━</div>
+          <div>
+            <div class="action-title">长按进入配网</div>
+            <div class="action-timing">>= 2000ms</div>
+          </div>
+        </div>
+        <div class="action-desc">
+          重启设备并进入 WiFi 配网模式 (AP 模式)。设备创建热点 InkSight-XXXXX，手机连接后自动弹出 Captive Portal 配置页面
+          <div class="action-led"><span class="led-blink"></span> portal: 持续亮起</div>
+        </div>
+      </div>
+
+      <div class="info-card" style="margin-top: 8px;">
+        <h3><span class="icon" style="background:rgba(57,255,133,0.1)">💡</span> LED 状态模式</h3>
+        <div class="spec-row">
+          <span class="label">ack</span>
+          <span class="value">2× 快闪 (80ms)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">connecting</span>
+          <span class="value">1× 长闪 (200ms)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">downloading</span>
+          <span class="value">3× 中闪 (150ms)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">success</span>
+          <span class="value">1× 长亮 (1000ms)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">fail</span>
+          <span class="value">5× 急闪 (60ms)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">favorite</span>
+          <span class="value">1× 超长亮 (2000ms)</span>
+        </div>
+        <div class="spec-row">
+          <span class="label">portal</span>
+          <span class="value">持续亮起</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 5: BOM & DIMENSIONS
+═══════════════════════════════════════════ -->
+<div class="section" id="section-bom">
+  <div class="section-title">物料清单 & 尺寸规格</div>
+  <div class="section-subtitle">// Bill of Materials · Mechanical Dimensions · 3D Print Notes</div>
+
+  <div class="bom-grid">
+    <div class="bom-card mcu">
+      <div class="bom-price">~20<span> CNY</span></div>
+      <div class="bom-icon">⚙</div>
+      <div class="bom-name">主控芯片</div>
+      <div class="bom-model">ESP32-C3 SuperMini</div>
+      <div class="bom-specs">
+        RISC-V 单核 160MHz<br>
+        WiFi 802.11 b/g/n<br>
+        Deep Sleep ~5μA<br>
+        工作电压 3.0-3.6V
+      </div>
+    </div>
+
+    <div class="bom-card display">
+      <div class="bom-price">~110<span> CNY</span></div>
+      <div class="bom-icon">📺</div>
+      <div class="bom-name">电子墨水屏</div>
+      <div class="bom-model">4.2" E-Paper SSD1683</div>
+      <div class="bom-specs">
+        分辨率 400 × 300<br>
+        1-bit 黑白显示<br>
+        SPI 接口 (6线)<br>
+        Waveshare V2 模组
+      </div>
+    </div>
+
+    <div class="bom-card battery">
+      <div class="bom-price">~35<span> CNY</span></div>
+      <div class="bom-icon">🔋</div>
+      <div class="bom-name">电池</div>
+      <div class="bom-model">18650 LiFePO4</div>
+      <div class="bom-specs">
+        标称电压 3.2V<br>
+        容量 1500mAh+<br>
+        2000+ 循环寿命<br>
+        直供无需降压模块
+      </div>
+    </div>
+
+    <div class="bom-card charger">
+      <div class="bom-price">~15<span> CNY</span></div>
+      <div class="bom-icon">🔌</div>
+      <div class="bom-name">充电模块</div>
+      <div class="bom-model">TP5000 USB-C</div>
+      <div class="bom-specs">
+        输入 5V USB-C<br>
+        跳线至 3.6V LiFePO4 模式<br>
+        充电电流 500mA<br>
+        内置充放电保护
+      </div>
+    </div>
+
+    <div class="bom-card enclosure">
+      <div class="bom-price">~35<span> CNY</span></div>
+      <div class="bom-icon">📦</div>
+      <div class="bom-name">外壳结构件</div>
+      <div class="bom-model">3D打印 / FR4 PCB三明治</div>
+      <div class="bom-specs">
+        M3 铜柱 × 4 + 螺丝<br>
+        3D打印材料: PLA / PETG<br>
+        壁厚建议 1.5mm+<br>
+        预留 USB-C / 按钮开孔
+      </div>
+    </div>
+
+    <div class="bom-card misc">
+      <div class="bom-price">~5<span> CNY</span></div>
+      <div class="bom-icon">🔩</div>
+      <div class="bom-name">辅料</div>
+      <div class="bom-model">电阻 / LED / 杜邦线</div>
+      <div class="bom-specs">
+        100KΩ 电阻 × 1 (ADC分压)<br>
+        220Ω 电阻 × 1 (LED限流)<br>
+        LED 指示灯 × 1<br>
+        杜邦线若干
+      </div>
+    </div>
+  </div>
+
+  <div class="bom-total">
+    <div>
+      <div class="total-label">物料总成本 (估算)</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:4px;font-family:'JetBrains Mono',monospace">含基础元器件，不含工具与耗材</div>
+    </div>
+    <div class="total-price">~220 <span>CNY</span></div>
+  </div>
+
+  <!-- Dimensions -->
+  <div class="dims-visual">
+    <div class="dim-view">
+      <h4>正面 FRONT VIEW</h4>
+      <div class="dim-drawing">
+        <div class="dim-rect" style="width:200px;height:150px;border-color:var(--accent-cyan)">
+          <div class="dim-label top">120mm</div>
+          <div class="dim-label right">90mm</div>
+          <div style="position:absolute;inset:10px;border:1px dashed var(--text-dim);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">
+            4.2" E-Ink<br>400×300
+          </div>
+          <!-- Screw holes -->
+          <div style="position:absolute;top:4px;left:4px;width:6px;height:6px;border-radius:50%;border:1px solid var(--accent-yellow)"></div>
+          <div style="position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;border:1px solid var(--accent-yellow)"></div>
+          <div style="position:absolute;bottom:4px;left:4px;width:6px;height:6px;border-radius:50%;border:1px solid var(--accent-yellow)"></div>
+          <div style="position:absolute;bottom:4px;right:4px;width:6px;height:6px;border-radius:50%;border:1px solid var(--accent-yellow)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dim-view">
+      <h4>侧面 SIDE VIEW</h4>
+      <div class="dim-drawing">
+        <div class="dim-rect" style="width:30px;height:150px;border-color:var(--accent-purple)">
+          <div class="dim-label top">18mm</div>
+          <div class="dim-label right">90mm</div>
+          <!-- Layers indicator -->
+          <div style="position:absolute;top:0;left:0;right:0;height:20%;border-bottom:1px dashed var(--text-dim);display:flex;align-items:center;justify-content:center;font-size:6px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">盖</div>
+          <div style="position:absolute;top:20%;left:0;right:0;height:25%;border-bottom:1px dashed var(--text-dim);display:flex;align-items:center;justify-content:center;font-size:6px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">屏</div>
+          <div style="position:absolute;top:45%;left:0;right:0;height:20%;border-bottom:1px dashed var(--text-dim);display:flex;align-items:center;justify-content:center;font-size:6px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">PCB</div>
+          <div style="position:absolute;top:65%;left:0;right:0;height:15%;border-bottom:1px dashed var(--text-dim);display:flex;align-items:center;justify-content:center;font-size:6px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">电池</div>
+          <div style="position:absolute;top:80%;left:0;right:0;height:20%;display:flex;align-items:center;justify-content:center;font-size:6px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">底</div>
+          <!-- Button indicator -->
+          <div style="position:absolute;left:-8px;top:45%;width:8px;height:8px;background:var(--accent-green);border-radius:50%;border:1px solid rgba(57,255,133,0.5)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dim-view">
+      <h4>底面 BOTTOM VIEW</h4>
+      <div class="dim-drawing">
+        <div class="dim-rect" style="width:200px;height:30px;border-color:var(--accent-orange)">
+          <div class="dim-label top">120mm</div>
+          <div class="dim-label right" style="right:-46px">18mm</div>
+          <!-- USB-C port -->
+          <div style="position:absolute;top:50%;left:25%;transform:translate(-50%,-50%);width:22px;height:10px;border:1px solid var(--text-dim);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">USB-C</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D Print Notes -->
+  <div class="info-card" style="margin-top:32px">
+    <h3><span class="icon" style="background:rgba(167,139,250,0.1)">🖨</span> 3D 打印注意事项</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:12px;line-height:1.8;color:var(--text-secondary)">
+      <div>
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px">材料推荐</div>
+        <div>PLA — 精度高、易打印、适合原型</div>
+        <div>PETG — 强度更佳、耐热性好</div>
+        <div>壁厚 >= 1.5mm，填充率 >= 20%</div>
+        <div>层高建议 0.2mm (标准质量)</div>
+      </div>
+      <div>
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px">设计要点</div>
+        <div>USB-C 开孔: 10 × 4mm (预留 0.3mm 公差)</div>
+        <div>BOOT 按钮开孔: 直径 5mm</div>
+        <div>M3 螺丝柱: 内径 3.0mm, 外径 6mm</div>
+        <div>FPC 排线槽宽: >= 8mm</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Power Consumption -->
+  <div class="power-flow" style="margin-top:24px">
+    <div class="pf-node">
+      <div class="pf-icon" style="background:rgba(255,212,59,0.1);border:1px solid rgba(255,212,59,0.2)">🔌</div>
+      <div class="pf-label" style="color:var(--accent-yellow)">USB-C</div>
+      <div class="pf-spec">5V Input</div>
+    </div>
+    <div class="pf-arrow">→</div>
+    <div class="pf-node">
+      <div class="pf-icon" style="background:rgba(57,255,133,0.1);border:1px solid rgba(57,255,133,0.2)">⚡</div>
+      <div class="pf-label" style="color:var(--accent-green)">TP5000</div>
+      <div class="pf-spec">3.6V LiFePO4</div>
+    </div>
+    <div class="pf-arrow">→</div>
+    <div class="pf-node">
+      <div class="pf-icon" style="background:rgba(255,109,46,0.1);border:1px solid rgba(255,109,46,0.2)">🔋</div>
+      <div class="pf-label" style="color:var(--accent-orange)">Battery</div>
+      <div class="pf-spec">3.2V 1500mAh</div>
+    </div>
+    <div class="pf-arrow">→</div>
+    <div class="pf-node">
+      <div class="pf-icon" style="background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.2)">⚙</div>
+      <div class="pf-label" style="color:var(--accent-cyan)">ESP32-C3</div>
+      <div class="pf-spec">130mA / 5μA</div>
+    </div>
+    <div class="pf-arrow">→</div>
+    <div class="pf-node">
+      <div class="pf-icon" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2)">📺</div>
+      <div class="pf-label" style="color:var(--accent-purple)">E-Ink</div>
+      <div class="pf-spec">0W Idle</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<div class="page-footer">
+  InkSight 墨鱼 · Prototype Design v0.1 · <a href="https://github.com/datascale-ai/inksight">github.com/datascale-ai/inksight</a> · MIT License
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// TAB NAVIGATION
+// ═══════════════════════════════════════════
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('section-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════
+// 3D VIEWER - DRAG ROTATION
+// ═══════════════════════════════════════════
+const viewer = document.getElementById('viewer3d');
+const pivot = document.getElementById('devicePivot');
+let rotX = -20, rotY = -25;
+let isDragging = false, lastX, lastY;
+
+function updateRotation() {
+  pivot.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+}
+updateRotation();
+
+viewer.addEventListener('mousedown', e => {
+  isDragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  viewer.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  rotY += dx * 0.5;
+  rotX -= dy * 0.5;
+  rotX = Math.max(-89, Math.min(89, rotX));
+  lastX = e.clientX;
+  lastY = e.clientY;
+  updateRotation();
+});
+
+document.addEventListener('mouseup', () => {
+  isDragging = false;
+  viewer.style.cursor = 'grab';
+});
+
+// Touch support
+viewer.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    lastX = e.touches[0].clientX;
+    lastY = e.touches[0].clientY;
+  }
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  if (!isDragging || e.touches.length !== 1) return;
+  const dx = e.touches[0].clientX - lastX;
+  const dy = e.touches[0].clientY - lastY;
+  rotY += dx * 0.5;
+  rotX -= dy * 0.5;
+  rotX = Math.max(-89, Math.min(89, rotX));
+  lastX = e.touches[0].clientX;
+  lastY = e.touches[0].clientY;
+  updateRotation();
+}, { passive: true });
+
+document.addEventListener('touchend', () => { isDragging = false; });
+
+// Preset Views
+function setView(x, y) {
+  rotX = x;
+  rotY = y;
+  pivot.style.transition = 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+  updateRotation();
+  setTimeout(() => { pivot.style.transition = 'transform 0.05s linear'; }, 600);
+
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// ═══════════════════════════════════════════
+// EXPLODED VIEW TOGGLE
+// ═══════════════════════════════════════════
+let isExploded = true;
+
+function toggleExplode() {
+  const container = document.getElementById('explodedView');
+  isExploded = !isExploded;
+  if (isExploded) {
+    container.classList.remove('collapsed');
+  } else {
+    container.classList.add('collapsed');
+  }
+}
+
+// ═══════════════════════════════════════════
+// BOOT BUTTON CLICK SIMULATION
+// ═══════════════════════════════════════════
+const bootBtn = document.getElementById('bootBtn');
+if (bootBtn) {
+  bootBtn.addEventListener('click', () => {
+    bootBtn.style.boxShadow = '0 0 12px rgba(0,229,255,0.6), inset 0 1px 2px rgba(255,255,255,0.2)';
+    setTimeout(() => {
+      bootBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.2)';
+    }, 200);
+  });
+}
+
+// ═══════════════════════════════════════════
+// AUTO-ROTATE (subtle, pauses on hover)
+// ═══════════════════════════════════════════
+let autoRotate = true;
+viewer.addEventListener('mouseenter', () => { autoRotate = false; });
+viewer.addEventListener('mouseleave', () => { if (!isDragging) autoRotate = true; });
+
+function autoRotateLoop() {
+  if (autoRotate && !isDragging) {
+    rotY += 0.15;
+    updateRotation();
+  }
+  requestAnimationFrame(autoRotateLoop);
+}
+autoRotateLoop();
+</script>
+</body>
+</html>

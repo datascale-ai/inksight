@@ -15,15 +15,37 @@
 // ── Shared framebuffer (referenced by other modules via extern) ──
 uint8_t imgBuf[IMG_BUF_LEN];
 
-// ── Runtime state ───────────────────────────────────────────
-static unsigned long cfgBtnPressStart   = 0;
-static unsigned long setupDoneMillis    = 0;
-static unsigned long lastShortPressTime = 0;
-static unsigned long lastClockTickMillis = 0;
-static int           clickCount         = 0;
-static bool          pendingRefresh     = false;
-static bool          pendingNextMode    = false;
-static bool          pendingFavorite    = false;
+// ── Device state machine ────────────────────────────────────
+enum class DeviceState : uint8_t {
+    BOOT,           // Initial state, loading config
+    PORTAL,         // Captive portal active
+    CONNECTING,     // Connecting to WiFi
+    FETCHING,       // Downloading image from backend
+    DISPLAYING,     // Showing content, clock ticking
+    REFRESHING,     // Manual refresh triggered
+    SLEEPING,       // Deep sleep
+    ERROR,          // Error state, retry pending
+};
+
+struct DeviceContext {
+    DeviceState state = DeviceState::BOOT;
+
+    // Button state
+    unsigned long btnPressStart = 0;
+    unsigned long lastClickTime = 0;
+    int clickCount = 0;
+
+    // Timing
+    unsigned long setupDoneAt = 0;
+    unsigned long lastClockTick = 0;
+
+    // Pending actions (set by button handler, consumed by loop)
+    bool wantRefresh = false;
+    bool wantNextMode = false;
+    bool wantFavorite = false;
+};
+
+static DeviceContext ctx;
 
 // ── Forward declarations ────────────────────────────────────
 static void checkConfigButton();
@@ -102,6 +124,7 @@ void setup() {
         ledFeedback("portal");
         showSetupScreen(apName.c_str());
         startCaptivePortal();
+        ctx.state = DeviceState::PORTAL;
         return;
     }
 
@@ -114,6 +137,7 @@ void setup() {
         ledFeedback("portal");
         showSetupScreen(apName.c_str());
         startCaptivePortal();
+        ctx.state = DeviceState::PORTAL;
         return;
     }
 
@@ -146,12 +170,13 @@ void setup() {
 
     syncNTP();
     updateTimeDisplay();
-    lastClockTickMillis = millis();
+    ctx.lastClockTick = millis();
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 
-    setupDoneMillis = millis();
+    ctx.state = DeviceState::DISPLAYING;
+    ctx.setupDoneAt = millis();
 #if DEBUG_MODE
     Serial.printf("[DEBUG] Staying awake, refresh every %d min (user config: %d min)\n",
                   DEBUG_REFRESH_MIN, cfgSleepMin);
@@ -166,7 +191,7 @@ void setup() {
 
 void loop() {
     // Portal mode: only handle web requests
-    if (portalActive) {
+    if (ctx.state == DeviceState::PORTAL) {
         handlePortalClients();
         checkConfigButton();
         delay(5);
@@ -176,24 +201,24 @@ void loop() {
     checkConfigButton();
 
     // Handle button-triggered actions
-    if (pendingFavorite) {
+    if (ctx.wantFavorite) {
         triggerFavorite();
-        pendingFavorite = false;
-        pendingNextMode = false;
-        pendingRefresh = false;
-        setupDoneMillis = millis();
-    } else if (pendingRefresh || pendingNextMode) {
-        triggerImmediateRefresh(pendingNextMode);
-        pendingRefresh = false;
-        pendingNextMode = false;
-        setupDoneMillis = millis();
+        ctx.wantFavorite = false;
+        ctx.wantNextMode = false;
+        ctx.wantRefresh = false;
+        ctx.setupDoneAt = millis();
+    } else if (ctx.wantRefresh || ctx.wantNextMode) {
+        triggerImmediateRefresh(ctx.wantNextMode);
+        ctx.wantRefresh = false;
+        ctx.wantNextMode = false;
+        ctx.setupDoneAt = millis();
     }
 
     unsigned long now = millis();
     bool timeChanged = false;
-    while (now - lastClockTickMillis >= 1000UL) {
+    while (now - ctx.lastClockTick >= 1000UL) {
         tickTime();
-        lastClockTickMillis += 1000UL;
+        ctx.lastClockTick += 1000UL;
         timeChanged = true;
     }
     if (timeChanged) {
@@ -206,14 +231,14 @@ void loop() {
 #else
     refreshInterval = (unsigned long)cfgSleepMin * 60000UL;
 #endif
-    if (millis() - setupDoneMillis >= refreshInterval) {
+    if (millis() - ctx.setupDoneAt >= refreshInterval) {
 #if DEBUG_MODE
         Serial.printf("[DEBUG] %d min elapsed, refreshing content...\n", DEBUG_REFRESH_MIN);
 #else
         Serial.printf("%d min elapsed, refreshing content...\n", cfgSleepMin);
 #endif
         triggerImmediateRefresh();
-        setupDoneMillis = millis();
+        ctx.setupDoneAt = millis();
     }
 
     delay(50);
@@ -232,17 +257,27 @@ static void enterDeepSleep(int minutes) {
 // ── Failure handler with retry logic ────────────────────────
 
 static void handleFailure(const char *reason) {
-    showError(reason);
-    epdSleep();
-
     int retryCount = getRetryCount();
+
     if (retryCount < MAX_RETRY_COUNT) {
+        int delaySec = RETRY_DELAYS[retryCount];
         setRetryCount(retryCount + 1);
+
+        // Show error with retry info on display
+        char msg[64];
+        snprintf(msg, sizeof(msg), "%s %d/%d %ds",
+                 reason, retryCount + 1, MAX_RETRY_COUNT, delaySec);
+        showError(msg);
+        epdSleep();
+
         Serial.printf("%s, retry %d/%d in %ds...\n",
-                      reason, retryCount + 1, MAX_RETRY_COUNT, RETRY_DELAY_SEC);
-        delay(RETRY_DELAY_SEC * 1000);
+                      reason, retryCount + 1, MAX_RETRY_COUNT, delaySec);
+        delay((unsigned long)delaySec * 1000);
         ESP.restart();
     } else {
+        showError("Sleep. Press btn.");
+        epdSleep();
+
         Serial.println("Max retries reached, entering deep sleep");
         resetRetryCount();
         esp_sleep_enable_timer_wakeup((uint64_t)cfgSleepMin * 60ULL * 1000000ULL);
@@ -268,7 +303,7 @@ static void triggerImmediateRefresh(bool nextMode) {
             Serial.println("Display done");
             syncNTP();
             updateTimeDisplay();
-            lastClockTickMillis = millis();
+            ctx.lastClockTick = millis();
         } else {
             ledFeedback("fail");
             Serial.println("Fetch failed, keeping old content");
@@ -312,10 +347,10 @@ static void checkConfigButton() {
     bool isPressed = (digitalRead(PIN_CFG_BTN) == LOW);
 
     if (isPressed) {
-        if (cfgBtnPressStart == 0) {
-            cfgBtnPressStart = millis();
+        if (ctx.btnPressStart == 0) {
+            ctx.btnPressStart = millis();
         } else {
-            unsigned long holdTime = millis() - cfgBtnPressStart;
+            unsigned long holdTime = millis() - ctx.btnPressStart;
             if (holdTime >= (unsigned long)CFG_BTN_HOLD_MS) {
                 Serial.printf("Config button held for %dms, restarting...\n", CFG_BTN_HOLD_MS);
                 ledFeedback("ack");
@@ -325,44 +360,44 @@ static void checkConfigButton() {
             }
         }
     } else {
-        if (cfgBtnPressStart != 0) {
-            unsigned long pressDuration = millis() - cfgBtnPressStart;
-            cfgBtnPressStart = 0;
+        if (ctx.btnPressStart != 0) {
+            unsigned long pressDuration = millis() - ctx.btnPressStart;
+            ctx.btnPressStart = 0;
 
             if (pressDuration >= (unsigned long)SHORT_PRESS_MIN_MS &&
                 pressDuration < (unsigned long)CFG_BTN_HOLD_MS) {
                 unsigned long now = millis();
-                if (now - lastShortPressTime < (unsigned long)TRIPLE_CLICK_MS) {
-                    clickCount++;
-                    if (clickCount >= 3) {
+                if (now - ctx.lastClickTime < (unsigned long)TRIPLE_CLICK_MS) {
+                    ctx.clickCount++;
+                    if (ctx.clickCount >= 3) {
                         Serial.println("[BTN] Triple-click -> favorite");
-                        pendingFavorite = true;
-                        clickCount = 0;
-                        lastShortPressTime = 0;
-                    } else if (clickCount == 2) {
+                        ctx.wantFavorite = true;
+                        ctx.clickCount = 0;
+                        ctx.lastClickTime = 0;
+                    } else if (ctx.clickCount == 2) {
                         Serial.println("[BTN] Double-click -> next mode");
-                        pendingNextMode = true;
+                        ctx.wantNextMode = true;
                         // Don't reset yet — wait to see if triple-click
-                        lastShortPressTime = now;
+                        ctx.lastClickTime = now;
                     }
                 } else {
-                    clickCount = 1;
-                    lastShortPressTime = now;
+                    ctx.clickCount = 1;
+                    ctx.lastClickTime = now;
                     Serial.printf("[BTN] Click #1 (%lums), waiting...\n", pressDuration);
                 }
             }
         } else {
-            if (lastShortPressTime != 0 &&
-                (millis() - lastShortPressTime >= (unsigned long)TRIPLE_CLICK_MS)) {
-                if (clickCount == 1) {
+            if (ctx.lastClickTime != 0 &&
+                (millis() - ctx.lastClickTime >= (unsigned long)TRIPLE_CLICK_MS)) {
+                if (ctx.clickCount == 1) {
                     Serial.println("[BTN] Single click -> immediate refresh");
-                    pendingRefresh = true;
-                } else if (clickCount == 2 && !pendingFavorite) {
+                    ctx.wantRefresh = true;
+                } else if (ctx.clickCount == 2 && !ctx.wantFavorite) {
                     // Double-click confirmed (no third click came)
-                    // pendingNextMode already set above
+                    // ctx.wantNextMode already set above
                 }
-                clickCount = 0;
-                lastShortPressTime = 0;
+                ctx.clickCount = 0;
+                ctx.lastClickTime = 0;
             }
         }
     }

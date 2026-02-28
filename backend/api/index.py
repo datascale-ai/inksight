@@ -14,6 +14,9 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Request, Response, Depends, Header
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import httpx
 from PIL import Image
 from PIL import ImageDraw
@@ -83,9 +86,38 @@ async def lifespan(app: FastAPI):
     from core.cache import init_cache_db
     await init_cache_db()
     yield
+    from core.db import close_all
+    await close_all()
 
 
 app = FastAPI(title="InkSight API", version="1.0.0", lifespan=lifespan)
+
+# ── Rate limiting ────────────────────────────────────────────
+
+
+def _rate_limit_key(request: Request) -> str:
+    """Use MAC query param if present, otherwise fall back to client IP."""
+    mac = request.query_params.get("mac")
+    if mac:
+        return f"mac:{mac}"
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_limit_key)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Global error handler for InkSightError hierarchy ─────────
+from core.errors import InkSightError
+
+
+@app.exception_handler(InkSightError)
+async def inksight_error_handler(request: Request, exc: InkSightError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": type(exc).__name__, "message": exc.message},
+    )
+
 
 FIRMWARE_CHIP_FAMILY = "ESP32-C3"
 FIRMWARE_RELEASE_CACHE_TTL = int(os.getenv("FIRMWARE_RELEASE_CACHE_TTL", "120"))
@@ -468,7 +500,9 @@ async def _validate_firmware_url(url: str) -> dict:
 
 
 @app.get("/api/render")
+@limiter.limit("10/minute")
 async def render(
+    request: Request,
     v: float = Query(default=3.3, description="Battery voltage"),
     mac: Optional[str] = Query(default=None, description="Device MAC address"),
     persona: Optional[str] = Query(default=None, description="Force persona"),
@@ -479,6 +513,7 @@ async def render(
     x_device_token: Optional[str] = Header(default=None),
 ):
     if mac:
+        mac = validate_mac_param(mac)
         await require_device_token(mac, x_device_token)
     start_time = time.time()
     force_next = (next_mode == 1)
@@ -568,13 +603,17 @@ async def get_widget(
 
 
 @app.get("/api/preview")
+@limiter.limit("20/minute")
 async def preview(
+    request: Request,
     v: float = Query(default=3.3, description="Battery voltage"),
     mac: Optional[str] = Query(default=None, description="Device MAC address"),
     persona: Optional[str] = Query(default=None, description="Force persona"),
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600, description="Screen width in pixels"),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200, description="Screen height in pixels"),
 ):
+    if mac:
+        mac = validate_mac_param(mac)
     try:
         img, resolved_persona, cache_hit = await _build_image(
             v, mac, persona, screen_w=w, screen_h=h,

@@ -11,12 +11,48 @@ import random
 import re
 from typing import Any
 
+import httpx
+
 from .config import DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL
 from .content import _build_context_str, _build_style_instructions, _call_llm, _clean_json_response
 
 logger = logging.getLogger(__name__)
 
 DEDUP_MAX_RETRIES = 2
+
+
+def _collect_image_fields(blocks: list, fields: set):
+    """Recursively collect image field names from layout blocks."""
+    for block in blocks:
+        if block.get("type") == "image":
+            fields.add(block.get("field", "image_url"))
+        for child_key in ("children", "left", "right"):
+            children = block.get(child_key, [])
+            if isinstance(children, list):
+                _collect_image_fields(children, fields)
+
+
+async def _prefetch_images(content: dict, mode_def: dict) -> dict:
+    """Pre-fetch any image URLs referenced by the layout into content dict."""
+    layout = mode_def.get("layout", {})
+    body_blocks = layout.get("body", [])
+    image_fields: set = set()
+    _collect_image_fields(body_blocks, image_fields)
+
+    if not image_fields:
+        return content
+
+    async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+        for field_name in image_fields:
+            url = content.get(field_name)
+            if url and isinstance(url, str) and url.startswith("http"):
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code < 400:
+                        content[f"_prefetched_{field_name}"] = resp.content
+                except Exception:
+                    pass  # Renderer will show placeholder
+    return content
 
 
 def _get_fallback(content_cfg: dict) -> dict:
@@ -98,15 +134,25 @@ async def generate_json_mode_content(
     )
 
     if ctype == "static":
-        return dict(content_cfg.get("static_data", fallback))
+        content = dict(content_cfg.get("static_data", fallback))
+        content = await _prefetch_images(content, mode_def)
+        return content
     if ctype == "computed":
-        return await _generate_computed_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _generate_computed_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _prefetch_images(content, mode_def)
+        return content
     if ctype == "external_data":
-        return await _generate_external_data_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _generate_external_data_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _prefetch_images(content, mode_def)
+        return content
     if ctype == "image_gen":
-        return await _generate_image_gen_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _generate_image_gen_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _prefetch_images(content, mode_def)
+        return content
     if ctype == "composite":
-        return await _generate_composite_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _generate_composite_content(mode_def, content_cfg, fallback, **common_args)
+        content = await _prefetch_images(content, mode_def)
+        return content
 
     provider = llm_provider or DEFAULT_LLM_PROVIDER
     model = llm_model or DEFAULT_LLM_MODEL
@@ -169,7 +215,9 @@ async def generate_json_mode_content(
             break
         logger.info(f"[JSONContent] Dedup retry {attempt + 1} for {mode_id} (hash collision)")
 
-    return _apply_post_process(result, content_cfg)
+    result = _apply_post_process(result, content_cfg)
+    result = await _prefetch_images(result, mode_def)
+    return result
 
 
 async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback: dict, **kwargs) -> dict:

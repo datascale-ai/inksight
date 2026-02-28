@@ -13,12 +13,15 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+from .db import get_cache_db
+
 _CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "cache.db")
 
 
 async def init_cache_db():
     """Initialize the cache database."""
     async with aiosqlite.connect(_CACHE_DB_PATH) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS image_cache (
                 cache_key TEXT PRIMARY KEY,
@@ -43,6 +46,7 @@ class ContentCache:
     def __init__(self):
         self._cache: dict[str, tuple[Image.Image, datetime]] = {}
         self._lock = asyncio.Lock()
+        self._regenerating: set[str] = set()
 
     def _get_cache_key(
         self, mac: str, persona: str,
@@ -82,7 +86,7 @@ class ContentCache:
                     del self._cache[key]
             # Try SQLite persistent cache
             try:
-                img = await self._get_from_db(key)
+                img = await self._get_from_db(key, ttl_minutes=ttl_minutes)
                 if img:
                     self._cache[key] = (img, datetime.now())
                     return img.copy()
@@ -134,9 +138,28 @@ class ContentCache:
             logger.debug(f"[CACHE] All {len(modes)} modes cached for {mac}")
             return True
 
-        logger.info(f"[CACHE] Regenerating all {len(modes)} modes for {mac}...")
-        await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h)
-        return True
+        if mac not in self._regenerating:
+            self._regenerating.add(mac)
+            logger.info(f"[CACHE] Spawning background regeneration of all {len(modes)} modes for {mac}...")
+            asyncio.create_task(
+                self._regenerate_background(mac, config, modes, v, screen_w, screen_h)
+            )
+        else:
+            logger.debug(f"[CACHE] Background regeneration already in progress for {mac}")
+
+        return False
+
+    async def _regenerate_background(
+        self, mac: str, config: dict, modes: list[str], v: float,
+        screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+    ):
+        """Background task that wraps _generate_all_modes with cleanup of _regenerating."""
+        try:
+            await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h)
+        except Exception as e:
+            logger.error(f"[CACHE] Background regeneration failed for {mac}: {e}")
+        finally:
+            self._regenerating.discard(mac)
 
     async def _generate_all_modes(
         self, mac: str, config: dict, modes: list[str], v: float,
@@ -191,42 +214,47 @@ class ContentCache:
             logger.error(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
             return False
 
-    async def _get_from_db(self, key: str) -> Image.Image | None:
-        async with aiosqlite.connect(_CACHE_DB_PATH) as db:
-            cursor = await db.execute(
-                "SELECT image_data, created_at FROM image_cache WHERE cache_key = ?",
-                (key,),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                return None
-            try:
-                img = Image.open(io.BytesIO(row[0]))
-                img.load()
-                return img
-            except Exception:
-                return None
+    async def _get_from_db(self, key: str, ttl_minutes: int | None = None) -> Image.Image | None:
+        db = await get_cache_db()
+        cursor = await db.execute(
+            "SELECT image_data, created_at FROM image_cache WHERE cache_key = ?",
+            (key,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            if ttl_minutes is not None and row[1]:
+                created_at = datetime.fromisoformat(row[1])
+                if datetime.now() - created_at >= timedelta(minutes=ttl_minutes):
+                    logger.debug(f"[CACHE] DB entry {key} expired (TTL={ttl_minutes}min)")
+                    return None
+            img = Image.open(io.BytesIO(row[0]))
+            img.load()
+            return img
+        except Exception:
+            return None
 
     async def _save_to_db(self, key: str, img: Image.Image):
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         data = buf.getvalue()
-        async with aiosqlite.connect(_CACHE_DB_PATH) as db:
-            await db.execute(
-                """INSERT INTO image_cache (cache_key, image_data, created_at)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(cache_key) DO UPDATE SET image_data = ?, created_at = ?""",
-                (key, data, datetime.now().isoformat(), data, datetime.now().isoformat()),
-            )
-            await db.commit()
+        db = await get_cache_db()
+        await db.execute(
+            """INSERT INTO image_cache (cache_key, image_data, created_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(cache_key) DO UPDATE SET image_data = ?, created_at = ?""",
+            (key, data, datetime.now().isoformat(), data, datetime.now().isoformat()),
+        )
+        await db.commit()
 
     async def cleanup_expired(self, max_age_hours: int = 48):
         """Remove cache entries older than max_age_hours."""
         cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
         try:
-            async with aiosqlite.connect(_CACHE_DB_PATH) as db:
-                await db.execute("DELETE FROM image_cache WHERE created_at < ?", (cutoff,))
-                await db.commit()
+            db = await get_cache_db()
+            await db.execute("DELETE FROM image_cache WHERE created_at < ?", (cutoff,))
+            await db.commit()
         except Exception:
             pass
 

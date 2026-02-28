@@ -18,6 +18,8 @@ from tenacity import (
     before_sleep_log,
 )
 
+from .errors import LLMKeyMissingError
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -113,8 +115,11 @@ def _build_style_instructions(
     parts = []
 
     if character_tones:
-        names = "、".join(character_tones)
-        parts.append(f"请模仿「{names}」的说话风格和语气来表达")
+        # Defense in depth: strip any prompt-like patterns even if schema missed them
+        safe_tones = [t for t in character_tones if len(t) <= 20 and "\n" not in t]
+        if safe_tones:
+            names = "、".join(safe_tones)
+            parts.append(f"请模仿「{names}」的说话风格和语气来表达")
 
     lang_map = {"zh": "中文", "en": "英文", "mixed": "中英混合"}
     if language and language != "zh":
@@ -148,7 +153,7 @@ def _get_client(
     api_key = os.getenv(env_key, "")
 
     if not api_key or api_key.startswith("sk-your-"):
-        raise ValueError(
+        raise LLMKeyMissingError(
             f"Missing or invalid API key for {provider}. Please set {env_key} in .env file."
         )
 
@@ -158,6 +163,49 @@ def _get_client(
     max_tokens = model_config["max_tokens"]
 
     return AsyncOpenAI(api_key=api_key, base_url=base_url), max_tokens
+
+
+class LLMClient:
+    """Unified LLM client with retry, timeout, and logging."""
+
+    def __init__(self, provider: str = "deepseek", model: str = "deepseek-chat"):
+        self.provider = provider
+        self.model = model
+        self._client, self._max_tokens = _get_client(provider, model)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=10),
+        retry=retry_if_exception_type((
+            ConnectionError,
+            TimeoutError,
+            httpx.ConnectError,
+            httpx.ReadTimeout,
+        )),
+        before_sleep=lambda rs: logger.warning(
+            f"[LLM] Retry {rs.attempt_number}/3 after {type(rs.outcome.exception()).__name__}..."
+        ),
+        reraise=True,
+    )
+    async def call(
+        self, prompt: str, temperature: float = 0.8, max_tokens: int | None = None,
+    ) -> str:
+        """Call the LLM with retry logic. Returns response text."""
+        response = await self._client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens or self._max_tokens,
+            temperature=temperature,
+        )
+        text = response.choices[0].message.content.strip()
+        finish_reason = response.choices[0].finish_reason
+        usage = response.usage
+        logger.info(
+            f"[LLM] {self.provider}/{self.model} tokens={usage.total_tokens}, finish={finish_reason}"
+        )
+        if finish_reason == "length":
+            logger.warning("[LLM] Content truncated due to max_tokens limit")
+        return text
 
 
 @retry(
@@ -578,13 +626,18 @@ async def generate_briefing_content(
         return _fallback_content("BRIEFING")
 
     if summarize:
-        hn_stories, ph_product = await summarize_briefing_content(
+        (hn_stories, ph_product), insight = await _asyncio.gather(
+            summarize_briefing_content(
+                hn_stories, ph_product, llm_provider, llm_model
+            ),
+            generate_briefing_insight(
+                hn_stories, ph_product, llm_provider, llm_model
+            ),
+        )
+    else:
+        insight = await generate_briefing_insight(
             hn_stories, ph_product, llm_provider, llm_model
         )
-
-    insight = await generate_briefing_insight(
-        hn_stories, ph_product, llm_provider, llm_model
-    )
 
     result = {
         "hn_items": hn_stories if hn_stories else [{"title": "数据获取失败", "score": 0}],
