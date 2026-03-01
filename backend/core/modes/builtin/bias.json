@@ -47,5 +47,36 @@
       "label": "BIAS",
       "attribution_template": "— Know Thyself"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "name_cn", "font": "noto_serif_bold", "font_size": 13, "align": "center" },
+        { "type": "separator", "style": "short", "width": 50 },
+        { "type": "text", "field": "definition", "font_size": 11, "align": "center", "margin_x": 12, "max_lines": 2 },
+        { "type": "text", "field": "antidote", "font_size": 10, "align": "center", "margin_x": 12, "max_lines": 1 }
+      ],
+      "footer": { "label": "BIAS", "attribution_template": "— Know Thyself", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 14 },
+        { "type": "text", "field": "name_cn", "font": "noto_serif_bold", "font_size": 26, "align": "center" },
+        { "type": "text", "field": "name_en", "font_size": 15, "align": "center" },
+        { "type": "spacer", "height": 10 },
+        { "type": "separator", "style": "short", "width": 100 },
+        { "type": "spacer", "height": 12 },
+        { "type": "text", "field": "definition", "font_size": 20, "align": "center", "margin_x": 48, "max_lines": 3 },
+        { "type": "spacer", "height": 18 },
+        { "type": "group", "title": "日常举例", "title_font_size": 16, "margin_x": 40, "children": [
+          { "type": "text", "field": "example", "font_size": 16, "align": "left", "margin_x": 56, "max_lines": 4 }
+        ]},
+        { "type": "spacer", "height": 12 },
+        { "type": "separator", "style": "dashed", "margin_x": 60 },
+        { "type": "spacer", "height": 10 },
+        { "type": "icon_text", "icon": "tips", "text": "解药", "font_size": 16, "margin_x": 40 },
+        { "type": "text", "field": "antidote", "font_size": 16, "align": "left", "margin_x": 56, "max_lines": 3 }
+      ]
+    }
   }
 }

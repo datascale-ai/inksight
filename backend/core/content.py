@@ -140,21 +140,22 @@ def _build_style_instructions(
 
 
 def _get_client(
-    provider: str = "deepseek", model: str = "deepseek-chat"
+    provider: str = "deepseek", model: str = "deepseek-chat",
+    api_key: str | None = None,
 ) -> tuple[AsyncOpenAI, int]:
     """Get OpenAI client for specified provider and return max_tokens"""
-    api_key_map = {
-        "deepseek": "DEEPSEEK_API_KEY",
-        "aliyun": "DASHSCOPE_API_KEY",
-        "moonshot": "MOONSHOT_API_KEY",
-    }
-
-    env_key = api_key_map.get(provider, "DEEPSEEK_API_KEY")
-    api_key = os.getenv(env_key, "")
+    if not api_key:
+        api_key_map = {
+            "deepseek": "DEEPSEEK_API_KEY",
+            "aliyun": "DASHSCOPE_API_KEY",
+            "moonshot": "MOONSHOT_API_KEY",
+        }
+        env_key = api_key_map.get(provider, "DEEPSEEK_API_KEY")
+        api_key = os.getenv(env_key, "")
 
     if not api_key or api_key.startswith("sk-your-"):
         raise LLMKeyMissingError(
-            f"Missing or invalid API key for {provider}. Please set {env_key} in .env file."
+            f"Missing or invalid API key for {provider}. Please set the API key in .env file or device config."
         )
 
     config = LLM_CONFIGS.get(provider, LLM_CONFIGS["deepseek"])
@@ -168,10 +169,10 @@ def _get_client(
 class LLMClient:
     """Unified LLM client with retry, timeout, and logging."""
 
-    def __init__(self, provider: str = "deepseek", model: str = "deepseek-chat"):
+    def __init__(self, provider: str = "deepseek", model: str = "deepseek-chat", api_key: str | None = None):
         self.provider = provider
         self.model = model
-        self._client, self._max_tokens = _get_client(provider, model)
+        self._client, self._max_tokens = _get_client(provider, model, api_key=api_key)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -228,13 +229,14 @@ async def _call_llm(
     prompt: str,
     temperature: float = 0.8,
     max_tokens: int | None = None,
+    api_key: str | None = None,
 ) -> str:
     """Unified LLM call: create client, call API, return response text.
 
     Retries up to 3 times with exponential backoff for transient errors.
     Raises ValueError when the API key is missing (no retry).
     """
-    client, default_max_tokens = _get_client(provider, model)
+    client, default_max_tokens = _get_client(provider, model, api_key=api_key)
     response = await client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],

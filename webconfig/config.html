@@ -156,6 +156,20 @@ h1{font-size:1.8rem;margin-bottom:8px}
 .wiz-preset.selected{border-color:#1a1a1a;background:#f5f5f0}
 .wiz-preset strong{font-size:.85rem}
 .wiz-preset span{color:#888;font-size:.75rem}
+
+/* Habit tracking */
+.habit-row{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd)}
+.habit-row:last-child{border-bottom:none}
+.habit-name{font-size:.85rem;font-weight:600;width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.habit-dots{display:flex;gap:6px;flex:1;justify-content:center}
+.habit-dot{width:24px;height:24px;border-radius:50%;border:2px solid #333;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:.7rem;transition:all .15s}
+.habit-dot:hover{transform:scale(1.15)}
+.habit-dot.done{background:#333;color:#fff}
+.habit-del{padding:4px 8px;font-size:.72rem;border:1px solid #fecaca;border-radius:6px;cursor:pointer;background:#fff;color:var(--red)}
+.habit-del:hover{background:#fef2f2}
+.habit-header{display:flex;align-items:center;padding:0 0 8px;font-size:.72rem;color:var(--gy)}
+.habit-header .habit-name{font-weight:500}
+.habit-header .habit-dots span{width:24px;text-align:center;display:inline-block}
 </style>
 </head>
 <body>
@@ -449,6 +463,15 @@ h1{font-size:1.8rem;margin-bottom:8px}
 </div>
 
 <div class="fg">
+<label class="lbl">API Key (可选)</label>
+<div style="display:flex;gap:8px">
+<input type="password" class="inp" id="llmApiKey" placeholder="使用自己的 API Key（留空则用服务器默认）" style="flex:1" autocomplete="off">
+<button type="button" class="btn btn-outline" onclick="toggleApiKeyVisibility()" style="padding:8px 12px;font-size:.8rem">显示</button>
+</div>
+<small id="apiKeyStatus" style="color:#666;font-size:.72rem;margin-top:4px;display:block"></small>
+</div>
+
+<div class="fg">
 <label class="lbl">刷新间隔（分钟）</label>
 <input type="number" class="inp" id="interval" min="10" max="1440" placeholder="60">
 </div>
@@ -502,6 +525,16 @@ h1{font-size:1.8rem;margin-bottom:8px}
 </div>
 <div id="modeList" class="mode-list">
 <div style="color:var(--gy);font-size:.85rem;text-align:center;padding:16px">加载中...</div>
+</div>
+</div>
+
+<!-- Habit tracking -->
+<div class="card" id="habitSection" style="display:none">
+<h2 style="font-size:1.3rem;margin-bottom:16px">习惯打卡</h2>
+<div id="habitGrid"></div>
+<div style="display:flex;gap:8px;margin-top:12px">
+<input type="text" class="inp" id="newHabitName" placeholder="输入新习惯名称" style="flex:1">
+<button class="btn" onclick="addHabit()" style="padding:8px 16px;font-size:.85rem">添加</button>
 </div>
 </div>
 
@@ -858,6 +891,7 @@ async function loadConfig() {
     document.getElementById('configForm').style.display = 'block';
     document.getElementById('historyList').style.display = 'none';
     showToast('配置加载成功', 'success');
+    loadHabits();
   } catch (e) {
     showToast('加载失败: ' + e.message, 'error');
   }
@@ -995,6 +1029,17 @@ function fillForm(cfg) {
   updateModels();
   document.getElementById('llmModel').value = cfg.llm_model || 'deepseek-chat';
 
+  // API Key status
+  document.getElementById('llmApiKey').value = '';
+  const apiKeyStatus = document.getElementById('apiKeyStatus');
+  if (cfg.has_api_key) {
+    apiKeyStatus.textContent = '✓ 已配置自定义 API Key';
+    apiKeyStatus.style.color = '#2d7d46';
+  } else {
+    apiKeyStatus.textContent = '使用服务器默认 Key';
+    apiKeyStatus.style.color = '#666';
+  }
+
   // Countdown events
   fillCountdownEvents(cfg.countdownEvents ?? cfg.countdown_events ?? []);
 
@@ -1047,7 +1092,8 @@ function collectFormData() {
     refreshInterval: parseInt(document.getElementById('interval').value) || 60,
     countdownEvents: getCountdownEvents(),
     timeSlotRules: getTimeSlotRules(),
-    memoText: document.getElementById('memoText').value.trim()
+    memoText: document.getElementById('memoText').value.trim(),
+    llmApiKey: document.getElementById('llmApiKey').value.trim()
   };
 }
 
@@ -1710,6 +1756,119 @@ async function showInlinePreview(mode) {
     status.textContent = `${mode} · ${elapsed}ms · ${(blob.size/1024).toFixed(1)}KB`;
   } catch (e) {
     status.textContent = '渲染失败: ' + e.message;
+  }
+}
+
+// ── API Key visibility toggle ────────────────────────────────
+
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('llmApiKey');
+  const btn = input.parentElement.querySelector('button');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隐藏';
+  } else {
+    input.type = 'password';
+    btn.textContent = '显示';
+  }
+}
+
+// ── Habit tracking ──────────────────────────────────────────
+
+function getWeekDates() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7));
+  const dates = [];
+  const dayLabels = ['一','二','三','四','五','六','日'];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    dates.push({
+      date: d.toISOString().split('T')[0],
+      label: dayLabels[i],
+      isToday: d.toDateString() === now.toDateString()
+    });
+  }
+  return dates;
+}
+
+function renderHabitGrid(habits) {
+  const container = document.getElementById('habitGrid');
+  const week = getWeekDates();
+  if (!habits || habits.length === 0) {
+    container.innerHTML = '<div style="color:var(--gy);font-size:.85rem;text-align:center;padding:16px">暂无习惯，添加一个开始打卡吧</div>';
+    return;
+  }
+
+  let html = '<div class="habit-header"><div class="habit-name"></div><div class="habit-dots">';
+  week.forEach(d => {
+    html += `<span style="${d.isToday ? 'font-weight:700;color:var(--bk)' : ''}">${d.label}</span>`;
+  });
+  html += '</div><div style="width:52px"></div></div>';
+
+  habits.forEach(h => {
+    html += `<div class="habit-row"><div class="habit-name" title="${h.name}">${h.name}</div><div class="habit-dots">`;
+    week.forEach(d => {
+      const checked = (h.dates || []).includes(d.date);
+      html += `<div class="habit-dot${checked ? ' done' : ''}" onclick="checkHabit('${h.name}','${d.date}')" title="${d.date}">${checked ? '✓' : ''}</div>`;
+    });
+    html += `</div><button class="habit-del" onclick="deleteHabit('${h.name}')">删除</button></div>`;
+  });
+  container.innerHTML = html;
+}
+
+async function loadHabits() {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/device/${encodeURIComponent(mac)}/habit/status`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderHabitGrid(data.habits || []);
+    document.getElementById('habitSection').style.display = '';
+  } catch (e) {
+    console.error('loadHabits error:', e);
+  }
+}
+
+async function checkHabit(habitName, date) {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) return;
+  try {
+    await fetch(`${API_BASE}/api/device/${encodeURIComponent(mac)}/habit/check`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ habit: habitName, date: date })
+    });
+    await loadHabits();
+  } catch (e) {
+    showToast('打卡失败: ' + e.message, 'error');
+  }
+}
+
+async function addHabit() {
+  const input = document.getElementById('newHabitName');
+  const name = input.value.trim();
+  if (!name) { showToast('请输入习惯名称', 'error'); return; }
+  const today = new Date().toISOString().split('T')[0];
+  await checkHabit(name, today);
+  input.value = '';
+}
+
+async function deleteHabit(habitName) {
+  const mac = document.getElementById('macIn').value.trim();
+  if (!mac) return;
+  try {
+    await fetch(`${API_BASE}/api/device/${encodeURIComponent(mac)}/habit/${encodeURIComponent(habitName)}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    await loadHabits();
+    showToast(`习惯"${habitName}"已删除`, 'success');
+  } catch (e) {
+    showToast('删除失败: ' + e.message, 'error');
   }
 }
 

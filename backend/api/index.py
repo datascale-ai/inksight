@@ -75,6 +75,7 @@ from core.stats_store import (
     get_latest_render_content,
     check_habit,
     get_habit_status,
+    delete_habit,
 )
 from core.auth import validate_mac_param, require_device_token, require_admin
 
@@ -654,6 +655,8 @@ async def get_config(mac: str, x_device_token: Optional[str] = Header(default=No
     config = await get_active_config(mac)
     if not config:
         return JSONResponse({"error": "no config found"}, status_code=404)
+    # Strip encrypted key from API response (keep has_api_key flag)
+    config.pop("llm_api_key", None)
     return config
 
 
@@ -661,6 +664,9 @@ async def get_config(mac: str, x_device_token: Optional[str] = Header(default=No
 async def get_config_hist(mac: str, x_device_token: Optional[str] = Header(default=None)):
     await require_device_token(mac, x_device_token)
     history = await get_config_history(mac)
+    # Strip encrypted keys from API response
+    for cfg in history:
+        cfg.pop("llm_api_key", None)
     return {"mac": mac, "configs": history}
 
 
@@ -1056,6 +1062,16 @@ async def habit_status(mac: str, x_device_token: Optional[str] = Header(default=
     await require_device_token(mac, x_device_token)
     habits = await get_habit_status(mac)
     return {"mac": mac, "habits": habits}
+
+
+@app.delete("/api/device/{mac}/habit/{habit_name}")
+async def habit_delete(mac: str, habit_name: str, x_device_token: Optional[str] = Header(default=None)):
+    """Delete a habit and all its records."""
+    await require_device_token(mac, x_device_token)
+    deleted = await delete_habit(mac, habit_name)
+    if not deleted:
+        return JSONResponse({"error": "Habit not found"}, status_code=404)
+    return {"ok": True, "message": f"Habit '{habit_name}' deleted"}
 
 
 @app.post("/api/device/{mac}/token")

@@ -101,6 +101,7 @@ async def generate_json_mode_content(
     mac: str = "",
     screen_w: int = 400,
     screen_h: int = 300,
+    api_key: str = "",
 ) -> dict:
     """Generate content for a JSON-defined mode.
 
@@ -131,6 +132,7 @@ async def generate_json_mode_content(
         llm_model=llm_model,
         config=config or {},
         date_ctx=date_ctx or {},
+        api_key=api_key,
     )
 
     if ctype == "static":
@@ -194,7 +196,7 @@ async def generate_json_mode_content(
             prompt += dedup_hint
 
         try:
-            text = await _call_llm(provider, model, prompt, temperature=temperature)
+            text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
         except Exception as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
             return dict(fallback)

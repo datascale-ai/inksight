@@ -9,11 +9,17 @@ from core.config_store import init_db, save_config, get_active_config, get_confi
 
 
 @pytest.fixture(autouse=True)
-def use_memory_db(tmp_path):
-    """Redirect all DB operations to a temp file."""
+async def use_memory_db(tmp_path):
+    """Redirect all DB operations to an isolated temp file per test."""
+    from core import db as db_mod
+
     db_path = str(tmp_path / "test.db")
-    with patch("core.config_store.DB_PATH", db_path):
+    await db_mod.close_all()
+    with patch.object(db_mod, "_MAIN_DB_PATH", db_path), \
+         patch("core.config_store.DB_PATH", db_path), \
+         patch("core.stats_store.DB_PATH", db_path):
         yield db_path
+    await db_mod.close_all()
 
 
 class TestConfigStore:

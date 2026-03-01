@@ -70,6 +70,7 @@ class ConfigRequest(BaseModel):
         description="时段绑定规则 [{startHour, endHour, modes}]",
     )
     memoText: str = Field(default="", description="MEMO 模式下的备忘录文本")
+    llmApiKey: str = Field(default="", max_length=200, description="LLM API Key (encrypted at rest)")
     screenSize: str = Field(default="400x300", description="屏幕尺寸: 400x300 / 296x128 / 800x480")
 
     @field_validator("mac")

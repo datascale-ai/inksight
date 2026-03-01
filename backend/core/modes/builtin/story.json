@@ -42,5 +42,30 @@
       "attribution_template": "— Micro Fiction",
       "dashed": true
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 12, "align": "center" },
+        { "type": "separator", "style": "short", "width": 30 },
+        { "type": "text", "field": "opening", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2 },
+        { "type": "text", "field": "twist", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2 }
+      ],
+      "footer": { "label": "STORY", "dashed": true, "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "genre", "font_size": 13, "align": "center" },
+        { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 24, "align": "center" },
+        { "type": "separator", "style": "short", "width": 70 },
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "opening", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 4 },
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "twist", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 4 },
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "ending", "font": "noto_serif_light", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 4 }
+      ]
+    }
   }
 }

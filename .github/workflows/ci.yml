@@ -10,6 +10,7 @@ jobs:
   backend-test:
     name: Backend Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       matrix:
         python-version: ["3.9", "3.10"]
@@ -67,8 +68,11 @@ jobs:
         working-directory: webapp
 
   firmware-build:
-    name: Firmware Build Check
+    name: Firmware Build (${{ matrix.env }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [epd_42, epd_29, epd_75]
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +94,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build firmware
-        run: pio run
+      - name: Build firmware (${{ matrix.env }})
+        run: pio run -e ${{ matrix.env }}
         working-directory: firmware
+

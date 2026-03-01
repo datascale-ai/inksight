@@ -40,5 +40,32 @@
       "attribution_template": "— InkSight AI",
       "line_width": 2
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "NotoSerifSC-Bold.ttf",
+          "font_size": 13,
+          "max_width_ratio": 0.92,
+          "vertical_center": true
+        }
+      ],
+      "footer": { "label": "ROAST", "attribution_template": "— InkSight AI", "height": 18, "line_width": 2 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "NotoSerifSC-Bold.ttf",
+          "font_size": 26,
+          "max_width_ratio": 0.82,
+          "vertical_center": true
+        }
+      ]
+    }
   }
 }

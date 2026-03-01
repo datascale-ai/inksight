@@ -43,5 +43,33 @@
       "label": "THIS DAY",
       "attribution_template": "— History"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "years_ago", "font_size": 9, "align": "center" },
+        { "type": "big_number", "field": "year", "font_size": 26, "align": "center" },
+        { "type": "separator", "style": "short", "width": 40 },
+        { "type": "text", "field": "event_title", "font": "noto_serif_bold", "font_size": 12, "align": "center" },
+        { "type": "text", "field": "event_desc", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2 }
+      ],
+      "footer": { "label": "THIS DAY", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 14 },
+        { "type": "text", "field": "years_ago", "font_size": 16, "align": "center" },
+        { "type": "big_number", "field": "year", "font_size": 60, "align": "center" },
+        { "type": "separator", "style": "short", "width": 100 },
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "event_title", "font": "noto_serif_bold", "font_size": 24, "align": "center" },
+        { "type": "spacer", "height": 14 },
+        { "type": "text", "field": "event_desc", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 5 },
+        { "type": "spacer", "height": 16 },
+        { "type": "separator", "style": "dashed", "margin_x": 60 },
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "significance", "font": "noto_serif_light", "font_size": 16, "align": "center", "max_lines": 3 }
+      ]
+    }
   }
 }

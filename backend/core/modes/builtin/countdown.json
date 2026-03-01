@@ -100,5 +100,66 @@
       "label": "COUNTDOWN",
       "attribution_template": "— Remember"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "list",
+          "field": "events",
+          "max_items": 1,
+          "item_template": "{name}",
+          "font_size": 12,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 40
+        },
+        {
+          "type": "list",
+          "field": "events",
+          "max_items": 1,
+          "item_template": "{days} 天",
+          "font_size": 36,
+          "align": "center"
+        }
+      ],
+      "footer": { "label": "COUNTDOWN", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "list",
+          "field": "events",
+          "max_items": 1,
+          "item_template": "{name}",
+          "font_size": 24,
+          "align": "center"
+        },
+        {
+          "type": "list",
+          "field": "events",
+          "max_items": 1,
+          "item_template": "{date}",
+          "font_size": 16,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 100
+        },
+        {
+          "type": "list",
+          "field": "events",
+          "max_items": 1,
+          "item_template": "{days} 天",
+          "font_size": 80,
+          "align": "center"
+        }
+      ]
+    }
   }
 }

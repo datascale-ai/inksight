@@ -27,5 +27,32 @@
       }
     ],
     "footer": {"label": "HABIT"}
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "summary",
+          "font": "noto_serif_regular",
+          "font_size": 12,
+          "max_width_ratio": 0.92,
+          "vertical_center": true
+        }
+      ],
+      "footer": { "label": "HABIT", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "summary",
+          "font": "noto_serif_regular",
+          "font_size": 24,
+          "max_width_ratio": 0.8,
+          "vertical_center": true
+        }
+      ]
+    }
   }
 }

@@ -14,6 +14,7 @@ slowapi~=0.1.9
 zhdate~=0.1
 qrcode~=7.4
 dashscope~=1.14.0
+cryptography~=41.0.0
 
 # Dev / Test
 pytest>=7.0

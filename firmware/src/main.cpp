@@ -11,6 +11,7 @@
 #include "network.h"
 #include "storage.h"
 #include "portal.h"
+#include "offline_cache.h"
 
 // ── Shared framebuffer (referenced by other modules via extern) ──
 uint8_t imgBuf[IMG_BUF_LEN];
@@ -46,6 +47,15 @@ struct DeviceContext {
 };
 
 static DeviceContext ctx;
+
+// Content dedup — skip display refresh when content unchanged
+static uint32_t lastContentChecksum = 0;
+
+static uint32_t computeChecksum(const uint8_t *buf, int len) {
+    uint32_t sum = 0;
+    for (int i = 0; i < len; i++) sum += buf[i];
+    return sum;
+}
 
 // ── Forward declarations ────────────────────────────────────
 static void checkConfigButton();
@@ -105,6 +115,7 @@ void setup() {
     gpioInit();
     ledInit();
     epdInit();
+    cacheInit();
     Serial.println("EPD ready");
 
     loadConfig();
@@ -165,6 +176,8 @@ void setup() {
 
     Serial.println("Displaying image...");
     smartDisplay(imgBuf);
+    cacheSave(imgBuf, IMG_BUF_LEN);
+    lastContentChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
     ledFeedback("success");
     Serial.println("Display done");
 
@@ -257,6 +270,26 @@ static void enterDeepSleep(int minutes) {
 // ── Failure handler with retry logic ────────────────────────
 
 static void handleFailure(const char *reason) {
+    // Try offline cache first
+    if (cacheLoad(imgBuf, IMG_BUF_LEN)) {
+        Serial.println("Showing cached content (offline mode)");
+        // Draw "OFFLINE" marker in top-left corner
+        drawText("OFFLINE", TIME_RGN_X0, TIME_RGN_Y0, 1);
+        smartDisplay(imgBuf);
+        ledFeedback("success");
+
+        syncNTP();
+        updateTimeDisplay();
+        ctx.lastClockTick = millis();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        ctx.state = DeviceState::DISPLAYING;
+        ctx.setupDoneAt = millis();
+        resetRetryCount();
+        return;
+    }
+
+    // No cache — original retry logic
     int retryCount = getRetryCount();
 
     if (retryCount < MAX_RETRY_COUNT) {
@@ -297,10 +330,20 @@ static void triggerImmediateRefresh(bool nextMode) {
     if (connectWiFi()) {
         ledFeedback("downloading");
         if (fetchBMP(nextMode)) {
-            Serial.println("Displaying new content...");
-            smartDisplay(imgBuf);
-            ledFeedback("success");
-            Serial.println("Display done");
+            cacheSave(imgBuf, IMG_BUF_LEN);
+
+            uint32_t newChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
+            if (newChecksum == lastContentChecksum && !nextMode) {
+                Serial.println("Content unchanged, skipping display refresh");
+                ledFeedback("success");
+            } else {
+                Serial.println("Displaying new content...");
+                smartDisplay(imgBuf);
+                lastContentChecksum = newChecksum;
+                ledFeedback("success");
+                Serial.println("Display done");
+            }
+
             syncNTP();
             updateTimeDisplay();
             ctx.lastClockTick = millis();
