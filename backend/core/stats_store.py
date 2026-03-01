@@ -473,3 +473,14 @@ async def get_habit_status(mac: str) -> list[dict]:
             "status": "✓" if today_done else "○",
         })
     return results
+
+
+async def delete_habit(mac: str, habit_name: str) -> bool:
+    """Delete all records for a specific habit."""
+    db = await get_main_db()
+    cursor = await db.execute(
+        "DELETE FROM habit_records WHERE mac = ? AND habit_name = ?",
+        (mac, habit_name),
+    )
+    await db.commit()
+    return cursor.rowcount > 0

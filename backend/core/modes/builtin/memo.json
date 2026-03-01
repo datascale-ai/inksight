@@ -29,5 +29,32 @@
       }
     ],
     "footer": {"label": "MEMO"}
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "memo_text",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 13,
+          "vertical_center": true,
+          "max_width_ratio": 0.92
+        }
+      ],
+      "footer": { "label": "MEMO", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "memo_text",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 26,
+          "vertical_center": true,
+          "max_width_ratio": 0.82
+        }
+      ]
+    }
   }
 }

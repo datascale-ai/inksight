@@ -47,5 +47,45 @@
       "label": "CHALLENGE",
       "attribution_template": "— Just Do It"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "template": "{difficulty}  ·  {time}", "font_size": 9, "align": "center" },
+        { "type": "separator", "style": "short", "width": 40 },
+        {
+          "type": "centered_text",
+          "field": "challenge",
+          "font": "noto_serif_bold",
+          "font_size": 13,
+          "max_width_ratio": 0.92,
+          "vertical_center": true,
+          "line_spacing": 6
+        }
+      ],
+      "footer": { "label": "CHALLENGE", "attribution_template": "— Just Do It", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 14 },
+        { "type": "text", "template": "今日微挑战", "font": "noto_serif_bold", "font_size": 20, "align": "center" },
+        { "type": "text", "template": "{difficulty}  ·  {time}", "font_size": 15, "align": "center" },
+        { "type": "spacer", "height": 12 },
+        { "type": "separator", "style": "short", "width": 90 },
+        {
+          "type": "centered_text",
+          "field": "challenge",
+          "font": "noto_serif_bold",
+          "font_size": 26,
+          "max_width_ratio": 0.72,
+          "vertical_center": false,
+          "line_spacing": 14
+        },
+        { "type": "spacer", "height": 24 },
+        { "type": "separator", "style": "dashed", "margin_x": 80 },
+        { "type": "spacer", "height": 10 },
+        { "type": "text", "field": "why", "font": "noto_serif_light", "font_size": 16, "align": "center", "max_lines": 3 }
+      ]
+    }
   }
 }

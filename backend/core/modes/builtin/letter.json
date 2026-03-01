@@ -40,5 +40,27 @@
       "attribution_template": "— {sender}",
       "dashed": true
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "greeting", "font": "noto_serif_light", "font_size": 10, "align": "left", "margin_x": 8 },
+        { "type": "text", "field": "body", "font": "noto_serif_regular", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 3 },
+        { "type": "text", "field": "closing", "font": "noto_serif_light", "font_size": 10, "align": "right", "margin_x": 8 }
+      ],
+      "footer": { "label": "LETTER", "attribution_template": "— {sender}", "dashed": true, "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 18 },
+        { "type": "text", "field": "greeting", "font": "noto_serif_light", "font_size": 18, "align": "left", "margin_x": 56 },
+        { "type": "spacer", "height": 14 },
+        { "type": "text", "field": "body", "font": "noto_serif_regular", "font_size": 19, "align": "left", "margin_x": 56, "max_lines": 8 },
+        { "type": "spacer", "height": 16 },
+        { "type": "text", "field": "closing", "font": "noto_serif_light", "font_size": 18, "align": "right", "margin_x": 56 },
+        { "type": "separator", "style": "short", "width": 60 },
+        { "type": "text", "field": "postscript", "font": "noto_serif_light", "font_size": 14, "align": "left", "margin_x": 56, "max_lines": 2 }
+      ]
+    }
   }
 }

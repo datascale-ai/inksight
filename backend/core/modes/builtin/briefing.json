@@ -107,5 +107,80 @@
       "label": "BRIEFING",
       "attribution_template": "— AI Brief"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "list",
+          "field": "hn_items",
+          "max_items": 2,
+          "item_template": "{title}",
+          "font_size": 10,
+          "item_spacing": 14,
+          "margin_x": 8
+        },
+        { "type": "separator", "style": "short", "width": 60 },
+        { "type": "text", "field": "insight", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2 }
+      ],
+      "footer": { "label": "BRIEFING", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "section",
+          "title": "HN Top",
+          "icon": "global",
+          "title_font_size": 18,
+          "children": [
+            {
+              "type": "list",
+              "field": "hn_items",
+              "max_items": 2,
+              "item_template": "{title}",
+              "right_field": "score",
+              "font_size": 16,
+              "item_spacing": 24,
+              "margin_x": 56
+            }
+          ]
+        },
+        { "type": "separator", "style": "short", "width": 120 },
+        {
+          "type": "section",
+          "title": "PH #1",
+          "icon": "star",
+          "title_font_size": 18,
+          "children": [
+            {
+              "type": "text",
+              "template": "{ph_name}",
+              "font_size": 18,
+              "align": "left",
+              "margin_x": 56,
+              "max_lines": 1
+            },
+            {
+              "type": "text",
+              "template": "{ph_tagline}",
+              "font_size": 15,
+              "align": "left",
+              "margin_x": 56,
+              "max_lines": 2
+            }
+          ]
+        },
+        { "type": "separator", "style": "dashed", "margin_x": 48 },
+        { "type": "spacer", "height": 8 },
+        {
+          "type": "text",
+          "field": "insight",
+          "font_size": 16,
+          "align": "left",
+          "margin_x": 40,
+          "max_lines": 4
+        }
+      ]
+    }
   }
 }

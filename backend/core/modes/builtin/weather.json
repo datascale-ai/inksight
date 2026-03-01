@@ -50,5 +50,26 @@
       {"type": "text", "field": "advice", "font_size": 12, "align": "center", "max_lines": 2}
     ],
     "footer": {"label": "WEATHER"}
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "big_number", "field": "today_temp", "font_size": 28, "align": "center" },
+        { "type": "text", "field": "today_desc", "font_size": 10, "align": "center" },
+        { "type": "separator", "style": "short", "width": 50 },
+        { "type": "text", "field": "advice", "font_size": 10, "align": "center", "max_lines": 1 }
+      ],
+      "footer": { "label": "WEATHER", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "big_number", "field": "today_temp", "font_size": 64, "align": "center" },
+        { "type": "text", "field": "today_desc", "font_size": 20, "align": "center" },
+        { "type": "separator", "style": "dashed" },
+        { "type": "list", "field": "forecast", "max_items": 3, "item_template": "{day}: {temp_range} {desc}", "font_size": 18 },
+        { "type": "separator", "style": "short", "width": 120 },
+        { "type": "text", "field": "advice", "font_size": 18, "align": "center", "max_lines": 3 }
+      ]
+    }
   }
 }

@@ -43,5 +43,32 @@
       "label": "STOIC",
       "attribution_template": "— {author}"
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 14,
+          "max_width_ratio": 0.92,
+          "vertical_center": true
+        }
+      ],
+      "footer": { "label": "STOIC", "attribution_template": "— {author}", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 28,
+          "max_width_ratio": 0.82,
+          "vertical_center": true
+        }
+      ]
+    }
   }
 }

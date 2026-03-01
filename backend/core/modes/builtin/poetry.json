@@ -160,5 +160,49 @@
       "attribution_template": "— {author}",
       "dashed": true
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 11, "align": "center" },
+        { "type": "separator", "style": "short", "width": 40, "line_width": 1 },
+        {
+          "type": "list",
+          "field": "lines",
+          "max_items": 4,
+          "item_template": "{_value}",
+          "font": "noto_serif_regular",
+          "font_size": 11,
+          "item_spacing": 14,
+          "margin_x": 8,
+          "align": "center"
+        }
+      ],
+      "footer": { "label": "POETRY", "attribution_template": "— {author}", "dashed": true, "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 22 },
+        { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 22, "align": "center" },
+        { "type": "spacer", "height": 8 },
+        { "type": "text", "field": "author", "font": "noto_serif_light", "font_size": 16, "align": "center" },
+        { "type": "spacer", "height": 10 },
+        { "type": "separator", "style": "short", "width": 90, "line_width": 1 },
+        { "type": "spacer", "height": 14 },
+        {
+          "type": "list",
+          "field": "lines",
+          "max_items": 8,
+          "item_template": "{_value}",
+          "font": "noto_serif_regular",
+          "font_size": 24,
+          "item_spacing": 32,
+          "margin_x": 50,
+          "align": "center"
+        },
+        { "type": "spacer", "height": 12 },
+        { "type": "text", "field": "note", "font": "noto_serif_light", "font_size": 14, "align": "center", "max_lines": 2 }
+      ]
+    }
   }
 }

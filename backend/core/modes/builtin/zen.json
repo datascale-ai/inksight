@@ -55,5 +55,44 @@
       "attribution_template": "— ...",
       "dashed": true
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "word",
+          "font": "noto_serif_regular",
+          "font_size": 56,
+          "max_width_ratio": 0.7,
+          "vertical_center": true
+        }
+      ],
+      "footer": { "label": "ZEN", "attribution_template": "— ...", "dashed": true, "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "word",
+          "font": "noto_serif_regular",
+          "font_size": 140,
+          "max_width_ratio": 0.7,
+          "vertical_center": true
+        },
+        {
+          "type": "spacer",
+          "height": 14
+        },
+        {
+          "type": "text",
+          "field": "source",
+          "font": "noto_serif_light",
+          "font_size": 14,
+          "align": "center",
+          "max_lines": 1
+        }
+      ]
+    }
   }
 }

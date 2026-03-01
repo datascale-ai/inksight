@@ -71,6 +71,14 @@ async def _generate_content_for_persona(
 
     registry = get_registry()
     date_str = date_ctx["date_str"]
+
+    # Decrypt device API key if available
+    device_api_key = ""
+    encrypted_key = cfg.get("llm_api_key", "")
+    if encrypted_key:
+        from .crypto import decrypt_api_key
+        device_api_key = decrypt_api_key(encrypted_key)
+
     ctx = ContentContext(
         config=cfg,
         date_ctx=date_ctx,
@@ -109,6 +117,7 @@ async def _generate_content_for_persona(
             mac=mac,
             screen_w=screen_w,
             screen_h=screen_h,
+            api_key=device_api_key,
         )
 
     # Builtin Python mode - use specialized content functions

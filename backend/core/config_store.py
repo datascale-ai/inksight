@@ -42,6 +42,7 @@ async def init_db():
                 llm_provider TEXT DEFAULT 'deepseek',
                 llm_model TEXT DEFAULT 'deepseek-chat',
                 countdown_events TEXT DEFAULT '[]',
+                llm_api_key TEXT DEFAULT '',
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL
             )
@@ -63,6 +64,13 @@ async def init_db():
         # Migration: add memo_text column if missing
         try:
             await db.execute("ALTER TABLE configs ADD COLUMN memo_text TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass  # Column already exists
+
+        # Migration: add llm_api_key column if missing
+        try:
+            await db.execute("ALTER TABLE configs ADD COLUMN llm_api_key TEXT DEFAULT ''")
             await db.commit()
         except Exception:
             pass  # Column already exists
@@ -118,12 +126,18 @@ async def save_config(mac: str, data: dict) -> int:
         data.get("timeSlotRules", []), ensure_ascii=False
     )
     memo_text = data.get("memoText", "")
+    # Encrypt API key if provided
+    from .crypto import encrypt_api_key
+    llm_api_key = ""
+    raw_key = data.get("llmApiKey", "")
+    if raw_key:
+        llm_api_key = encrypt_api_key(raw_key)
     cursor = await db.execute(
         """INSERT INTO configs
            (mac, nickname, modes, refresh_strategy, character_tones,
             language, content_tone, city, refresh_interval, llm_provider, llm_model,
-            countdown_events, time_slot_rules, memo_text, is_active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+            countdown_events, time_slot_rules, memo_text, llm_api_key, is_active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
         (
             mac,
             data.get("nickname", ""),
@@ -139,6 +153,7 @@ async def save_config(mac: str, data: dict) -> int:
             countdown_events_json,
             time_slot_rules_json,
             memo_text,
+            llm_api_key,
             now,
         ),
     )
@@ -189,6 +204,8 @@ def _row_to_dict(row, columns) -> dict:
     if "mac" not in d:
         d["mac"] = d.get("mac", "default")
     d["memo_text"] = d.get("memo_text", "")
+    # Keep encrypted key for internal use, add flag for API response
+    d["has_api_key"] = bool(d.get("llm_api_key", ""))
     return d
 
 

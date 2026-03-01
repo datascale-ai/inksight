@@ -40,5 +40,37 @@
       "attribution_template": "— Take a Moment",
       "dashed": true
     }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "question",
+          "font": "noto_serif_bold",
+          "font_size": 14,
+          "max_width_ratio": 0.92,
+          "vertical_center": true,
+          "line_spacing": 8
+        }
+      ],
+      "footer": { "label": "?", "attribution_template": "— Take a Moment", "dashed": true, "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        { "type": "spacer", "height": 16 },
+        { "type": "text", "field": "category", "font_size": 14, "align": "center" },
+        {
+          "type": "centered_text",
+          "field": "question",
+          "font": "noto_serif_bold",
+          "font_size": 28,
+          "max_width_ratio": 0.72,
+          "vertical_center": true,
+          "line_spacing": 16
+        },
+        { "type": "text", "field": "context_note", "font": "noto_serif_light", "font_size": 14, "align": "center", "max_lines": 2 }
+      ]
+    }
   }
 }
