@@ -73,6 +73,13 @@ def _disable_dedup():
         yield
 
 
+async def provision_device_headers(client: AsyncClient, mac: str) -> dict[str, str]:
+    resp = await client.post(f"/api/device/{mac}/token")
+    assert resp.status_code == 200
+    token = resp.json()["token"]
+    return {"X-Device-Token": token}
+
+
 # ---------------------------------------------------------------------------
 # Render endpoint tests
 # ---------------------------------------------------------------------------
@@ -81,6 +88,7 @@ def _disable_dedup():
 @pytest.mark.asyncio
 async def test_render_returns_bmp(client):
     """Test that /api/render returns a valid BMP image."""
+    headers = await provision_device_headers(client, "AA:BB:CC:DD:EE:FF")
     with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
         resp = await client.get("/api/render", params={
             "mac": "AA:BB:CC:DD:EE:FF",
@@ -88,7 +96,7 @@ async def test_render_returns_bmp(client):
             "v": "3.85",
             "w": "400",
             "h": "300",
-        })
+        }, headers=headers)
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/bmp"
         # BMP magic bytes
@@ -99,6 +107,7 @@ async def test_render_returns_bmp(client):
 @pytest.mark.parametrize("w,h", [("296", "128"), ("400", "300"), ("800", "480")])
 async def test_render_multi_resolution(client, w, h):
     """Test rendering works for all supported resolutions."""
+    headers = await provision_device_headers(client, "AA:BB:CC:DD:EE:FF")
     with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
         resp = await client.get("/api/render", params={
             "mac": "AA:BB:CC:DD:EE:FF",
@@ -106,7 +115,7 @@ async def test_render_multi_resolution(client, w, h):
             "v": "3.85",
             "w": w,
             "h": h,
-        })
+        }, headers=headers)
         assert resp.status_code == 200
         assert resp.content[:2] == b"BM"
 
@@ -119,6 +128,7 @@ async def test_render_multi_resolution(client, w, h):
 @pytest.mark.asyncio
 async def test_config_save_and_load(client):
     """Test saving and loading device configuration."""
+    headers = await provision_device_headers(client, "AA:BB:CC:DD:EE:FF")
     config_data = {
         "mac": "AA:BB:CC:DD:EE:FF",
         "modes": ["STOIC", "ZEN"],
@@ -126,12 +136,12 @@ async def test_config_save_and_load(client):
         "llmProvider": "deepseek",
         "llmModel": "deepseek-chat",
     }
-    resp = await client.post("/api/config", json=config_data)
+    resp = await client.post("/api/config", json=config_data, headers=headers)
     assert resp.status_code == 200
     body = resp.json()
     assert body["ok"] is True
 
-    resp = await client.get("/api/config/AA:BB:CC:DD:EE:FF")
+    resp = await client.get("/api/config/AA:BB:CC:DD:EE:FF", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert "STOIC" in data["modes"]
@@ -147,26 +157,27 @@ async def test_config_save_and_load(client):
 async def test_habit_workflow(client):
     """Test habit create -> check -> status -> delete lifecycle."""
     mac = "AA:BB:CC:DD:EE:FF"
+    headers = await provision_device_headers(client, mac)
 
     # Check habit (creates it)
     resp = await client.post(f"/api/device/{mac}/habit/check", json={
         "habit": "Exercise",
         "date": "2026-02-28",
-    })
+    }, headers=headers)
     assert resp.status_code == 200
 
     # Get status
-    resp = await client.get(f"/api/device/{mac}/habit/status")
+    resp = await client.get(f"/api/device/{mac}/habit/status", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert any(h["name"] == "Exercise" for h in data["habits"])
 
     # Delete habit
-    resp = await client.delete(f"/api/device/{mac}/habit/Exercise")
+    resp = await client.delete(f"/api/device/{mac}/habit/Exercise", headers=headers)
     assert resp.status_code == 200
 
     # Verify deleted
-    resp = await client.get(f"/api/device/{mac}/habit/status")
+    resp = await client.get(f"/api/device/{mac}/habit/status", headers=headers)
     data = resp.json()
     assert not any(h["name"] == "Exercise" for h in data["habits"])
 
@@ -180,6 +191,7 @@ async def test_habit_workflow(client):
 async def test_cache_hit(client):
     """Test that second render hits cache (returns BMP without calling LLM again)."""
     mock_llm = AsyncMock(return_value=MOCK_LLM_RESPONSE)
+    headers = await provision_device_headers(client, "BB:CC:DD:EE:FF:00")
 
     # First, save a config so the cache path is activated
     config_data = {
@@ -189,7 +201,7 @@ async def test_cache_hit(client):
         "llmProvider": "deepseek",
         "llmModel": "deepseek-chat",
     }
-    await client.post("/api/config", json=config_data)
+    await client.post("/api/config", json=config_data, headers=headers)
 
     with patch("core.json_content._call_llm", mock_llm):
         # First render - should call LLM
@@ -199,7 +211,7 @@ async def test_cache_hit(client):
             "v": "3.85",
             "w": "400",
             "h": "300",
-        })
+        }, headers=headers)
         assert resp1.status_code == 200
         assert resp1.content[:2] == b"BM"
         first_call_count = mock_llm.call_count
@@ -211,7 +223,7 @@ async def test_cache_hit(client):
             "v": "3.85",
             "w": "400",
             "h": "300",
-        })
+        }, headers=headers)
         assert resp2.status_code == 200
         assert resp2.content[:2] == b"BM"
         # LLM should NOT have been called again for the second render

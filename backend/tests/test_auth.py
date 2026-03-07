@@ -60,8 +60,8 @@ class TestRequireAdmin:
 
 class TestRequireDeviceToken:
     @pytest.mark.asyncio
-    async def test_no_token_stored_allows_access(self, monkeypatch):
-        """新设备无 Token 时应放行（宽限期）。"""
+    async def test_no_token_stored_rejects_access(self, monkeypatch):
+        """新设备无 Token 时应拒绝访问。"""
         from core import auth as _auth_mod
         async def _fake_validate(mac, token):
             return False
@@ -70,8 +70,10 @@ class TestRequireDeviceToken:
         monkeypatch.setattr(_auth_mod, "validate_device_token", _fake_validate)
         monkeypatch.setattr(_auth_mod, "get_device_state", _fake_get_state)
 
-        result = await require_device_token(mac="AA:BB:CC:DD:EE:FF", x_device_token=None)
-        assert result is True
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            await require_device_token(mac="AA:BB:CC:DD:EE:FF", x_device_token=None)
+        assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_valid_token(self, monkeypatch):
