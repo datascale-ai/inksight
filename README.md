@@ -1,15 +1,15 @@
 English | [中文](README_ZH.md)
 
-# InkSight | 墨见
+# InkSight | inco (墨鱼)
 
-> An LLM-powered smart e-ink desktop companion that delivers calm, meaningful "slow information" — your personal ink-on-paper intelligence. A minimalist smart e-ink desktop companion that generates warm, thoughtful content through LLM — your multi-scenario AI companion on the desk.
+> An LLM-powered smart e-ink desktop companion that delivers calm, meaningful "slow information" on your desk.
 
 Official Website: [https://www.inksight.site](https://www.inksight.site)
 
 ![Version](https://img.shields.io/badge/version-v0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-orange)
-![Python](https://img.shields.io/badge/python-3.9+-blue)
+![Python](https://img.shields.io/badge/python-3.10+-blue)
 
 ![inco](images/intro.jpg)
 
@@ -17,18 +17,18 @@ Official Website: [https://www.inksight.site](https://www.inksight.site)
 
 ## Overview
 
-**inco** (墨见) is a minimalist smart e-ink desktop companion that generates warm, thoughtful "slow information" through LLM. It uses a backend LLM to generate personalized content based on real-time context — weather, time of day, date, and solar terms — and renders it on a 4.2-inch e-ink screen. With dozens of content modes ranging from daily recommendations to AI briefings, it brings a thoughtful, intelligent companion to your desk.
+**inco** (墨鱼) is a minimalist smart e-ink desktop companion that generates warm, thoughtful "slow information" through LLM. It uses a backend LLM to generate personalized content based on real-time context — weather, time of day, date, and solar terms — and renders it on a 4.2-inch e-ink screen. With dozens of content modes ranging from daily recommendations to AI briefings, it brings a thoughtful, intelligent companion to your desk.
 
-The backend is built on the OpenAI-compatible SDK, so it works out of the box with **DeepSeek**, **Alibaba Bailian (Qwen)**, and **Moonshot (Kimi)**. Any OpenAI-compatible API provider (OpenAI, Groq, Together AI, etc.) can be used with minimal configuration. Modes are extensible via a JSON config-driven system — create your own content modes without writing Python.
+The backend is built on the OpenAI-compatible SDK, so it works out of the box with **DeepSeek**, **Alibaba Bailian (Qwen)**, and **Moonshot (Kimi)**. Modes are extensible via a JSON config-driven system — create your own content modes without writing Python.
 
 **Key Features:**
 
-- **6 Core Modes + 16 Extended Modes + Custom Modes** — Core: Daily, Weather, Poetry, ArtWall, Almanac, Briefing; Extended: Stoic, Zen, Recipe, Countdown, Memo, Habit, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge, Roast, Fitness; plus custom JSON modes
+- **22 Built-in Modes + Custom Modes** — Core: Daily, Weather, Poetry, ArtWall, Almanac, Briefing; Extended: Stoic, Zen, Recipe, Countdown, Memo, Habit, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge, Roast, Fitness; plus custom JSON modes
 - **Extensible Mode System** — Define new modes via JSON config (prompt, layout, style) without writing code
 - **AI Mode Generator** — Generate custom modes from natural language descriptions using LLM — "more content, defined by you"
 - **Built-in Mode Editor** — Create/edit custom JSON modes with templates and preview in web config
 - **4 Refresh Strategies** — Random, Sequential, Time-Bound, Smart
-- **On-Demand Refresh** — Single press for instant refresh, double press to switch mode, or trigger remotely via web
+- **Active/Interval Runtime Modes** — Single press BOOT toggles runtime mode; trigger refresh, mode switch, or preview push remotely via web/API
 - **User Authentication** — User registration, login, and device binding system
 - **Device Token Security** — Token-based authentication for device API access
 - **Habit Tracker** — Daily habit tracking with check-in and status monitoring
@@ -40,9 +40,9 @@ The backend is built on the OpenAI-compatible SDK, so it works out of the box wi
 - **WiFi Provisioning** — Captive Portal auto-popup for zero-friction setup
 - **Web Configuration** — Full settings management with import/export, live preview, and config history
 - **Smart Caching** — Batch pre-generated content with sub-second response times
-- **Multi-LLM Support** — DeepSeek, Alibaba Bailian (Qwen), Moonshot (Kimi), and any OpenAI-compatible API
+- **Multi-LLM Support** — DeepSeek, Alibaba Bailian (Qwen), Moonshot (Kimi)
 - **Ultra-Low Power** — Deep Sleep mode, 6 months battery life on a single charge with LiFePO4 battery
-- **Affordable Hardware** — Total BOM cost under ¥200, open-source hardware that everyone can build
+- **Affordable Hardware** — Total BOM cost around ¥220, open-source hardware that everyone can build
 
 ---
 
@@ -88,11 +88,30 @@ Create your own content modes in two ways:
 |-------|------------|
 | Hardware | ESP32-C3 (RISC-V, WiFi, ultra-low power) + 4.2" E-Paper (400x300, 1-bit, paper-like texture, non-glowing) + LiFePO4 battery |
 | Firmware | PlatformIO / Arduino, GxEPD2, WiFiManager |
-| Backend | Python 3.9+ FastAPI, Pillow, OpenAI SDK, httpx, SQLite, PyJWT, qrcode, dashscope |
+| Backend | Python 3.10+ FastAPI, Pillow, OpenAI SDK, httpx, SQLite, PyJWT, qrcode, dashscope |
 | Frontend | Static HTML pages (`webconfig/`) + Next.js 16.1.6 web app (`webapp/`, website + flasher) |
 | Authentication | JWT-based user sessions + Device Token authentication |
 
 For detailed architecture design, see the [Architecture Documentation](docs/architecture.md) (Chinese).
+
+---
+
+## What You Need
+
+### Hardware Checklist
+
+- ESP32-C3 dev board (SuperMini recommended)
+- 4.2" e-ink display (SPI, 400x300)
+- Dupont wires / soldering tools (depending on your assembly method)
+- Power option: USB power, or LiFePO4 battery + TP5000 charging module (optional)
+
+### Setup Device Checklist
+
+- A computer (Windows/macOS/Linux, Chrome/Edge recommended)
+- A USB cable with data transfer support (for flashing)
+- A 2.4GHz WiFi network (for weather + LLM content updates)
+- LLM API key(s) when using self-hosted backend
+- Optional: a smartphone, only if you want to use captive portal from mobile
 
 ---
 
@@ -127,13 +146,20 @@ cp .env.example .env
 python -m uvicorn api.index:app --host 0.0.0.0 --port 8080
 ```
 
-Once running, visit:
+You can use either of the following paths:
+
+- **Public hosted usage (recommended for beginners)**: use the public site directly for flashing and configuration.
+- **Local self-hosted usage**: run backend (`http://127.0.0.1:8080`) + webapp (`http://localhost:3000`) locally for configuration and development.
+
+Pick one path for a given runtime setup. In normal usage, you don't need to use both public and local targets at the same time.
+
+Entry points:
 
 | Entry | URL | Description |
 |------|-----|-------------|
-| Live Demo / Official Website | `https://www.inksight.site` | Public website (homepage, docs, online flasher) |
+| Live Demo / Official Website | `https://www.inksight.site` | Public hosted site (easy start for beginners) |
 
-| Page | URL | Description |
+| Local Backend Page | URL | Description |
 |------|-----|-------------|
 | Preview Console | `http://localhost:8080` | Test rendering for each mode |
 | Config Manager | `http://localhost:8080/config` | Manage device configuration |
@@ -157,10 +183,12 @@ Install Node.js in advance
 
 Default URL: `http://localhost:3000`
 
-Environment variables:
+Environment variables (follow the path you choose):
 
-- `INKSIGHT_BACKEND_API_BASE` (server-side proxy target, default `http://127.0.0.1:8080`)
-- `NEXT_PUBLIC_FIRMWARE_API_BASE` (optional browser-side API base; if omitted, use same-origin `/api/firmware/*`)
+- `INKSIGHT_BACKEND_API_BASE` (backend target: local self-host usually `http://127.0.0.1:8080`; public deployment uses your backend domain)
+- `NEXT_PUBLIC_FIRMWARE_API_BASE` (optional browser-side API base; if set, keep it the same backend target as above)
+
+`/config` in `webapp` includes user login + device binding workflow.
 
 ### 3. Firmware Flashing
 
@@ -186,27 +214,29 @@ pio device monitor
 
 Alternatively, open `firmware/src/main.cpp` in Arduino IDE to compile and upload.
 
-If you deploy `webapp` separately from the backend API, set
-`NEXT_PUBLIC_FIRMWARE_API_BASE` to point to your backend (for example
-`https://your-backend.example.com`). If not set, `webapp` uses its built-in
-Next.js API routes to proxy `/api/firmware/*` requests to
-`INKSIGHT_BACKEND_API_BASE`.
+If `webapp` is deployed separately from backend API, point
+`NEXT_PUBLIC_FIRMWARE_API_BASE` to the same backend target you selected. If
+not set, `webapp` proxies `/api/firmware/*` to `INKSIGHT_BACKEND_API_BASE`.
 
 ### 4. WiFi Provisioning
 
-1. Long press BOOT (>= 5s) to enter provisioning mode
-2. Connect your phone to the `InkSight-XXXX` hotspot
-3. A configuration page will pop up automatically — select your WiFi and enter the password
-4. The device will connect and start working once configuration is complete
+In most cases, setup can be completed end-to-end in the web frontend. Captive Portal is an optional fallback path.
+
+1. On first boot (or missing WiFi config), the device enters Captive Portal automatically
+2. If already configured, long press BOOT (>= 2s) to reboot; keep holding during reboot to force portal mode
+3. Connect your computer (or phone) to the `InkSight-XXXX` hotspot
+4. A configuration page will pop up automatically — select your WiFi, then choose official server (quick start) or custom backend URL (self-hosted)
 
 ### 5. Button Controls
 
 | Action | Effect |
 |--------|--------|
-| RESET | Reset, a hardware-level reset, a complete reboot, the behavior of which is a page refresh |
-| Short press BOOT (< 2s) | Switch to next mode，LIVE/INTERVAL |
-| Long press BOOT (>= 2s) | restarting |
-| Long press BOOT (while restarting) | Enter AP configuration network mode |
+| RESET | Hardware reboot |
+| Short press BOOT (>= 50ms and < 2s) | Toggle runtime mode: `active` (live polling) / `interval` |
+| Long press BOOT (>= 2s) | Restart device |
+| Hold BOOT during reboot | Enter Captive Portal provisioning mode |
+
+On first successful setup, firmware enters `active` mode by default once.
 
 ---
 
@@ -221,15 +251,17 @@ Visit `http://your-server:8080/config?mac=XX:XX:XX:XX:XX:XX` to configure your d
 | Nickname | Device display name |
 | Content Modes | Select which modes to display (multi-select) |
 | Refresh Strategy | Random / Sequential / Time-Bound / Smart |
-| Time-Bound Rules | Map time slots to specific modes (up to 12 rules) |
+| Time-Bound Rules | Map time slots to specific modes (up to 24 rules) |
 | Refresh Interval | 10 minutes to 24 hours |
 | Language | Chinese / English / Bilingual |
 | Content Tone | Positive / Neutral / Profound / Humorous |
-| Character Voice | Presets (Lu Xun, Wang Xiaobo, Stephen Chow, etc.) + custom (hover to preview style) |
+| Character Voice | Presets (Lu Xun, Wang Xiaobo, JARVIS, Socrates, Haruki Murakami) + custom |
 | Location | Used for weather data |
 | LLM Provider | DeepSeek / Alibaba Bailian / Moonshot |
 | LLM Model | Select a specific model based on provider |
 | Countdown Events | Date events for COUNTDOWN mode (up to 10) |
+| Mode Overrides | Override city/provider/model and mode-specific fields per mode |
+| API Keys | Device-level text/image API keys (encrypted at rest) |
 
 ### Config Management
 
@@ -437,7 +469,7 @@ inksight/
 - [x] Smart caching (cycle index persists across reboots)
 - [x] 22 content modes (including Weather, Memo, Habit, Almanac, Letter, ThisDay, Riddle, Question, Bias, Story, LifeBar, Challenge)
 - [x] Multi-LLM provider support
-- [x] On-demand refresh (button press / double press + web remote trigger)
+- [x] On-demand refresh, mode switch, and preview push via web/API
 - [x] Config import/export + live preview
 - [x] Toast notifications replacing confirm/alert dialogs
 - [x] Enhanced Preview console (request cancellation, history, rate limiting, resolution simulation)
@@ -454,8 +486,8 @@ inksight/
 - [x] Share functionality and QR code generation
 - [x] Widget endpoint for embedding content
 - [x] Mode editor web page
-- [ ] Multi-resolution display support (backend rendering adaptation)
-- [ ] User-provided API keys
+- [x] Multi-resolution rendering support (`w` / `h` request params + firmware build-time screen sizes)
+- [x] User-provided API keys (device-level LLM/Image keys with encrypted storage)
 - [ ] One-click Vercel deployment
 - [ ] Hardware productization (PCB design)
 
