@@ -28,7 +28,6 @@ bool postRuntimeMode(const char *mode);
 void postConfigToBackend();
 
 bool ensureDeviceToken();
-String requestClaimUrl();
 bool postHeartbeat(bool force = false);
 
 // ── Battery ─────────────────────────────────────────────────

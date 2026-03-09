@@ -9,6 +9,7 @@ import aiosqlite
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+PAIR_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
 from .db import get_main_db
 from .config import (
@@ -209,13 +210,20 @@ async def init_db():
                 token_hash TEXT PRIMARY KEY,
                 mac TEXT NOT NULL,
                 nonce TEXT NOT NULL,
+                pair_code TEXT DEFAULT '',
                 source TEXT DEFAULT '',
                 expires_at TEXT NOT NULL,
                 used_at TEXT DEFAULT '',
                 created_at TEXT NOT NULL
             )
         """)
+        try:
+            await db.execute("ALTER TABLE device_claim_tokens ADD COLUMN pair_code TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_claim_tokens_mac ON device_claim_tokens(mac)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_device_claim_tokens_pair_code ON device_claim_tokens(pair_code)")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS device_access_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -331,6 +339,36 @@ def _claim_token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _normalize_pair_code(code: str) -> str:
+    return "".join(ch for ch in code.upper() if ch.isalnum())
+
+
+async def _generate_pair_code(db, now_iso: str) -> str:
+    for _ in range(20):
+        code = "".join(secrets.choice(PAIR_CODE_ALPHABET) for _ in range(8))
+        cursor = await db.execute(
+            """SELECT 1
+               FROM device_claim_tokens
+               WHERE pair_code = ? AND used_at = '' AND expires_at > ?
+               LIMIT 1""",
+            (code, now_iso),
+        )
+        if not await cursor.fetchone():
+            return code
+    raise RuntimeError("failed to generate pair code")
+
+
+async def _is_pair_code_available(db, pair_code: str, now_iso: str) -> bool:
+    cursor = await db.execute(
+        """SELECT 1
+           FROM device_claim_tokens
+           WHERE pair_code = ? AND used_at = '' AND expires_at > ?
+           LIMIT 1""",
+        (pair_code, now_iso),
+    )
+    return (await cursor.fetchone()) is None
+
+
 async def get_device_membership(
     mac: str,
     user_id: int,
@@ -426,30 +464,45 @@ async def upsert_device_membership(
     return await get_device_membership(mac, user_id, include_pending=True)
 
 
-async def create_claim_token(mac: str, source: str = "portal", ttl_minutes: int = 10) -> dict:
+async def create_claim_token(
+    mac: str,
+    source: str = "portal",
+    ttl_minutes: int = 10,
+    preferred_pair_code: str = "",
+) -> dict | None:
     now = datetime.now()
     token = secrets.token_urlsafe(32)
+    now_iso = now.isoformat()
     db = await get_main_db()
     await db.execute(
         "DELETE FROM device_claim_tokens WHERE used_at != '' OR expires_at <= ?",
-        (now.isoformat(),),
+        (now_iso,),
     )
+    normalized_pair_code = _normalize_pair_code(preferred_pair_code)
+    if normalized_pair_code:
+        if not await _is_pair_code_available(db, normalized_pair_code, now_iso):
+            return None
+        pair_code = normalized_pair_code
+    else:
+        pair_code = await _generate_pair_code(db, now_iso)
     await db.execute(
         """INSERT INTO device_claim_tokens
-           (token_hash, mac, nonce, source, expires_at, used_at, created_at)
-           VALUES (?, ?, ?, ?, ?, '', ?)""",
+           (token_hash, mac, nonce, pair_code, source, expires_at, used_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, '', ?)""",
         (
             _claim_token_hash(token),
             mac.upper(),
             secrets.token_hex(8),
+            pair_code,
             source,
             (now + timedelta(minutes=ttl_minutes)).isoformat(),
-            now.isoformat(),
+            now_iso,
         ),
     )
     await db.commit()
     return {
         "token": token,
+        "pair_code": pair_code,
         "expires_at": (now + timedelta(minutes=ttl_minutes)).isoformat(),
     }
 
@@ -501,16 +554,31 @@ async def create_access_request(mac: str, requester_user_id: int) -> dict:
     }
 
 
-async def consume_claim_token(token: str, user_id: int) -> dict:
+async def consume_claim_token(user_id: int, token: str = "", pair_code: str = "") -> dict:
     now = datetime.now().isoformat()
     db = await get_main_db()
-    cursor = await db.execute(
-        """SELECT token_hash, mac, expires_at, used_at
-           FROM device_claim_tokens
-           WHERE token_hash = ?
-           LIMIT 1""",
-        (_claim_token_hash(token),),
-    )
+    normalized_pair_code = _normalize_pair_code(pair_code)
+    if token:
+        cursor = await db.execute(
+            """SELECT token_hash, mac, expires_at, used_at
+               FROM device_claim_tokens
+               WHERE token_hash = ?
+               LIMIT 1""",
+            (_claim_token_hash(token),),
+        )
+    elif normalized_pair_code:
+        cursor = await db.execute(
+            """SELECT token_hash, mac, expires_at, used_at
+               FROM device_claim_tokens
+               WHERE pair_code = ?
+                 AND used_at = ''
+                 AND expires_at > ?
+               ORDER BY created_at DESC
+               LIMIT 1""",
+            (normalized_pair_code, now),
+        )
+    else:
+        return {"status": "invalid"}
     row = await cursor.fetchone()
     if not row:
         return {"status": "invalid"}

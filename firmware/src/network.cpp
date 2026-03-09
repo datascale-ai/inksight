@@ -11,6 +11,9 @@
 // ── Time state ──────────────────────────────────────────────
 int curHour, curMin, curSec;
 static unsigned long lastHeartbeatAt = 0;
+static bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClientSecure &secClient, const String &url);
+static bool recoverDeviceTokenIfUnauthorized(int code);
+static String extractJsonStringField(const String &body, const char *key);
 
 // ── WiFi connection ─────────────────────────────────────────
 
@@ -29,6 +32,58 @@ bool connectWiFi() {
         Serial.print(".");
     }
     Serial.printf(" OK  IP=%s\n", WiFi.localIP().toString().c_str());
+    ensureDeviceToken();
+    if (cfgPendingPairCode.length() > 0) {
+        String mac = WiFi.macAddress();
+        String url = cfgServer + "/api/device/" + mac + "/claim-token";
+        String body = String("{\"pair_code\":\"") + cfgPendingPairCode + "\"}";
+        for (int attempt = 0; attempt < 3; attempt++) {
+            Serial.printf("[PAIR] POST %s (attempt %d/3)\n", url.c_str(), attempt + 1);
+            WiFiClient plainClient;
+            WiFiClientSecure secClient;
+            HTTPClient http;
+            if (!beginHttpForUrl(http, plainClient, secClient, url)) {
+                Serial.println("[PAIR] begin failed");
+                delay(800);
+                continue;
+            }
+            http.addHeader("Content-Type", "application/json");
+            if (cfgDeviceToken.length() > 0) {
+                http.addHeader("X-Device-Token", cfgDeviceToken);
+            }
+            http.setTimeout(HTTP_TIMEOUT);
+
+            int code = http.POST(body);
+            Serial.printf("[PAIR] HTTP code: %d\n", code);
+            if (code >= 200 && code < 300) {
+                String resp = http.getString();
+                String savedPairCode = extractJsonStringField(resp, "pair_code");
+                http.end();
+                if (savedPairCode == cfgPendingPairCode) {
+                    clearPendingPairCode();
+                    Serial.println("[PAIR] pair code registered");
+                    break;
+                }
+                Serial.printf(
+                    "[PAIR] pair code mismatch: local=%s remote=%s\n",
+                    cfgPendingPairCode.c_str(),
+                    savedPairCode.length() > 0 ? savedPairCode.c_str() : "empty"
+                );
+                delay(800);
+                continue;
+            }
+            if (code < 0) {
+                Serial.printf("[PAIR] error: %s\n", http.errorToString(code).c_str());
+            } else {
+                String resp = http.getString();
+                Serial.printf("[PAIR] response: %s\n", resp.substring(0, 300).c_str());
+            }
+            http.end();
+            if (!recoverDeviceTokenIfUnauthorized(code)) {
+                delay(800);
+            }
+        }
+    }
     postHeartbeat(true);
     return true;
 }
@@ -105,6 +160,13 @@ static String extractJsonStringField(const String &body, const char *key) {
     return body.substring(start, end);
 }
 
+static bool recoverDeviceTokenIfUnauthorized(int code) {
+    if (code != 401 || cfgDeviceToken.length() == 0) return false;
+    Serial.println("[AUTH] 401 unauthorized, resetting cached device token");
+    clearDeviceToken();
+    return ensureDeviceToken();
+}
+
 bool postHeartbeat(bool force) {
     if (WiFi.status() != WL_CONNECTED) return false;
     unsigned long now = millis();
@@ -117,30 +179,35 @@ bool postHeartbeat(bool force) {
     int rssi = WiFi.RSSI();
     String mac = WiFi.macAddress();
     String url = cfgServer + "/api/device/" + mac + "/heartbeat";
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
-    if (!beginHttpForUrl(http, plainClient, secClient, url)) return false;
-    http.addHeader("Content-Type", "application/json");
-    if (cfgDeviceToken.length() > 0) {
-        http.addHeader("X-Device-Token", cfgDeviceToken);
-    }
-    http.setTimeout(HTTP_TIMEOUT);
-
     String body = String("{\"battery_voltage\":") + String(v, 2) + ",\"wifi_rssi\":" + String(rssi) + "}";
-    lastHeartbeatAt = now;
-    int code = http.POST(body);
-    if (code >= 200 && code < 300) {
-        Serial.printf("[HEARTBEAT] POST -> %d\n", code);
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (!beginHttpForUrl(http, plainClient, secClient, url)) return false;
+        http.addHeader("Content-Type", "application/json");
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
+        http.setTimeout(HTTP_TIMEOUT);
+
+        int code = http.POST(body);
+        if (code >= 200 && code < 300) {
+            Serial.printf("[HEARTBEAT] POST -> %d\n", code);
+            http.end();
+            lastHeartbeatAt = now;
+            return true;
+        }
+        if (code < 0) {
+            Serial.printf("[HEARTBEAT] error: %s\n", http.errorToString(code).c_str());
+        } else {
+            Serial.printf("[HEARTBEAT] POST -> %d\n", code);
+        }
         http.end();
-        return true;
+        if (!recoverDeviceTokenIfUnauthorized(code)) {
+            return false;
+        }
     }
-    if (code < 0) {
-        Serial.printf("[HEARTBEAT] error: %s\n", http.errorToString(code).c_str());
-    } else {
-        Serial.printf("[HEARTBEAT] POST -> %d\n", code);
-    }
-    http.end();
     return false;
 }
 
@@ -150,49 +217,46 @@ bool ensureDeviceToken() {
 
     String mac = WiFi.macAddress();
     String url = cfgServer + "/api/device/" + mac + "/token";
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
-    if (!beginHttpForUrl(http, plainClient, secClient, url)) return false;
-    http.addHeader("Content-Type", "application/json");
-    http.setTimeout(HTTP_TIMEOUT);
+    delay(1200);
+    for (int attempt = 0; attempt < 3; attempt++) {
+        Serial.printf("[TOKEN] POST %s (attempt %d/3)\n", url.c_str(), attempt + 1);
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (!beginHttpForUrl(http, plainClient, secClient, url)) {
+            Serial.println("[TOKEN] begin failed");
+            delay(800);
+            continue;
+        }
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(HTTP_TIMEOUT);
 
-    int code = http.POST("{}");
-    if (code < 200 || code >= 300) {
+        int code = http.POST("{}");
+        Serial.printf("[TOKEN] HTTP code: %d\n", code);
+        if (code >= 200 && code < 300) {
+            String body = http.getString();
+            http.end();
+            String token = extractJsonStringField(body, "token");
+            if (token.length() == 0) {
+                Serial.println("[TOKEN] token field empty");
+                delay(800);
+                continue;
+            }
+            saveDeviceToken(token);
+            Serial.println("[TOKEN] token saved");
+            return true;
+        }
+        if (code < 0) {
+            Serial.printf("[TOKEN] error: %s\n", http.errorToString(code).c_str());
+        } else {
+            String body = http.getString();
+            Serial.printf("[TOKEN] response: %s\n", body.substring(0, 300).c_str());
+        }
         http.end();
-        return false;
+        delay(800);
     }
-    String body = http.getString();
-    http.end();
-
-    String token = extractJsonStringField(body, "token");
-    if (token.length() == 0) return false;
-    saveDeviceToken(token);
-    return true;
-}
-
-String requestClaimUrl() {
-    if (!ensureDeviceToken()) return "";
-    String mac = WiFi.macAddress();
-    String url = cfgServer + "/api/device/" + mac + "/claim-token";
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
-    if (!beginHttpForUrl(http, plainClient, secClient, url)) return "";
-    http.addHeader("Content-Type", "application/json");
-    if (cfgDeviceToken.length() > 0) {
-        http.addHeader("X-Device-Token", cfgDeviceToken);
-    }
-    http.setTimeout(HTTP_TIMEOUT);
-
-    int code = http.POST("{}");
-    if (code < 200 || code >= 300) {
-        http.end();
-        return "";
-    }
-    String body = http.getString();
-    http.end();
-    return extractJsonStringField(body, "claim_url");
+    Serial.println("[TOKEN] failed to obtain device token");
+    return false;
 }
 
 // ── Fetch BMP from backend ──────────────────────────────────
@@ -218,96 +282,97 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
     Serial.printf("GET %s (RSSI=%d)\n", url.c_str(), rssi);
 
     bool useSSL = cfgServer.startsWith("https://");
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
-    if (useSSL) {
-        secClient.setCACert(ROOT_CA);  // Verify server certificate against ISRG Root X1
-        http.begin(secClient, url);
-    } else {
-        http.begin(plainClient, url);
-    }
-    http.setTimeout(HTTP_TIMEOUT);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    const char *headerKeys[] = {"X-Content-Fallback"};
-    http.collectHeaders(headerKeys, 1);
-
-    if (cfgDeviceToken.length() > 0) {
-        http.addHeader("X-Device-Token", cfgDeviceToken);
-    }
-
-    Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
-    int code = http.GET();
-    Serial.printf("HTTP code: %d\n", code);
-    if (isFallback) {
-        String fallbackHeader = http.header("X-Content-Fallback");
-        *isFallback = (fallbackHeader == "1" || fallbackHeader == "true");
-        if (*isFallback) {
-            Serial.println("[RENDER] Received fallback content");
-        }
-    }
-
-    if (code != 200) {
-        if (code < 0) {
-            Serial.printf("HTTP error: %s\n", http.errorToString(code).c_str());
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
         } else {
-            String body = http.getString();
-            Serial.printf("Response: %s\n", body.substring(0, 500).c_str());
+            http.begin(plainClient, url);
         }
-        http.end();
-        return false;
-    }
+        http.setTimeout(HTTP_TIMEOUT);
+        http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+        const char *headerKeys[] = {"X-Content-Fallback"};
+        http.collectHeaders(headerKeys, 1);
 
-    int contentLen = http.getSize();
-    Serial.printf("Content-Length: %d\n", contentLen);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
 
-    WiFiClient *stream = http.getStreamPtr();
+        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        int code = http.GET();
+        Serial.printf("HTTP code: %d\n", code);
+        if (isFallback) {
+            String fallbackHeader = http.header("X-Content-Fallback");
+            *isFallback = (fallbackHeader == "1" || fallbackHeader == "true");
+            if (*isFallback) {
+                Serial.println("[RENDER] Received fallback content");
+            }
+        }
 
-    // Read BMP file header (14 bytes)
-    uint8_t fileHeader[14];
-    if (!readExact(stream, fileHeader, 14)) {
-        Serial.println("Failed to read BMP header");
-        http.end();
-        return false;
-    }
+        if (code != 200) {
+            if (code < 0) {
+                Serial.printf("HTTP error: %s\n", http.errorToString(code).c_str());
+            } else {
+                String body = http.getString();
+                Serial.printf("Response: %s\n", body.substring(0, 500).c_str());
+            }
+            http.end();
+            if (!recoverDeviceTokenIfUnauthorized(code)) {
+                return false;
+            }
+            continue;
+        }
 
-    // Extract pixel data offset from header
-    uint32_t pixelOffset = fileHeader[10]
-                         | ((uint32_t)fileHeader[11] << 8)
-                         | ((uint32_t)fileHeader[12] << 16)
-                         | ((uint32_t)fileHeader[13] << 24);
-    Serial.printf("BMP pixel offset: %u\n", pixelOffset);
+        int contentLen = http.getSize();
+        Serial.printf("Content-Length: %d\n", contentLen);
 
-    // Skip remaining header bytes
-    int toSkip = pixelOffset - 14;
-    while (toSkip > 0 && stream->connected()) {
-        if (stream->available()) { stream->read(); toSkip--; }
-    }
+        WiFiClient *stream = http.getStreamPtr();
 
-    // Read pixel data row by row (BMP is bottom-up)
-    uint8_t rowBuf[ROW_STRIDE];
-    for (int bmpY = 0; bmpY < H; bmpY++) {
-        if (!readExact(stream, rowBuf, ROW_STRIDE)) {
-            Serial.printf("Failed to read row %d\n", bmpY);
+        uint8_t fileHeader[14];
+        if (!readExact(stream, fileHeader, 14)) {
+            Serial.println("Failed to read BMP header");
             http.end();
             return false;
         }
-        int dispY = H - 1 - bmpY;  // Flip vertical (BMP is bottom-up)
-        memcpy(imgBuf + dispY * ROW_BYTES, rowBuf, ROW_BYTES);
-    }
 
-    http.end();
-    Serial.printf("BMP OK  %d bytes\n", IMG_BUF_LEN);
-    lastHeartbeatAt = millis();
+        uint32_t pixelOffset = fileHeader[10]
+                             | ((uint32_t)fileHeader[11] << 8)
+                             | ((uint32_t)fileHeader[12] << 16)
+                             | ((uint32_t)fileHeader[13] << 24);
+        Serial.printf("BMP pixel offset: %u\n", pixelOffset);
+
+        int toSkip = pixelOffset - 14;
+        while (toSkip > 0 && stream->connected()) {
+            if (stream->available()) { stream->read(); toSkip--; }
+        }
+
+        uint8_t rowBuf[ROW_STRIDE];
+        for (int bmpY = 0; bmpY < H; bmpY++) {
+            if (!readExact(stream, rowBuf, ROW_STRIDE)) {
+                Serial.printf("Failed to read row %d\n", bmpY);
+                http.end();
+                return false;
+            }
+            int dispY = H - 1 - bmpY;
+            memcpy(imgBuf + dispY * ROW_BYTES, rowBuf, ROW_BYTES);
+        }
+
+        http.end();
+        Serial.printf("BMP OK  %d bytes\n", IMG_BUF_LEN);
+        lastHeartbeatAt = millis();
 
 #if DEBUG_MODE
-    // Checksum for verifying image data changed
-    uint32_t checksum = 0;
-    for (int i = 0; i < IMG_BUF_LEN; i++) checksum += imgBuf[i];
-    Serial.printf("imgBuf checksum: %u\n", checksum);
+        uint32_t checksum = 0;
+        for (int i = 0; i < IMG_BUF_LEN; i++) checksum += imgBuf[i];
+        Serial.printf("imgBuf checksum: %u\n", checksum);
 #endif
 
-    return true;
+        return true;
+    }
+    return false;
 }
 
 bool hasPendingRemoteAction(bool *shouldExitLive) {
@@ -318,48 +383,54 @@ bool hasPendingRemoteAction(bool *shouldExitLive) {
     String url = cfgServer + "/api/device/" + mac + "/state";
 
     bool useSSL = cfgServer.startsWith("https://");
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
-    if (useSSL) {
-        secClient.setCACert(ROOT_CA);
-        http.begin(secClient, url);
-    } else {
-        http.begin(plainClient, url);
-    }
-    http.setTimeout(HTTP_TIMEOUT);
-    if (cfgDeviceToken.length() > 0) {
-        http.addHeader("X-Device-Token", cfgDeviceToken);
-    }
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.setTimeout(HTTP_TIMEOUT);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
 
-    int code = http.GET();
-    if (code != 200) {
+        int code = http.GET();
+        if (code != 200) {
+            http.end();
+            if (!recoverDeviceTokenIfUnauthorized(code)) {
+                return false;
+            }
+            continue;
+        }
+
+        String body = http.getString();
         http.end();
-        return false;
+
+        if (shouldExitLive) {
+            bool intervalRequested =
+                body.indexOf("\"runtime_mode\":\"interval\"") >= 0 ||
+                body.indexOf("\"runtime_mode\": \"interval\"") >= 0;
+            *shouldExitLive = intervalRequested;
+        }
+
+        bool pendingRefresh =
+            body.indexOf("\"pending_refresh\":1") >= 0 ||
+            body.indexOf("\"pending_refresh\": 1") >= 0 ||
+            body.indexOf("\"pending_refresh\":true") >= 0 ||
+            body.indexOf("\"pending_refresh\": true") >= 0;
+
+        bool pendingMode =
+            (body.indexOf("\"pending_mode\":\"") >= 0 || body.indexOf("\"pending_mode\": \"") >= 0) &&
+            body.indexOf("\"pending_mode\":\"\"") < 0 &&
+            body.indexOf("\"pending_mode\": \"\"") < 0;
+
+        return pendingRefresh || pendingMode;
     }
-
-    String body = http.getString();
-    http.end();
-
-    if (shouldExitLive) {
-        bool intervalRequested =
-            body.indexOf("\"runtime_mode\":\"interval\"") >= 0 ||
-            body.indexOf("\"runtime_mode\": \"interval\"") >= 0;
-        *shouldExitLive = intervalRequested;
-    }
-
-    bool pendingRefresh =
-        body.indexOf("\"pending_refresh\":1") >= 0 ||
-        body.indexOf("\"pending_refresh\": 1") >= 0 ||
-        body.indexOf("\"pending_refresh\":true") >= 0 ||
-        body.indexOf("\"pending_refresh\": true") >= 0;
-
-    bool pendingMode =
-        (body.indexOf("\"pending_mode\":\"") >= 0 || body.indexOf("\"pending_mode\": \"") >= 0) &&
-        body.indexOf("\"pending_mode\":\"\"") < 0 &&
-        body.indexOf("\"pending_mode\": \"\"") < 0;
-
-    return pendingRefresh || pendingMode;
+    return false;
 }
 
 // ── Post config to backend ──────────────────────────────────
@@ -375,26 +446,31 @@ void postConfigToBackend() {
         body = "{\"mac\":\"" + mac + "\"," + body.substring(1);
     }
 
-    bool useSSL = cfgServer.startsWith("https://");
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
     String url = cfgServer + "/api/config";
-    if (useSSL) {
-        secClient.setCACert(ROOT_CA);  // Verify server certificate against ISRG Root X1
-        http.begin(secClient, url);
-    } else {
-        http.begin(plainClient, url);
-    }
-    http.addHeader("Content-Type", "application/json");
-    http.setTimeout(HTTP_TIMEOUT);
-    if (cfgDeviceToken.length() > 0) {
-        http.addHeader("X-Device-Token", cfgDeviceToken);
-    }
+    bool useSSL = cfgServer.startsWith("https://");
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(HTTP_TIMEOUT);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
 
-    int code = http.POST(body);
-    Serial.printf("POST /api/config -> %d\n", code);
-    http.end();
+        int code = http.POST(body);
+        Serial.printf("POST /api/config -> %d\n", code);
+        http.end();
+        if (!recoverDeviceTokenIfUnauthorized(code)) {
+            return;
+        }
+    }
 }
 
 // ── Post runtime mode to backend ────────────────────────────
@@ -404,29 +480,37 @@ bool postRuntimeMode(const char *mode) {
     String mac = WiFi.macAddress();
     String url = cfgServer + "/api/device/" + mac + "/runtime";
     bool useSSL = cfgServer.startsWith("https://");
-    WiFiClient plainClient;
-    WiFiClientSecure secClient;
-    HTTPClient http;
-    if (useSSL) {
-        secClient.setCACert(ROOT_CA);
-        http.begin(secClient, url);
-    } else {
-        http.begin(plainClient, url);
-    }
-    http.addHeader("Content-Type", "application/json");
-    http.setTimeout(HTTP_TIMEOUT);
-    if (cfgDeviceToken.length() > 0) {
-        http.addHeader("X-Device-Token", cfgDeviceToken);
-    }
-
     String body = String("{\"mode\":\"") + mode + "\"}";
-    int code = http.POST(body);
-    http.end();
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(HTTP_TIMEOUT);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
 
-    if (code == 404) {
-        return true;
+        int code = http.POST(body);
+        http.end();
+
+        if (code == 404) {
+            return true;
+        }
+        if (code >= 200 && code < 300) {
+            return true;
+        }
+        if (!recoverDeviceTokenIfUnauthorized(code)) {
+            return false;
+        }
     }
-    return (code >= 200 && code < 300);
+    return false;
 }
 
 // ── NTP time sync ───────────────────────────────────────────

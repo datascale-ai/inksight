@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <esp_system.h>
 
 #include "../data/portal_html.h"
 
@@ -68,12 +69,21 @@ static bool isValidUrl(const String &url) {
     return url.startsWith("http://") || url.startsWith("https://");
 }
 
-static bool isOfficialServerUrl(const String &url) {
-    String lower = url;
-    lower.toLowerCase();
-    return lower.indexOf("://web.inksight.site") >= 0
-        || lower.indexOf("://www.inksight.site") >= 0
-        || lower.indexOf("://inksight.site") >= 0;
+static String generatePairCode() {
+    char buf[7];
+    snprintf(buf, sizeof(buf), "%06u", (unsigned)(esp_random() % 1000000));
+    return String(buf);
+}
+
+static void resetPortalProvisioningState() {
+    pendingRestart = false;
+    restartAtMillis = 0;
+    wifiConnected = false;
+    wifiConnecting = false;
+    lastWifiError = "";
+    clearPendingPairCode();
+    WiFi.disconnect();
+    WiFi.mode(WIFI_AP_STA);
 }
 
 // ── Start captive portal ────────────────────────────────────
@@ -217,19 +227,10 @@ void startCaptivePortal() {
             wifiConnected = true;
             lastWifiError = "";
             Serial.printf("WiFi OK  IP=%s\n", WiFi.localIP().toString().c_str());
-            String claimUrl = "";
-            bool manualBind = !isOfficialServerUrl(cfgServer);
-            if (!manualBind) {
-                claimUrl = requestClaimUrl();
-            }
-            String response = "{\"ok\":true";
-            if (claimUrl.length() > 0) {
-                response += ",\"claim_url\":\"" + claimUrl + "\"";
-            }
-            if (manualBind) {
-                response += ",\"manual_bind\":true";
-            }
-            response += "}";
+            String pairCode = generatePairCode();
+            savePendingPairCode(pairCode);
+            Serial.printf("[PAIR] local pair code: %s\n", pairCode.c_str());
+            String response = String("{\"ok\":true,\"pair_code\":\"") + pairCode + "\"}";
             webServer.send(200, "application/json", response);
 
             pendingRestart  = true;
@@ -288,6 +289,12 @@ void startCaptivePortal() {
         Serial.println("Manual restart requested, restarting in 1 second...");
         delay(1000);
         ESP.restart();
+    });
+
+    webServer.on("/reset_portal", HTTP_POST, []() {
+        resetPortalProvisioningState();
+        webServer.send(200, "application/json", "{\"ok\":true}");
+        Serial.println("Portal reset requested, staying in provisioning mode");
     });
 
     // ── Captive portal redirect for all other requests ──────

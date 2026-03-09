@@ -121,6 +121,10 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 <div id="srvCustomWrap" class="hidden">
 <input type="text" class="inp" id="srvIn" value="http://本地服务IP:8080" placeholder="例如: http://192.168.1.100:8080">
 <div style="font-size:.68rem;color:var(--gy);margin-top:3px">输入你自己部署的 InkSight 后端地址（含端口）</div>
+<div style="margin-top:10px">
+<input type="text" class="inp" id="frontendPortIn" value="3000" placeholder="例如: 3000">
+<div style="font-size:.68rem;color:var(--gy);margin-top:3px">前端配置页端口，用于重启后跳转到 localhost:端口/config</div>
+</div>
 </div>
 </div>
 <button class="btn btn-ghost" id="cBtn" onclick="doConnect()"><span class="bt">连接并保存</span><div class="sp"></div></button>
@@ -133,15 +137,20 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 <p style="font-size:.82rem;color:var(--gy)">已连接到 <strong id="cSSID"></strong></p>
 
 <div class="link-box">
-<strong>下一步：</strong>设备将自动重启并联网，届时将为您跳转至配置页面完成个性化设置。<br>
+<strong>下一步：</strong>设备将自动重启并联网，请使用配对码继续完成认领与配置。<br>
 <div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border-radius:6px;font-size:.75rem;color:#92400e;font-weight:500">⚠ 跳转前请先断开 InkSight 热点，重新连接您的家庭 / 办公 WiFi</div>
 </div>
 
+<div id="pairWrap" class="hidden" style="margin-top:12px;padding:12px;border:1px solid var(--bd);border-radius:8px;background:#f8fafc">
+<div style="font-size:.76rem;color:var(--gy)">配对码</div>
+<div id="pairCode" style="margin-top:6px;font-size:1.3rem;letter-spacing:.18em;font-weight:700">--------</div>
+</div>
+
 <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
-<button class="btn" onclick="doRestart()" style="width:auto;padding:9px 20px;font-size:.82rem">立即重启并跳转</button>
+<button class="btn" onclick="doRestart()" style="width:auto;padding:9px 20px;font-size:.82rem">立即重启</button>
 <button class="btn" onclick="cancelCountdown()" id="cdCancelBtn" style="width:auto;padding:9px 16px;font-size:.8rem;background:var(--bg);color:var(--bk)">取消</button>
 </div>
-<p class="cd"><span id="cdN">10</span> 秒后自动重启并跳转</p>
+<p class="cd"><span id="cdN">10</span> 秒后自动重启</p>
 <div style="margin-top:10px"><button class="btn" onclick="resetP()" style="background:var(--bg);color:var(--bk);font-size:.8rem;padding:9px">重新配网</button></div>
 </div>
 
@@ -156,8 +165,10 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 
 <script>
 var OFFICIAL_SERVER='https://web.inksight.site/';
+var OFFICIAL_CONFIG_URL='https://www.inksight.site/config';
 var LOCAL_DEFAULT_SERVER='http://本地服务IP:8080';
-var ssid='',ctm=null,devMac='',srvUrl='',srvMode='official',claimUrl='',manualBindRequired=false;
+var LOCAL_DEFAULT_FRONTEND_PORT='3000';
+var ssid='',ctm=null,devMac='',srvUrl='',srvMode='official',pairCode='',frontendPort=LOCAL_DEFAULT_FRONTEND_PORT;
 var hiddenSsids=[];
 
 function setStep(n){
@@ -179,20 +190,38 @@ function normalizeServerUrl(url){
 return (url||'').replace(/\/+$/,'');
 }
 
+function getConfigUrl(){
+var normalized=normalizeServerUrl(srvUrl);
+var base='';
+if(!normalized)return'';
+if(normalized===normalizeServerUrl(OFFICIAL_SERVER))base=OFFICIAL_CONFIG_URL;
+else{
+if(!frontendPort||!/^\d{2,5}$/.test(frontendPort))return'';
+base='http://localhost:'+frontendPort+'/config';
+}
+var qs=[];
+if(devMac)qs.push('prefer_mac='+encodeURIComponent(devMac));
+if(pairCode)qs.push('code='+encodeURIComponent(pairCode));
+return qs.length?base+'?'+qs.join('&'):base;
+}
+
 function switchSrvMode(mode){
 var o=document.getElementById('srvOfficial'),c=document.getElementById('srvCustom');
 var tip=document.getElementById('srvOfficialTip'),wrap=document.getElementById('srvCustomWrap');
-var input=document.getElementById('srvIn');
+var input=document.getElementById('srvIn'),portInput=document.getElementById('frontendPortIn');
 srvMode=mode==='custom'?'custom':'official';
 if(srvMode==='official'){
 o.classList.add('act');c.classList.remove('act');
 tip.classList.remove('hidden');wrap.classList.add('hidden');
 srvUrl=normalizeServerUrl(OFFICIAL_SERVER);
+frontendPort=LOCAL_DEFAULT_FRONTEND_PORT;
 }else{
 c.classList.add('act');o.classList.remove('act');
 wrap.classList.remove('hidden');tip.classList.add('hidden');
 if(!input.value||normalizeServerUrl(input.value)===normalizeServerUrl(OFFICIAL_SERVER))input.value=LOCAL_DEFAULT_SERVER;
+if(!portInput.value)portInput.value=LOCAL_DEFAULT_FRONTEND_PORT;
 srvUrl=normalizeServerUrl(input.value.trim());
+frontendPort=(portInput.value||'').trim();
 }
 }
 
@@ -227,14 +256,17 @@ function doConnect(){
 var s=ssid||document.getElementById('ssidIn').value.trim();
 var p=document.getElementById('pwIn').value;
 var sv=srvMode==='official'?OFFICIAL_SERVER:document.getElementById('srvIn').value.trim();
+var fp=srvMode==='official'?LOCAL_DEFAULT_FRONTEND_PORT:document.getElementById('frontendPortIn').value.trim();
 var st=document.getElementById('pSt'),btn=document.getElementById('cBtn');
 if(!s){st.className='st e';st.textContent='请选择或输入 WiFi';return;}
 if(!p){st.className='st e';st.textContent='请输入密码';return;}
 if(p.length<8){st.className='st e';st.textContent='密码至少 8 位';return;}
 if(sv&&!sv.match(/^https?:\/\//)){st.className='st e';st.textContent='服务器地址需以 http:// 或 https:// 开头';return;}
+if(srvMode==='custom'&&!/^\d{2,5}$/.test(fp)){st.className='st e';st.textContent='前端端口需为 2 到 5 位数字';return;}
 btn.classList.add('ld');btn.disabled=true;
 st.className='st c';st.textContent='正在连接 '+s+' ...';
 srvUrl=normalizeServerUrl(sv);
+frontendPort=fp;
 
 var fd=new FormData();fd.append('ssid',s);fd.append('pass',p);if(srvUrl)fd.append('server',srvUrl);
 fetch('/save_wifi',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
@@ -242,8 +274,7 @@ btn.classList.remove('ld');btn.disabled=false;
 if(d.ok){
 st.className='st s';st.textContent='WiFi 已连接';
 document.getElementById('cSSID').textContent=s;
-claimUrl=d.claim_url||'';
-manualBindRequired=!!d.manual_bind;
+pairCode=(d.pair_code||'').toUpperCase();
 showSuccess();
 }else{
 st.className='st e';st.textContent=d.msg||'连接失败';
@@ -254,17 +285,16 @@ st.className='st e';st.textContent='请求失败，请重试';
 });
 }
 
-function getConfigUrl(){
-if(claimUrl)return claimUrl;
-return'';
-}
-
 function showSuccess(){
 document.getElementById('s1').classList.add('hidden');
 document.getElementById('s2').classList.remove('hidden');
 setStep(2);
 document.getElementById('pSt').className='st s';
 document.getElementById('pSt').textContent='配网完成！';
+if(pairCode){
+document.getElementById('pairWrap').classList.remove('hidden');
+document.getElementById('pairCode').textContent=pairCode;
+}
 var c=30;document.getElementById('cdN').textContent=c;
 ctm=setInterval(function(){c--;document.getElementById('cdN').textContent=c;
 if(c<=0){clearInterval(ctm);ctm=null;doRestart();}
@@ -273,17 +303,17 @@ if(c<=0){clearInterval(ctm);ctm=null;doRestart();}
 
 function doRestart(){
 if(ctm)clearInterval(ctm);
-document.getElementById('pSt').className='st c';
-document.getElementById('pSt').textContent=manualBindRequired?'设备重启中，请稍后在自部署站点手动绑定...':'设备重启中，即将跳转至领取页...';
-fetch('/restart',{method:'POST'}).catch(function(){});
 var url=getConfigUrl();
+document.getElementById('pSt').className='st c';
+document.getElementById('pSt').textContent=url?'设备重启中，即将跳转至配置页...':'设备重启中，请稍后在配置页输入配对码...';
+fetch('/restart',{method:'POST'}).catch(function(){});
 setTimeout(function(){
-if(!url){
-document.body.innerHTML=manualBindRequired?'<div style="text-align:center;padding:50px;font-family:sans-serif"><h2>设备已重启</h2><p style="color:#888">当前为自定义服务，请切换回家庭 WiFi 后在自部署站点手动绑定并配置设备。</p></div>':'<div style="text-align:center;padding:50px;font-family:sans-serif"><h2>领取链接生成失败</h2><p style="color:#888">请切换回家庭 WiFi 后登录官网，在设备列表中手动处理该设备。</p></div>';
+if(url){
+document.body.innerHTML='<div style="text-align:center;padding:50px;font-family:sans-serif"><h2>正在跳转至配置页</h2><p style="color:#888">请确保已切换回家庭 WiFi</p>'+(pairCode?'<div style="margin:18px auto 0;max-width:260px;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc"><div style="font-size:.8rem;color:#6b7280">配对码</div><div style="margin-top:6px;font-size:1.5rem;letter-spacing:.18em;font-weight:700">'+pairCode+'</div></div>':'')+'<p style="margin-top:12px"><a href="'+url+'" style="color:#3b82f6">点击此处手动跳转</a></p></div>';
+window.location.href=url;
 return;
 }
-document.body.innerHTML='<div style="text-align:center;padding:50px;font-family:sans-serif"><h2>正在跳转至领取页</h2><p style="color:#888">请确保已切换回家庭 WiFi</p><p style="margin-top:12px"><a href="'+url+'" style="color:#3b82f6">点击此处手动跳转</a></p></div>';
-window.location.href=url;
+document.body.innerHTML=pairCode?'<div style="text-align:center;padding:50px;font-family:sans-serif"><h2>设备已重启</h2><p style="color:#888">请切换回家庭 WiFi 后打开配置页，输入以下配对码继续认领设备。</p><div style="margin:18px auto 0;max-width:260px;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;font-size:1.5rem;letter-spacing:.18em;font-weight:700">'+pairCode+'</div></div>':'<div style="text-align:center;padding:50px;font-family:sans-serif"><h2>配对码生成失败</h2><p style="color:#888">请稍后重试配网流程。</p></div>';
 },3000);
 }
 
@@ -296,6 +326,7 @@ document.getElementById('cdCancelBtn').disabled=true;
 
 function resetP(){
 if(ctm)clearInterval(ctm);
+fetch('/reset_portal',{method:'POST'}).catch(function(){});
 document.getElementById('s1').classList.remove('hidden');
 document.getElementById('s2').classList.add('hidden');
 document.getElementById('pwIn').value='';
@@ -304,6 +335,10 @@ document.getElementById('pSt').textContent='等待配网...';
 setStep(1);
 document.querySelectorAll('.wi').forEach(function(i){i.classList.remove('sel')});
 ssid='';
+pairCode='';
+document.getElementById('pairWrap').classList.add('hidden');
+document.getElementById('pairCode').textContent='--------';
+document.getElementById('cdN').textContent='10';
 }
 
 (function(){

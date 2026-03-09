@@ -11,29 +11,33 @@ function ClaimPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
+  const pairCode = (searchParams.get("code") || "").trim().toUpperCase();
   const [status, setStatus] = useState<"loading" | "pending" | "error">("loading");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (!token) {
+      if (!token && !pairCode) {
         if (!cancelled) {
           setStatus("error");
-          setMessage("缺少 claim token");
+          setMessage("缺少配对信息");
         }
         return;
       }
       try {
         const user = await fetchCurrentUser();
         if (!user) {
-          router.replace(`/login?next=${encodeURIComponent(`/claim?token=${encodeURIComponent(token)}`)}`);
+          const next = token
+            ? `/claim?token=${encodeURIComponent(token)}`
+            : `/claim?code=${encodeURIComponent(pairCode)}`;
+          router.replace(`/login?next=${encodeURIComponent(next)}`);
           return;
         }
         const res = await fetch("/api/claim/consume", {
           method: "POST",
           headers: authHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ token }),
+          body: JSON.stringify(token ? { token } : { pair_code: pairCode }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -58,7 +62,7 @@ function ClaimPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [router, token]);
+  }, [pairCode, router, token]);
 
   return (
     <div className="mx-auto max-w-md px-6 py-20">
@@ -69,7 +73,7 @@ function ClaimPageInner() {
         <CardContent className="space-y-4 text-center">
           {status === "loading" && (
             <div className="flex items-center justify-center gap-2 text-sm text-ink-light">
-              <Loader2 size={16} className="animate-spin" /> 正在验证领取链接...
+              <Loader2 size={16} className="animate-spin" /> 正在验证配对信息...
             </div>
           )}
           {status === "pending" && (

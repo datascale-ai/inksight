@@ -10,6 +10,7 @@ extern String cfgServer;
 extern int    cfgSleepMin;
 extern String cfgConfigJson;
 extern String cfgDeviceToken;
+extern String cfgPendingPairCode;
 
 // ── NVS operations ──────────────────────────────────────────
 
@@ -36,5 +37,8 @@ void markFirstInstallLiveModeDone();
 
 // Device token for backend auth
 void saveDeviceToken(const String &token);
+void clearDeviceToken();
+void savePendingPairCode(const String &code);
+void clearPendingPairCode();
 
 #endif // INKSIGHT_STORAGE_H

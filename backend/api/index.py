@@ -65,6 +65,17 @@ ONLINE_WINDOW_MINUTES = 15
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+
+def _build_claim_url(request: Request, token: str) -> str:
+    override = os.environ.get("INKSIGHT_WEB_BASE_URL", "").rstrip("/")
+    if override:
+        return f"{override}/claim?token={token}"
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc or "").strip()
+    if "inksight.site" not in host.lower():
+        return ""
+    scheme = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").strip()
+    return f"{scheme}://{host}/claim?token={token}"
+
 from core.config import (
     SCREEN_WIDTH,
     SCREEN_HEIGHT,
@@ -1599,15 +1610,25 @@ async def provision_device_token(mac: str):
 @app.post("/api/device/{mac}/claim-token")
 async def provision_claim_token(
     mac: str,
+    request: Request,
+    body: Optional[dict] = None,
     x_device_token: Optional[str] = Header(default=None),
 ):
     mac = validate_mac_param(mac)
     await require_device_token(mac, x_device_token)
-    created = await create_claim_token(mac, source="portal")
+    preferred_pair_code = str((body or {}).get("pair_code") or "").strip()
+    created = await create_claim_token(
+        mac,
+        source="portal",
+        preferred_pair_code=preferred_pair_code,
+    )
+    if created is None:
+        return JSONResponse({"error": "pair_code_conflict"}, status_code=409)
     return {
         "ok": True,
         "token": created["token"],
-        "claim_url": f"https://www.inksight.site/claim?token={created['token']}",
+        "pair_code": created["pair_code"],
+        "claim_url": _build_claim_url(request, created["token"]),
         "expires_at": created["expires_at"],
     }
 
@@ -1615,22 +1636,25 @@ async def provision_claim_token(
 @app.post("/api/claim/consume")
 async def claim_consume(body: dict, user_id: int = Depends(require_user)):
     token = str(body.get("token") or "").strip()
-    if not token:
-        return JSONResponse({"error": "token 不能为空"}, status_code=400)
-    result = await consume_claim_token(token, user_id)
+    pair_code = str(body.get("pair_code") or "").strip()
+    if not token and not pair_code:
+        return JSONResponse({"error": "token 或 pair_code 不能为空"}, status_code=400)
+    result = await consume_claim_token(user_id=user_id, token=token, pair_code=pair_code)
     if result["status"] == "invalid":
-        return JSONResponse({"error": "claim token 无效"}, status_code=404)
+        return JSONResponse({"error": "配对码或 claim token 无效"}, status_code=404)
     if result["status"] == "expired":
-        return JSONResponse({"error": "claim token 已失效"}, status_code=410)
+        return JSONResponse({"error": "配对码或 claim token 已失效"}, status_code=410)
     return {"ok": True, **result}
 
-
-# ── Device discovery (public, no auth) ────────────────────────
+# ── Device discovery ──────────────────────────────────────────
 
 
 @app.get("/api/devices/recent")
-async def recent_devices(minutes: int = Query(default=DISCOVERY_WINDOW_MINUTES, ge=1, le=60)):
-    """Return MACs seen in the last N minutes (for post-flash discovery)."""
+async def recent_devices(
+    minutes: int = Query(default=DISCOVERY_WINDOW_MINUTES, ge=1, le=60),
+    admin_auth: None = Depends(require_admin),
+):
+    """Return recently online devices for admin diagnostics."""
     from datetime import datetime, timedelta
     from core.db import get_main_db
     cutoff = (datetime.now() - timedelta(minutes=minutes)).isoformat()

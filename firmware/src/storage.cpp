@@ -15,6 +15,7 @@ String cfgServer;
 int    cfgSleepMin;
 String cfgConfigJson;
 String cfgDeviceToken;
+String cfgPendingPairCode;
 
 // ── Load config from NVS ────────────────────────────────────
 
@@ -32,6 +33,7 @@ void loadConfig() {
         cfgSleepMin = 60;
         cfgConfigJson = "";
         cfgDeviceToken = "";
+        cfgPendingPairCode = "";
         return;
     }
 
@@ -41,6 +43,7 @@ void loadConfig() {
     cfgSleepMin     = prefs.getInt("sleep_min", 60);
     cfgConfigJson   = prefs.getString("config_json", "");
     cfgDeviceToken  = prefs.getString("device_token", "");
+    cfgPendingPairCode = prefs.getString("pair_code", "");
     prefs.end();
 
     // Sanity checks
@@ -139,4 +142,28 @@ void saveDeviceToken(const String &token) {
     prefs.putString("device_token", token);
     prefs.end();
     cfgDeviceToken = token;
+}
+
+void clearDeviceToken() {
+    prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
+    prefs.remove("device_token");
+    prefs.end();
+    cfgDeviceToken = "";
+}
+
+void savePendingPairCode(const String &code) {
+    prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
+    prefs.putString("pair_code", code);
+    prefs.end();
+    cfgPendingPairCode = code;
+}
+
+void clearPendingPairCode() {
+    prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
+    prefs.remove("pair_code");
+    prefs.end();
+    cfgPendingPairCode = "";
 }

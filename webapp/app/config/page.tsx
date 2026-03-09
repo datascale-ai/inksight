@@ -56,12 +56,6 @@ interface AccessRequestItem {
   created_at: string;
 }
 
-interface DiscoveredDeviceItem {
-  mac: string;
-  last_seen: string | null;
-  has_owner: boolean;
-}
-
 const MODE_META: Record<string, { name: string; tip: string }> = {
   DAILY: { name: "每日", tip: "语录、书籍推荐、冷知识的综合日报" },
   WEATHER: { name: "天气", tip: "实时天气和未来趋势看板" },
@@ -287,11 +281,13 @@ type RuntimeMode = "active" | "interval" | "unknown";
 function ConfigPageInner() {
   const searchParams = useSearchParams();
   const mac = searchParams.get("mac") || "";
-  const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDeviceItem[]>([]);
-
+  const preferMac = searchParams.get("prefer_mac") || "";
+  const prefillCode = searchParams.get("code") || "";
   const [currentUser, setCurrentUser] = useState<{ user_id: number; username: string } | null | undefined>(undefined);
   const [userDevices, setUserDevices] = useState<UserDevice[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
+  const [pairCodeInput, setPairCodeInput] = useState("");
+  const [pairingDevice, setPairingDevice] = useState(false);
   const [bindMacInput, setBindMacInput] = useState("");
   const [bindNicknameInput, setBindNicknameInput] = useState("");
   const [deviceMembers, setDeviceMembers] = useState<DeviceMember[]>([]);
@@ -299,7 +295,6 @@ function ConfigPageInner() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [shareUsernameInput, setShareUsernameInput] = useState("");
-  const [detectingDevice, setDetectingDevice] = useState(false);
   const [macAccessDenied, setMacAccessDenied] = useState(false);
 
   const refreshCurrentUser = useCallback(() => {
@@ -373,6 +368,59 @@ function ConfigPageInner() {
     }
   }, [currentUser, loadPendingRequests, loadUserDevices]);
 
+  useEffect(() => {
+    if (mac) return;
+    const normalizedCode = prefillCode.trim().toUpperCase();
+    if (normalizedCode) {
+      setPairCodeInput((prev) => prev || normalizedCode);
+    }
+    const normalizedMac = preferMac.trim().toUpperCase();
+    if (normalizedMac) {
+      setBindMacInput((prev) => prev || normalizedMac);
+    }
+  }, [mac, preferMac, prefillCode]);
+
+  useEffect(() => {
+    if (mac || !preferMac || !currentUser || devicesLoading) return;
+    const normalizedMac = preferMac.trim().toUpperCase();
+    if (!normalizedMac) return;
+    const alreadyBound = userDevices.some((item) => item.mac.toUpperCase() === normalizedMac);
+    if (alreadyBound) {
+      window.location.href = `/config?mac=${encodeURIComponent(normalizedMac)}`;
+    }
+  }, [currentUser, devicesLoading, mac, preferMac, userDevices]);
+
+  const handlePairDevice = async () => {
+    const normalized = pairCodeInput.trim().toUpperCase();
+    if (!normalized) return;
+    setPairingDevice(true);
+    try {
+      const res = await fetch("/api/claim/consume", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pair_code: normalized }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || "配对失败", "error");
+        return;
+      }
+      setPairCodeInput("");
+      if (data.status === "claimed" || data.status === "already_member" || data.status === "active") {
+        await loadUserDevices();
+        await loadPendingRequests();
+        window.location.href = `/config?mac=${encodeURIComponent(data.mac)}`;
+        return;
+      }
+      await loadPendingRequests();
+      showToast("已提交绑定申请，等待 owner 同意", "info");
+    } catch {
+      showToast("配对失败", "error");
+    } finally {
+      setPairingDevice(false);
+    }
+  };
+
   const handleBindDevice = async (deviceMac: string, nickname?: string) => {
     try {
       const res = await fetch("/api/user/devices", {
@@ -381,16 +429,19 @@ function ConfigPageInner() {
         body: JSON.stringify({ mac: deviceMac, nickname: nickname || "" }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        await loadUserDevices();
-        await loadPendingRequests();
-        setBindMacInput("");
-        setBindNicknameInput("");
-        setDiscoveredDevices((prev) => prev.filter((item) => item.mac.toUpperCase() !== deviceMac.toUpperCase()));
-        return data;
+      if (!res.ok) {
+        showToast(data.error || "绑定失败", "error");
+        return null;
       }
-    } catch { /* ignore */ }
-    return null;
+      setBindMacInput("");
+      setBindNicknameInput("");
+      await loadUserDevices();
+      await loadPendingRequests();
+      return data;
+    } catch {
+      showToast("绑定失败", "error");
+      return null;
+    }
   };
 
   const handleUnbindDevice = async (deviceMac: string) => {
@@ -473,36 +524,6 @@ function ConfigPageInner() {
     }
   };
 
-  const handleDetectDevice = async () => {
-    setDetectingDevice(true);
-    try {
-      const res = await fetch("/api/discovery?minutes=15", { cache: "no-store" });
-      if (!res.ok) {
-        showToast("检测设备失败", "error");
-        return;
-      }
-      const data = await res.json();
-      const owned = new Set(userDevices.map((d) => d.mac.toUpperCase()));
-      const devices: DiscoveredDeviceItem[] = (data.devices || [])
-        .filter((d: DiscoveredDeviceItem) => d?.mac && !owned.has(d.mac.toUpperCase()))
-        .map((d: DiscoveredDeviceItem) => ({
-          mac: d.mac,
-          last_seen: typeof d.last_seen === "string" ? d.last_seen : null,
-          has_owner: Boolean(d.has_owner),
-        }));
-      setDiscoveredDevices(devices);
-      if (devices.length > 0) {
-        showToast(`已检测到 ${devices.length} 台最近上线设备`, "success");
-      } else {
-        showToast("未检测到设备，可按复位按钮让设备重新上线后再试", "info");
-      }
-    } catch {
-      showToast("检测设备失败", "error");
-    } finally {
-      setDetectingDevice(false);
-    }
-  };
-
   const [activeTab, setActiveTab] = useState<TabId>("modes");
   const [config, setConfig] = useState<DeviceConfig>({});
   const [selectedModes, setSelectedModes] = useState<Set<string>>(new Set(["STOIC", "ZEN", "DAILY"]));
@@ -559,6 +580,18 @@ function ConfigPageInner() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  const nextConfigPath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (mac) {
+      params.set("mac", mac);
+    } else {
+      if (preferMac) params.set("prefer_mac", preferMac);
+      if (prefillCode) params.set("code", prefillCode);
+    }
+    const query = params.toString();
+    return query ? `/config?${query}` : "/config";
+  }, [mac, preferMac, prefillCode]);
 
   useEffect(() => {
     fetch("/api/modes").then((r) => r.json()).then((d) => {
@@ -1233,7 +1266,7 @@ function ConfigPageInner() {
             <div>
               <p className="font-medium">请先登录</p>
               <p className="text-xs mt-0.5">{mac ? "登录后才能配置设备。" : "登录后可以管理你的设备列表。"}</p>
-              <Link href={`/login?next=${encodeURIComponent(mac ? `/config?mac=${encodeURIComponent(mac)}` : "/config")}`}>
+              <Link href={`/login?next=${encodeURIComponent(nextConfigPath)}`}>
                 <Button size="sm" className="mt-2">登录 / 注册</Button>
               </Link>
             </div>
@@ -1296,12 +1329,56 @@ function ConfigPageInner() {
 
             <div className="p-3 rounded-sm border border-ink/10 bg-paper">
               <p className="text-sm font-medium text-ink mb-2 flex items-center gap-1">
-                <Monitor size={14} /> 检测设备
+                <Monitor size={14} /> 配对设备
               </p>
-              <div className="mt-2">
-                <Button size="sm" variant="outline" onClick={handleDetectDevice} disabled={detectingDevice}>
-                  {detectingDevice ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                  检测设备
+              <p className="text-xs text-ink-light mb-3">在设备配网页查看配对码，输入后即可认领或申请绑定设备。</p>
+              <div className="flex gap-2 flex-wrap items-center">
+                <input
+                  value={pairCodeInput}
+                  onChange={(e) => setPairCodeInput(e.target.value.toUpperCase())}
+                  placeholder="配对码"
+                  className="w-full sm:w-64 rounded-sm border border-ink/20 px-3 py-1.5 text-sm font-mono uppercase tracking-[0.2em]"
+                />
+                <Button size="sm" variant="outline" onClick={handlePairDevice} disabled={!pairCodeInput.trim() || pairingDevice}>
+                  {pairingDevice ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+                  立即配对
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-sm border border-ink/10 bg-paper">
+              <p className="text-sm font-medium text-ink mb-2 flex items-center gap-1">
+                <Plus size={14} /> 按 MAC 手动绑定
+              </p>
+              <p className="text-xs text-ink-light mb-3">请优先使用配对码配对。</p>
+              <div className="flex gap-2 flex-wrap items-center">
+                <input
+                  value={bindMacInput}
+                  onChange={(e) => setBindMacInput(e.target.value)}
+                  placeholder="MAC 地址 (如 AA:BB:CC:DD:EE:FF)"
+                  className="w-full sm:w-[360px] rounded-sm border border-ink/20 px-3 py-1.5 text-sm font-mono"
+                />
+                <input
+                  value={bindNicknameInput}
+                  onChange={(e) => setBindNicknameInput(e.target.value)}
+                  placeholder="别名（可选）"
+                  className="w-32 rounded-sm border border-ink/20 px-3 py-1.5 text-sm"
+                />
+                <Button size="sm" variant="outline" onClick={async () => {
+                  const targetMac = bindMacInput.trim();
+                  if (!targetMac) return;
+                  const result = await handleBindDevice(targetMac, bindNicknameInput.trim());
+                  if (!result) return;
+                  if (result.status === "claimed" || result.status === "active") {
+                    showToast("设备已绑定", "success");
+                    window.location.href = `/config?mac=${encodeURIComponent(targetMac)}`;
+                    return;
+                  }
+                  if (result.status === "pending_approval") {
+                    showToast("已提交绑定申请，等待 owner 同意", "info");
+                  }
+                }}>
+                  绑定
                 </Button>
               </div>
             </div>
@@ -1361,75 +1438,6 @@ function ConfigPageInner() {
               </div>
             )}
 
-            {discoveredDevices.length > 0 && (
-              <div className="space-y-2">
-                {discoveredDevices.map((device) => (
-                  <div key={device.mac} className="flex items-start gap-2 p-3 rounded-sm border border-green-200 bg-green-50 text-sm text-green-800">
-                    <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="font-medium">已检测到设备上线: {device.mac}</p>
-                      <p className="text-xs mt-1">
-                        {device.has_owner ? "该设备已有 owner，可申请绑定并等待对方同意。" : "该设备当前没有 owner，可直接绑定。"}
-                      </p>
-                      {device.last_seen && (
-                        <p className="text-xs mt-1">最近上报: {new Date(device.last_seen).toLocaleString("zh-CN")}</p>
-                      )}
-                      <div className="mt-2 flex items-center gap-2">
-                        <Button size="sm" onClick={() => {
-                          handleBindDevice(device.mac).then((result) => {
-                            if (!result) {
-                              showToast(device.has_owner ? "申请绑定失败" : "绑定失败", "error");
-                              return;
-                            }
-                            if (result.status === "claimed" || result.status === "active") {
-                              window.location.href = `/config?mac=${encodeURIComponent(device.mac)}`;
-                              return;
-                            }
-                            showToast("已提交绑定申请，等待 owner 同意", "info");
-                          });
-                        }}>
-                          {device.has_owner ? "申请绑定" : "直接绑定"}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Manual bind */}
-            <div className="p-3 rounded-sm border border-ink/10 bg-paper">
-              <p className="text-sm font-medium text-ink mb-2 flex items-center gap-1">
-                <Plus size={14} /> 手动添加设备
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                <input
-                  value={bindMacInput}
-                  onChange={(e) => setBindMacInput(e.target.value)}
-                  placeholder="MAC 地址 (如 AA:BB:CC:DD:EE:FF)"
-                  className="flex-1 min-w-[200px] rounded-sm border border-ink/20 px-3 py-1.5 text-sm font-mono"
-                />
-                <input
-                  value={bindNicknameInput}
-                  onChange={(e) => setBindNicknameInput(e.target.value)}
-                  placeholder="别名（可选）"
-                  className="w-32 rounded-sm border border-ink/20 px-3 py-1.5 text-sm"
-                />
-                <Button size="sm" onClick={async () => {
-                  if (!bindMacInput.trim()) return;
-                  const result = await handleBindDevice(bindMacInput.trim(), bindNicknameInput.trim());
-                  if (!result) {
-                    showToast("绑定失败（MAC 无效或设备不可用）", "error");
-                  } else if (result.status === "claimed" || result.status === "active") {
-                    showToast("设备已绑定", "success");
-                  } else if (result.status === "pending_approval") {
-                    showToast("已提交绑定申请，等待 owner 同意", "info");
-                  }
-                }}>
-                  绑定
-                </Button>
-              </div>
-            </div>
           </div>
         )}
       </div>
