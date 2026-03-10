@@ -1,7 +1,8 @@
 [English](README.md) | 中文
 
-👋 欢迎加入我们 [Discord](https://discord.gg/5Ne6D4YNf) and [QQ](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=kha7gD4FzS3ld_f9bx_TlLIj94Oyoip1&authKey=n4yACMiVaMagSs5HUH5HLw%2BhXdKRFjCDI4rAt7zdVym7yTeXwMxTkWqUjE9jzjXo&noverify=0&group_code=1026120682)
+👋 欢迎加入我们 [Discord](https://discord.gg/5Ne6D4YNf) and [QQ:1026120682](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=kha7gD4FzS3ld_f9bx_TlLIj94Oyoip1&authKey=n4yACMiVaMagSs5HUH5HLw%2BhXdKRFjCDI4rAt7zdVym7yTeXwMxTkWqUjE9jzjXo&noverify=0&group_code=1026120682)
 
+![QQ](images/QQ.jpg)
 
 # InkSight | inco (墨鱼)
 
