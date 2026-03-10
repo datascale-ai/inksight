@@ -212,6 +212,16 @@ async def _ensure_web_or_device_access(
 # ── Rate limiting ────────────────────────────────────────────
 
 
+class _NoopLimiter:
+    """A shunt limiter for downgrading, which implements the same interface but does not impose any restrictions."""
+    def __init__(self, *args, **kwargs):
+        pass
+    def limit(self, *args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
+
 def _rate_limit_key(request: Request) -> str:
     """Use MAC query param if present, otherwise fall back to client IP."""
     mac = request.query_params.get("mac")
@@ -220,7 +230,11 @@ def _rate_limit_key(request: Request) -> str:
     return get_remote_address(request)
 
 
-limiter = Limiter(key_func=_rate_limit_key)
+try:
+    limiter = Limiter(key_func=_rate_limit_key)
+except Exception as e:
+    logging.warning("Rate limiter disabled due to init error: %s", e)
+    limiter = _NoopLimiter()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
