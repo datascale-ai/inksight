@@ -4,6 +4,7 @@ import logging
 import time
 import httpx
 import random
+from json import JSONDecodeError
 from datetime import datetime
 from typing import Any
 
@@ -96,7 +97,8 @@ async def get_holiday_info(date: datetime) -> dict:
                 }
         else:
             return {"is_holiday": False, "holiday_name": "", "is_workday": False}
-    except Exception:
+    except (httpx.HTTPError, JSONDecodeError, TypeError, ValueError):
+        logger.warning("[Context] Failed to fetch holiday info for %s", date_str, exc_info=True)
         return {"is_holiday": False, "holiday_name": "", "is_workday": False}
 
 
@@ -128,8 +130,8 @@ async def get_upcoming_holiday(now: datetime) -> dict:
                     "date": holiday_date.strftime("%m月%d日"),
                     "holiday_duration": data.get("days", 0),
                 }
-    except Exception:
-        pass
+    except (httpx.HTTPError, JSONDecodeError, TypeError, ValueError):
+        logger.warning("[Context] Failed to fetch upcoming holiday", exc_info=True)
 
     return {"days_until": 0, "holiday_name": "", "date": "", "holiday_duration": 0}
 
@@ -150,8 +152,8 @@ async def get_date_context() -> dict:
         lunar_festival = LUNAR_FESTIVALS.get((lunar.lunar_month, lunar.lunar_day), "")
         if lunar_festival and not festival:
             festival = lunar_festival
-    except Exception:
-        pass
+    except ValueError:
+        logger.warning("[Context] Failed to resolve lunar date for %s", now.isoformat(), exc_info=True)
     
     holiday_info = await get_holiday_info(now)
     if holiday_info["holiday_name"] and not festival:
@@ -222,7 +224,8 @@ async def get_weather(
             "weather_code": current["weather_code"],
             "weather_str": f"{round(current['temperature_2m'])}°C",
         }
-    except Exception:
+    except (httpx.HTTPError, KeyError, TypeError, ValueError, Exception):
+        logger.warning("[Context] Failed to fetch weather for city=%s lat=%s lon=%s", city, lat, lon, exc_info=True)
         return {"temp": 0, "weather_code": -1, "weather_str": "--°C"}
 
 
@@ -367,7 +370,8 @@ async def get_weather_forecast(
             try:
                 idx = int((deg % 360) / 45 + 0.5) % 8
                 return dirs[idx]
-            except Exception:
+            except (TypeError, ValueError):
+                logger.warning("[Context] Invalid wind direction value: %s", deg, exc_info=True)
                 return ""
 
         today_wind_dir = ""
@@ -393,13 +397,15 @@ async def get_weather_forecast(
             try:
                 sr = datetime.fromisoformat(sunrises[0])
                 sunrise_str = sr.strftime("%H:%M")
-            except Exception:
+            except (TypeError, ValueError):
+                logger.warning("[Context] Failed to parse sunrise value: %s", sunrises[0], exc_info=True)
                 sunrise_str = ""
         if sunsets:
             try:
                 ss = datetime.fromisoformat(sunsets[0])
                 sunset_str = ss.strftime("%H:%M")
-            except Exception:
+            except (TypeError, ValueError):
+                logger.warning("[Context] Failed to parse sunset value: %s", sunsets[0], exc_info=True)
                 sunset_str = ""
 
         return {
@@ -418,8 +424,8 @@ async def get_weather_forecast(
             # 仅返回“未来 4 天”的预报（不含今天）
             "forecast": full_forecast[1:5] if len(full_forecast) > 1 else [],
         }
-    except Exception as e:
-        logger.warning(f"[WeatherForecast] Failed to get weather forecast: {e}")
+    except (httpx.HTTPError, KeyError, TypeError, ValueError, JSONDecodeError) as e:
+        logger.warning(f"[WeatherForecast] Failed to get weather forecast: {e}", exc_info=True)
         return {
             "city": city or DEFAULT_CITY,
             "today_temp": "--",

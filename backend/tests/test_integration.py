@@ -2,14 +2,17 @@
 Integration tests for InkSight API -> render pipeline.
 Uses httpx.AsyncClient with FastAPI TestClient, mocking LLM calls.
 """
+import io
 import json
 import pytest
+from PIL import Image
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
 from api.index import app
 from core.cache import content_cache
 from core.config_store import init_db
+from core.mode_registry import reset_registry
 from core.stats_store import init_stats_db
 from core.cache import init_cache_db
 
@@ -80,6 +83,21 @@ async def provision_device_headers(client: AsyncClient, mac: str) -> dict[str, s
     return {"X-Device-Token": token}
 
 
+async def register_user(client: AsyncClient, username: str, password: str = "pass1234") -> dict:
+    resp = await client.post(
+        "/api/auth/register",
+        json={"username": username, "password": password},
+    )
+    assert resp.status_code == 200
+    return resp.json()
+
+
+def png_payload(width: int = 48, height: int = 48) -> bytes:
+    buf = io.BytesIO()
+    Image.new("1", (width, height), 1).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
 # Render endpoint tests
 # ---------------------------------------------------------------------------
@@ -100,6 +118,22 @@ async def test_render_returns_bmp(client):
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/bmp"
         # BMP magic bytes
+        assert resp.content[:2] == b"BM"
+
+
+@pytest.mark.asyncio
+async def test_render_v1_alias_returns_bmp(client):
+    headers = await provision_device_headers(client, "AA:BB:CC:DD:EE:01")
+    with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
+        resp = await client.get("/api/v1/render", params={
+            "mac": "AA:BB:CC:DD:EE:01",
+            "persona": "STOIC",
+            "v": "3.85",
+            "w": "400",
+            "h": "300",
+        }, headers=headers)
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/bmp"
         assert resp.content[:2] == b"BM"
 
 
@@ -146,6 +180,53 @@ async def test_config_save_and_load(client):
     data = resp.json()
     assert "STOIC" in data["modes"]
     assert "ZEN" in data["modes"]
+
+
+@pytest.mark.asyncio
+async def test_config_history_and_activate_flow(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "admin-secret")
+    mac = "AA:BB:CC:DD:EE:10"
+    headers = await provision_device_headers(client, mac)
+
+    config_a = {
+        "mac": mac,
+        "modes": ["STOIC"],
+        "refreshInterval": 30,
+        "llmProvider": "deepseek",
+        "llmModel": "deepseek-chat",
+    }
+    config_b = {
+        "mac": mac,
+        "modes": ["ZEN"],
+        "refreshInterval": 45,
+        "llmProvider": "deepseek",
+        "llmModel": "deepseek-chat",
+    }
+
+    resp_a = await client.post("/api/config", json=config_a, headers=headers)
+    resp_b = await client.post("/api/v1/config", json=config_b, headers=headers)
+    assert resp_a.status_code == 200
+    assert resp_b.status_code == 200
+    config_a_id = resp_a.json()["config_id"]
+
+    history_resp = await client.get(f"/api/v1/config/{mac}/history", headers=headers)
+    assert history_resp.status_code == 200
+    history = history_resp.json()["configs"]
+    assert len(history) >= 2
+    assert any(cfg["id"] == config_a_id for cfg in history)
+
+    activate_resp = await client.put(
+        f"/api/v1/config/{mac}/activate/{config_a_id}",
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert activate_resp.status_code == 200
+    assert activate_resp.json()["ok"] is True
+
+    active_resp = await client.get(f"/api/config/{mac}", headers=headers)
+    assert active_resp.status_code == 200
+    active = active_resp.json()
+    assert active["id"] == config_a_id
+    assert active["modes"] == ["STOIC"]
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +309,360 @@ async def test_cache_hit(client):
         assert resp2.content[:2] == b"BM"
         # LLM should NOT have been called again for the second render
         assert mock_llm.call_count == first_call_count
+
+
+@pytest.mark.asyncio
+async def test_widget_returns_png(client):
+    mac = "BB:CC:DD:EE:FF:11"
+    headers = await provision_device_headers(client, mac)
+    await client.post(
+        "/api/config",
+        json={
+            "mac": mac,
+            "modes": ["STOIC"],
+            "refreshInterval": 60,
+            "llmProvider": "deepseek",
+            "llmModel": "deepseek-chat",
+        },
+        headers=headers,
+    )
+    with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
+        resp = await client.get(f"/api/v1/widget/{mac}", params={"size": "small"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/png")
+
+
+@pytest.mark.asyncio
+async def test_preview_stream_returns_sse_events(client):
+    headers = await provision_device_headers(client, "CC:DD:EE:FF:00:11")
+    with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
+        resp = await client.get(
+            "/api/preview/stream",
+            params={
+                "mac": "CC:DD:EE:FF:00:11",
+                "persona": "STOIC",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        body = resp.text
+        assert 'event: status' in body
+        assert 'event: result' in body
+        assert '"stage": "done"' in body
+
+
+@pytest.mark.asyncio
+async def test_preview_stream_returns_error_event_on_render_failure(client):
+    headers = await provision_device_headers(client, "CC:DD:EE:FF:00:12")
+    with patch("api.routes.render.build_image", new_callable=AsyncMock, side_effect=RuntimeError("render boom")):
+        resp = await client.get(
+            "/api/preview/stream",
+            params={
+                "mac": "CC:DD:EE:FF:00:12",
+                "persona": "STOIC",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        body = resp.text
+        assert 'event: status' in body
+        assert 'event: error' in body
+        assert 'render boom' in body
+
+
+@pytest.mark.asyncio
+async def test_device_preview_stats_and_share_flow(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "admin-secret")
+    mac = "CC:DD:EE:FF:11:22"
+    headers = await provision_device_headers(client, mac)
+
+    config_resp = await client.post(
+        "/api/config",
+        json={
+            "mac": mac,
+            "modes": ["STOIC"],
+            "refreshInterval": 60,
+            "llmProvider": "deepseek",
+            "llmModel": "deepseek-chat",
+        },
+        headers=headers,
+    )
+    assert config_resp.status_code == 200
+
+    runtime_resp = await client.post(
+        f"/api/device/{mac}/runtime",
+        json={"mode": "active"},
+        headers=headers,
+    )
+    assert runtime_resp.status_code == 200
+    assert runtime_resp.json()["runtime_mode"] == "active"
+
+    heartbeat_resp = await client.post(
+        f"/api/v1/device/{mac}/heartbeat",
+        json={"battery_voltage": 3.91, "wifi_rssi": -42},
+        headers=headers,
+    )
+    assert heartbeat_resp.status_code == 200
+
+    state_resp = await client.get(f"/api/device/{mac}/state", headers=headers)
+    assert state_resp.status_code == 200
+    state = state_resp.json()
+    assert state["runtime_mode"] == "active"
+    assert state["is_online"] is True
+    assert state["refresh_minutes"] == 60
+    assert state["last_seen"]
+
+    preview_resp = await client.post(
+        f"/api/device/{mac}/apply-preview",
+        params={"mode": "STOIC"},
+        content=png_payload(),
+        headers={**headers, "Content-Type": "image/png"},
+    )
+    assert preview_resp.status_code == 200
+
+    render_resp = await client.get("/api/render", params={"mac": mac, "v": "3.91"}, headers=headers)
+    assert render_resp.status_code == 200
+    assert render_resp.headers["x-preview-push"] == "1"
+    assert render_resp.content[:2] == b"BM"
+
+    favorite_resp = await client.post(
+        f"/api/device/{mac}/favorite",
+        json={"mode": "STOIC"},
+        headers=headers,
+    )
+    assert favorite_resp.status_code == 200
+    assert favorite_resp.json()["ok"] is True
+
+    favorites_resp = await client.get(f"/api/device/{mac}/favorites", headers=headers)
+    assert favorites_resp.status_code == 200
+    favorites = favorites_resp.json()["favorites"]
+    assert favorites
+    assert favorites[0]["mode_id"] == "STOIC"
+
+    history_resp = await client.get(f"/api/device/{mac}/history", headers=headers)
+    assert history_resp.status_code == 200
+    history = history_resp.json()["history"]
+    assert history
+
+    share_resp = await client.get(f"/api/device/{mac}/share", headers=headers)
+    assert share_resp.status_code == 200
+    assert share_resp.headers["content-type"].startswith("image/png")
+
+    stats_resp = await client.get(f"/api/stats/{mac}", headers=headers)
+    assert stats_resp.status_code == 200
+    stats = stats_resp.json()
+    assert stats["total_renders"] >= 1
+    assert stats["heartbeats"]
+
+    renders_resp = await client.get(f"/api/v1/stats/{mac}/renders", headers=headers)
+    assert renders_resp.status_code == 200
+    assert renders_resp.json()["renders"]
+
+    recent_resp = await client.get(
+        "/api/devices/recent",
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert recent_resp.status_code == 200
+    assert any(device["mac"] == mac for device in recent_resp.json()["devices"])
+
+    overview_resp = await client.get(
+        "/api/v1/stats/overview",
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert overview_resp.status_code == 200
+    overview = overview_resp.json()
+    assert overview["total_devices"] >= 1
+    assert overview["total_renders"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_auth_claim_and_membership_approval_flow(client):
+    mac = "DD:EE:FF:00:11:22"
+    headers = await provision_device_headers(client, mac)
+
+    claim_resp = await client.post(f"/api/device/{mac}/claim-token", headers=headers)
+    assert claim_resp.status_code == 200
+    claim = claim_resp.json()
+    assert claim["ok"] is True
+
+    owner = await register_user(client, "owner_user")
+    consume_resp = await client.post("/api/claim/consume", json={"token": claim["token"]})
+    assert consume_resp.status_code == 200
+    consume = consume_resp.json()
+    assert consume["status"] == "claimed"
+    assert consume["mac"] == mac
+
+    me_resp = await client.get("/api/auth/me")
+    assert me_resp.status_code == 200
+    assert me_resp.json()["user_id"] == owner["user_id"]
+
+    devices_resp = await client.get("/api/user/devices")
+    assert devices_resp.status_code == 200
+    devices = devices_resp.json()["devices"]
+    assert any(device["mac"] == mac for device in devices)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as member_client:
+        member = await register_user(member_client, "member_user")
+
+        bind_resp = await member_client.post("/api/user/devices", json={"mac": mac, "nickname": "Shared"})
+        assert bind_resp.status_code == 200
+        assert bind_resp.json()["status"] == "pending_approval"
+
+        requests_resp = await client.get("/api/user/devices/requests")
+        assert requests_resp.status_code == 200
+        requests = requests_resp.json()["requests"]
+        assert len(requests) == 1
+        request_id = requests[0]["id"]
+
+        approve_resp = await client.post(f"/api/user/devices/requests/{request_id}/approve")
+        assert approve_resp.status_code == 200
+        assert approve_resp.json()["ok"] is True
+
+        member_devices_resp = await member_client.get("/api/user/devices")
+        assert member_devices_resp.status_code == 200
+        member_devices = member_devices_resp.json()["devices"]
+        assert any(device["mac"] == mac and device["role"] == "member" for device in member_devices)
+
+        members_resp = await client.get(f"/api/user/devices/{mac}/members")
+        assert members_resp.status_code == 200
+        members = members_resp.json()["members"]
+        assert len(members) == 2
+        assert any(item["user_id"] == owner["user_id"] and item["role"] == "owner" for item in members)
+        assert any(item["user_id"] == member["user_id"] and item["role"] == "member" for item in members)
+
+        remove_resp = await client.delete(f"/api/user/devices/{mac}/members/{member['user_id']}")
+        assert remove_resp.status_code == 200
+        assert remove_resp.json()["ok"] is True
+
+        member_devices_after_resp = await member_client.get("/api/user/devices")
+        assert member_devices_after_resp.status_code == 200
+        assert not any(device["mac"] == mac for device in member_devices_after_resp.json()["devices"])
+
+    logout_resp = await client.post("/api/auth/logout")
+    assert logout_resp.status_code == 200
+    me_after_logout = await client.get("/api/auth/me")
+    assert me_after_logout.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Modes routes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_modes_v1_alias_returns_mode_list(client):
+    resp = await client.get("/api/v1/modes")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert "modes" in payload
+    assert isinstance(payload["modes"], list)
+    assert payload["modes"]
+    assert "mode_id" in payload["modes"][0]
+
+
+@pytest.mark.asyncio
+async def test_custom_modes_end_to_end(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "admin-secret")
+    from api.routes import modes as modes_routes
+
+    custom_dir = tmp_path / "custom_modes"
+    custom_dir.mkdir()
+    monkeypatch.setattr(modes_routes, "CUSTOM_JSON_DIR", str(custom_dir))
+    reset_registry()
+
+    mode_def = {
+        "mode_id": "E2E_CUSTOM",
+        "display_name": "E2E Custom",
+        "icon": "star",
+        "cacheable": True,
+        "description": "integration test custom mode",
+        "content": {
+            "type": "static",
+            "static_data": {"text": "hello custom"},
+        },
+        "layout": {
+            "status_bar": {"line_width": 1},
+            "body": [
+                {
+                    "type": "centered_text",
+                    "field": "text",
+                    "font": "noto_serif_regular",
+                    "font_size": 16,
+                    "vertical_center": True,
+                }
+            ],
+            "footer": {"label": "E2E"},
+        },
+    }
+
+    preview_resp = await client.post(
+        "/api/v1/modes/custom/preview",
+        json={"mode_def": mode_def, "w": 400, "h": 300},
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert preview_resp.status_code == 200
+    assert preview_resp.headers["content-type"].startswith("image/png")
+
+    with patch("core.mode_generator.generate_mode_definition", new_callable=AsyncMock, return_value=mode_def):
+        generate_resp = await client.post(
+            "/api/modes/generate",
+            json={"description": "generate a custom mode"},
+            headers={"Authorization": "Bearer admin-secret"},
+        )
+    assert generate_resp.status_code == 200
+    assert generate_resp.json()["mode_id"] == "E2E_CUSTOM"
+
+    create_resp = await client.post(
+        "/api/modes/custom",
+        json=mode_def,
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert create_resp.status_code == 200
+    assert create_resp.json()["ok"] is True
+
+    get_resp = await client.get("/api/modes/custom/E2E_CUSTOM")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["display_name"] == "E2E Custom"
+
+    delete_resp = await client.delete(
+        "/api/v1/modes/custom/E2E_CUSTOM",
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert delete_resp.status_code == 200
+    assert delete_resp.json()["ok"] is True
+
+    missing_resp = await client.get("/api/modes/custom/E2E_CUSTOM")
+    assert missing_resp.status_code == 404
+
+    reset_registry()
+
+
+# ---------------------------------------------------------------------------
+# Legacy pages routing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_config_page_bridge_and_legacy_page(client):
+    bridge_resp = await client.get("/config")
+    assert bridge_resp.status_code == 200
+    assert "Device configuration moved to the web app." in bridge_resp.text
+    assert "/legacy/config" in bridge_resp.text
+
+    legacy_resp = await client.get("/legacy/config")
+    assert legacy_resp.status_code == 200
+    assert "legacy-console-banner" not in legacy_resp.text
+    assert "/webconfig/role-banner.js" in legacy_resp.text
+
+
+@pytest.mark.asyncio
+async def test_config_page_redirects_to_primary_webapp_when_configured(client, monkeypatch):
+    monkeypatch.setenv("INKSIGHT_PRIMARY_WEBAPP_URL", "https://app.example.com")
+    resp = await client.get("/config", params={"mac": "AA:BB:CC:DD:EE:FF"})
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "https://app.example.com/config?mac=AA:BB:CC:DD:EE:FF"
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import get_supported_modes
 
@@ -187,3 +187,40 @@ class ConfigRequest(BaseModel):
             if item:
                 cleaned[key] = item
         return cleaned
+
+
+class RenderQuery(BaseModel):
+    """渲染端点 Query 参数模型。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    v: float = Field(default=3.3, description="Battery voltage")
+    mac: Optional[str] = Field(default=None, description="Device MAC address")
+    persona: Optional[str] = Field(default=None, description="Force persona")
+    rssi: Optional[int] = Field(default=None, description="WiFi RSSI (dBm)")
+    refresh_min: Optional[int] = Field(default=None, ge=1, le=1440, description="Device effective refresh interval in minutes")
+    w: int = Field(default=400, ge=100, le=1600, description="Screen width in pixels")
+    h: int = Field(default=300, ge=100, le=1200, description="Screen height in pixels")
+    next_mode: Optional[int] = Field(default=None, alias="next", description="1 = advance to next mode")
+
+    @field_validator("mac")
+    @classmethod
+    def validate_optional_mac(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return ConfigRequest.validate_mac(v)
+
+
+class DeviceHeartbeatRequest(BaseModel):
+    """设备心跳请求体。"""
+
+    battery_voltage: Optional[float] = Field(default=3.3, ge=0.0, le=10.0)
+    wifi_rssi: Optional[int] = Field(default=None, ge=-150, le=0)
+
+
+class OkResponse(BaseModel):
+    ok: bool = True
+
+
+class ConfigSaveResponse(OkResponse):
+    config_id: int

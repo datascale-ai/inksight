@@ -4,12 +4,11 @@ import datetime
 import json
 import os
 import re
-import traceback
 import xml.etree.ElementTree as ET
 
 import logging
 import httpx
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -21,6 +20,15 @@ from tenacity import (
 from .errors import LLMKeyMissingError
 
 logger = logging.getLogger(__name__)
+
+_LLM_RECOVERABLE_ERRORS = (
+    LLMKeyMissingError,
+    OpenAIError,
+    httpx.HTTPError,
+    ConnectionError,
+    TimeoutError,
+    ValueError,
+)
 
 try:
     import dashscope
@@ -295,10 +303,7 @@ async def generate_content(
 
     try:
         text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8)
-    except ValueError as e:
-        logger.error(f"[LLM] ✗ FAILED - ValueError: {e}")
-        return _fallback_content(persona)
-    except Exception as e:
+    except _LLM_RECOVERABLE_ERRORS as e:
         logger.error(f"[LLM] ✗ FAILED - {type(e).__name__}: {e}")
         return _fallback_content(persona)
 
@@ -392,7 +397,7 @@ async def fetch_hn_top_stories(limit: int = 3) -> list[dict]:
             logger.info(f"[HN] Fetched {len(stories)} stories (concurrent)")
             return stories
 
-    except Exception as e:
+    except (httpx.HTTPError, ValueError, TypeError) as e:
         logger.error(f"[HN] Error: {e}")
         return []
 
@@ -449,7 +454,7 @@ async def fetch_ph_top_product() -> dict:
             logger.info(f"[PH] Fetched product: {product['name']}")
             return product
 
-    except Exception as e:
+    except (httpx.HTTPError, ET.ParseError) as e:
         logger.exception("[PH] Error fetching Product Hunt product")
         return {}
 
@@ -472,7 +477,7 @@ async def fetch_v2ex_hot(limit: int = 3) -> list[dict]:
                     for t in topics
                 ]
             logger.error(f"[V2EX] Failed to fetch hot topics: {resp.status_code}")
-    except Exception as e:
+    except (httpx.HTTPError, ValueError, TypeError) as e:
         logger.error(f"[V2EX] Error: {e}")
     return []
 
@@ -508,7 +513,7 @@ Hacker News Top 3:
         insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7)
         logger.info(f"[BRIEFING] Generated insight: {insight[:50]}...")
         return insight
-    except Exception as e:
+    except _LLM_RECOVERABLE_ERRORS as e:
         logger.error(f"[BRIEFING] Failed to generate insight: {e}")
         return "今日科技圈依然精彩，开发者们在不断探索新的可能性。"
 
@@ -597,7 +602,7 @@ async def summarize_briefing_content(
 
         return summarized_stories, summarized_ph
 
-    except Exception as e:
+    except _LLM_RECOVERABLE_ERRORS + (json.JSONDecodeError, TypeError) as e:
         logger.error(f"[BRIEFING] Batch summarize failed, returning originals: {e}")
         return stories, ph_product
 
@@ -766,7 +771,7 @@ async def generate_artwall_content(
         title_text = await _call_llm("deepseek", "deepseek-chat", title_prompt)
         artwork_title = title_text.strip('"').strip("「」") or artwork_title
         logger.info(f"[ARTWALL] Generated title: {artwork_title}")
-    except Exception as e:
+    except _LLM_RECOVERABLE_ERRORS as e:
         # 标题模型失败时继续执行文生图，避免整条 ARTWALL 流程直接降级为空图
         logger.warning(f"[ARTWALL] Title generation failed, use fallback title: {e}")
 
@@ -853,7 +858,14 @@ async def generate_artwall_content(
                 "prompt": image_prompt,
             }
 
-    except Exception as e:
+    except (
+        httpx.HTTPError,
+        OpenAIError,
+        OSError,
+        TypeError,
+        ValueError,
+        AttributeError,
+    ) as e:
         logger.exception("[ARTWALL] Failed to generate artwall content")
         return {
             "artwork_title": artwork_title,
@@ -940,7 +952,7 @@ async def generate_recipe_content(
             "nutrition": data.get("nutrition", "蛋白质✓ 膳食纤维✓ 维生素C✓ 铁✓"),
         }
 
-    except Exception as e:
+    except _LLM_RECOVERABLE_ERRORS + (json.JSONDecodeError, TypeError) as e:
         logger.exception("[RECIPE] Failed to generate recipe content")
         return {
             "season": season_map.get(month, f"{month}月"),
@@ -949,5 +961,3 @@ async def generate_recipe_content(
             "dinner": {"meat": "清蒸鲈鱼", "veg": "蒜蓉西兰花", "staple": "紫菜蛋花汤"},
             "nutrition": "蛋白质✓ 膳食纤维✓ 维生素C✓ 铁✓",
         }
-
-

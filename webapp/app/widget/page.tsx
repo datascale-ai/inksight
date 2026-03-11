@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -49,12 +50,17 @@ function WidgetContent() {
       }}
     >
       {imgSrc ? (
-        <img
+        <Image
           src={imgSrc}
           alt="InkSight Widget"
+          width={800}
+          height={480}
+          unoptimized
           style={{
             maxWidth: "100%",
             maxHeight: "100%",
+            width: "auto",
+            height: "auto",
             borderRadius: "8px",
           }}
         />

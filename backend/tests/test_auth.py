@@ -105,29 +105,29 @@ class TestTokenProvisioning:
     @pytest.mark.asyncio
     async def test_provision_new_device(self, monkeypatch):
         """新设备首次请求时获得 Token。"""
-        from api import index
+        from api.routes import device as device_routes
 
         generated_token = "test-token-abc"
         async def _fake_get_state(mac):
             return None
         async def _fake_generate(mac):
             return generated_token
-        monkeypatch.setattr(index, "get_device_state", _fake_get_state)
-        monkeypatch.setattr(index, "generate_device_token", _fake_generate)
+        monkeypatch.setattr(device_routes, "get_device_state", _fake_get_state)
+        monkeypatch.setattr(device_routes, "generate_device_token", _fake_generate)
 
-        resp = await index.provision_device_token("AA:BB:CC:DD:EE:FF")
+        resp = await device_routes.provision_device_token("AA:BB:CC:DD:EE:FF")
         assert resp["token"] == generated_token
 
     @pytest.mark.asyncio
     async def test_provision_existing_device_returns_existing(self, monkeypatch):
         """已有 Token 的设备返回已有 Token。"""
-        from api import index
+        from api.routes import device as device_routes
 
         async def _fake_get_state(mac):
             return {"auth_token": "existing-token"}
-        monkeypatch.setattr(index, "get_device_state", _fake_get_state)
+        monkeypatch.setattr(device_routes, "get_device_state", _fake_get_state)
 
-        resp = await index.provision_device_token("AA:BB:CC:DD:EE:FF")
+        resp = await device_routes.provision_device_token("AA:BB:CC:DD:EE:FF")
         assert resp["token"] == "existing-token"
 
 

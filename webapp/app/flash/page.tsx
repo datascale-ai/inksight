@@ -10,7 +10,6 @@ import {
   Zap,
   CheckCircle2,
   AlertCircle,
-  Wifi,
   Terminal,
   RefreshCw,
   X,
@@ -352,7 +351,7 @@ export default function FlashPage() {
     let port: unknown;
     try {
       port = await navigator.serial.requestPort();
-    } catch (e) {
+    } catch {
       addLog("用户取消了串口选择或无可用串口");
       setStatus("ready");
       return;

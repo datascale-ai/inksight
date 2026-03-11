@@ -3,6 +3,10 @@ InkSight 配置文件
 包含所有常量、映射表和配置项
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ==================== 屏幕配置 ====================
 SCREEN_WIDTH = 400   # Default; overridable per-request via w/h query params
 SCREEN_HEIGHT = 300  # Default; overridable per-request via w/h query params
@@ -273,7 +277,8 @@ def get_supported_modes() -> set[str]:
     try:
         from .mode_registry import get_registry
         return get_registry().get_supported_ids()
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
+        logger.warning("[Config] Falling back to builtin supported modes", exc_info=True)
         return _BUILTIN_MODE_IDS
 
 
@@ -282,5 +287,6 @@ def get_cacheable_modes() -> set[str]:
     try:
         from .mode_registry import get_registry
         return get_registry().get_cacheable_ids()
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
+        logger.warning("[Config] Falling back to builtin cacheable modes", exc_info=True)
         return {"STOIC", "ROAST", "ZEN", "DAILY"}

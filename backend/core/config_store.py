@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 PAIR_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
+from migrations import run_main_db_migrations
 from .db import get_main_db
 from .config import (
     DEFAULT_CITY,
@@ -48,67 +49,15 @@ async def init_db():
                 image_provider TEXT DEFAULT 'aliyun',
                 image_model TEXT DEFAULT 'qwen-image-max',
                 countdown_events TEXT DEFAULT '[]',
+                time_slot_rules TEXT DEFAULT '[]',
+                memo_text TEXT DEFAULT '',
                 llm_api_key TEXT DEFAULT '',
                 image_api_key TEXT DEFAULT '',
+                mode_overrides TEXT DEFAULT '{}',
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL
             )
         """)
-        # Migration: add countdown_events column if missing
-        try:
-            await db.execute("ALTER TABLE configs ADD COLUMN countdown_events TEXT DEFAULT '[]'")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add time_slot_rules column if missing
-        try:
-            await db.execute("ALTER TABLE configs ADD COLUMN time_slot_rules TEXT DEFAULT '[]'")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add memo_text column if missing
-        try:
-            await db.execute("ALTER TABLE configs ADD COLUMN memo_text TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add llm_api_key column if missing
-        try:
-            await db.execute("ALTER TABLE configs ADD COLUMN llm_api_key TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add image_provider column if missing
-        try:
-            await db.execute(f"ALTER TABLE configs ADD COLUMN image_provider TEXT DEFAULT '{DEFAULT_IMAGE_PROVIDER}'")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add image_model column if missing
-        try:
-            await db.execute(f"ALTER TABLE configs ADD COLUMN image_model TEXT DEFAULT '{DEFAULT_IMAGE_MODEL}'")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add image_api_key column if missing
-        try:
-            await db.execute("ALTER TABLE configs ADD COLUMN image_api_key TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add mode_overrides column if missing
-        try:
-            await db.execute("ALTER TABLE configs ADD COLUMN mode_overrides TEXT DEFAULT '{}'")
-            await db.commit()
-        except Exception:
-            pass  # Column already exists
 
         await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_mac ON configs(mac)")
 
@@ -121,51 +70,14 @@ async def init_db():
                 last_refresh_at TEXT DEFAULT '',
                 pending_refresh INTEGER DEFAULT 0,
                 pending_mode TEXT DEFAULT '',
+                last_state_poll_at TEXT DEFAULT '',
+                auth_token TEXT DEFAULT '',
+                runtime_mode TEXT DEFAULT 'interval',
+                expected_refresh_min INTEGER DEFAULT 0,
+                last_reconnect_regen_at TEXT DEFAULT '',
                 updated_at TEXT NOT NULL
             )
         """)
-
-        # Migration: add pending_mode column if missing
-        try:
-            await db.execute("ALTER TABLE device_state ADD COLUMN pending_mode TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass
-
-        # Migration: add last_state_poll_at column if missing
-        try:
-            await db.execute("ALTER TABLE device_state ADD COLUMN last_state_poll_at TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass
-
-        # Migration: add auth_token column if missing
-        try:
-            await db.execute("ALTER TABLE device_state ADD COLUMN auth_token TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass
-
-        # Migration: add runtime_mode column if missing
-        try:
-            await db.execute("ALTER TABLE device_state ADD COLUMN runtime_mode TEXT DEFAULT 'interval'")
-            await db.commit()
-        except Exception:
-            pass
-
-        # Migration: add expected_refresh_min column if missing
-        try:
-            await db.execute("ALTER TABLE device_state ADD COLUMN expected_refresh_min INTEGER DEFAULT 0")
-            await db.commit()
-        except Exception:
-            pass
-
-        # Migration: add last_reconnect_regen_at column if missing
-        try:
-            await db.execute("ALTER TABLE device_state ADD COLUMN last_reconnect_regen_at TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass
 
         # User system tables
         await db.execute("""
@@ -217,11 +129,6 @@ async def init_db():
                 created_at TEXT NOT NULL
             )
         """)
-        try:
-            await db.execute("ALTER TABLE device_claim_tokens ADD COLUMN pair_code TEXT DEFAULT ''")
-            await db.commit()
-        except Exception:
-            pass
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_claim_tokens_mac ON device_claim_tokens(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_claim_tokens_pair_code ON device_claim_tokens(pair_code)")
         await db.execute("""
@@ -240,6 +147,13 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_access_requests_mac ON device_access_requests(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_access_requests_user ON device_access_requests(requester_user_id)")
 
+        await run_main_db_migrations(
+            db,
+            defaults={
+                "image_provider": DEFAULT_IMAGE_PROVIDER,
+                "image_model": DEFAULT_IMAGE_MODEL,
+            },
+        )
         await _migrate_legacy_user_devices(db)
         await db.commit()
 

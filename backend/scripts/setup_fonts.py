@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -83,7 +84,7 @@ def _download_file(url: str, target: str, user_agent: str) -> None:
         with os.fdopen(fd, "wb") as tmp_f:
             tmp_f.write(data)
         os.replace(tmp_path, target)
-    except Exception:
+    except OSError:
         os.unlink(tmp_path)
         raise
 
@@ -124,7 +125,13 @@ def _install_vector_fonts(force: bool) -> tuple[int, int]:
         try:
             manifest = _fetch_manifest(family)
             url_maps[family] = _build_url_map(manifest)
-        except Exception as exc:
+        except (
+            json.JSONDecodeError,
+            OSError,
+            TimeoutError,
+            urllib.error.URLError,
+            ValueError,
+        ) as exc:
             print(f"  [ERROR] Failed manifest for {display_name}: {exc}", file=sys.stderr)
             url_maps[family] = {}
 
@@ -140,7 +147,7 @@ def _install_vector_fonts(force: bool) -> tuple[int, int]:
             size_mb = os.path.getsize(target) / (1024 * 1024)
             print(f"  \u2713 {name} ({size_mb:.1f} MB)")
             success_count += 1
-        except Exception as exc:
+        except (OSError, TimeoutError, urllib.error.URLError, ValueError) as exc:
             print(f"  [ERROR] Failed {name}: {exc}", file=sys.stderr)
     return success_count, len(all_needed)
 

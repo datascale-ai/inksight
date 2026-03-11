@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, UnidentifiedImageError
 
 from .config import SCREEN_WIDTH, SCREEN_HEIGHT
 from .patterns.utils import (
@@ -1068,7 +1068,7 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
                 if resp.status_code >= 400:
                     raise ValueError(f"HTTP {resp.status_code}")
                 break
-            except Exception as e:
+            except (httpx.HTTPError, ValueError) as e:
                 last_error = e
                 resp = None
         if resp is None:
@@ -1078,7 +1078,7 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
         mono = img.convert("1")
         ctx.img.paste(mono, (x, y))
         ctx.y = y + height + int(block.get("margin_bottom", 6))
-    except Exception:
+    except (httpx.HTTPError, ValueError, OSError, UnidentifiedImageError):
         logger.warning("[JSONRenderer] Failed to render image block", exc_info=True)
         ctx.draw.rectangle([x, y, x + width, y + height], outline=EINK_FG, width=1)
         placeholder_font = load_font("noto_serif_light", int(12 * ctx.scale))

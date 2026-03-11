@@ -54,6 +54,27 @@ export async function proxyGet(pathWithQuery: string, req?: NextRequest) {
   }
 }
 
+export async function proxyStream(pathWithQuery: string, req?: NextRequest) {
+  const target = `${backendBase}${pathWithQuery}`;
+  try {
+    const res = await fetch(target, { cache: "no-store", headers: passthroughHeaders(req) });
+    return new NextResponse(res.body, {
+      status: res.status,
+      headers: {
+        "content-type": res.headers.get("content-type") || "text/event-stream",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+      },
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "upstream fetch failed";
+    return NextResponse.json(
+      { error: "upstream_unreachable", message: msg, backend: backendBase },
+      { status: 503 },
+    );
+  }
+}
+
 export async function proxyPost(
   path: string,
   req: NextRequest,

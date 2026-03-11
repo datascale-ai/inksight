@@ -3,6 +3,7 @@ Unit tests for content generation helpers (no real LLM calls).
 """
 import json
 import pytest
+import httpx
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from core.content import (
@@ -10,11 +11,15 @@ from core.content import (
     _build_context_str,
     _build_style_instructions,
     _fallback_content,
+    generate_artwall_content,
+    generate_recipe_content,
     generate_content,
     fetch_hn_top_stories,
     fetch_ph_top_product,
+    summarize_briefing_content,
     generate_briefing_content,
 )
+from core.errors import LLMKeyMissingError
 
 
 class TestCleanJsonResponse:
@@ -129,7 +134,7 @@ class TestGenerateContent:
     @pytest.mark.asyncio
     async def test_llm_failure_returns_fallback(self):
         with patch("core.content._call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.side_effect = Exception("API timeout")
+            mock_llm.side_effect = LLMKeyMissingError("missing key")
             result = await generate_content(
                 persona="DAILY",
                 date_str="2月16日",
@@ -182,13 +187,29 @@ class TestFetchHNStories:
     async def test_failure_returns_empty(self):
         with patch("core.content.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
-            instance.get = AsyncMock(side_effect=Exception("Network error"))
+            instance.get = AsyncMock(side_effect=httpx.ReadTimeout("Network error"))
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
             MockClient.return_value = instance
 
             stories = await fetch_hn_top_stories()
             assert stories == []
+
+    @pytest.mark.asyncio
+    async def test_product_hunt_parse_failure_returns_empty(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"<rss><broken"
+
+        with patch("core.content.httpx.AsyncClient") as MockClient:
+            instance = AsyncMock()
+            instance.get = AsyncMock(return_value=mock_response)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
+
+            product = await fetch_ph_top_product()
+            assert product == {}
 
 
 class TestGenerateBriefingContent:
@@ -229,3 +250,42 @@ class TestGenerateBriefingContent:
             result = await generate_briefing_content()
             assert len(result["hn_items"]) == 2
             assert result["insight"] == "AI 行业持续创新。"
+
+
+class TestBriefingSummaries:
+    @pytest.mark.asyncio
+    async def test_summarize_briefing_content_invalid_json_returns_originals(self):
+        stories = [{"title": "A very long story title that should be summarized", "score": 10}]
+        ph = {"name": "CoolApp", "tagline": "A long English tagline that should also be summarized"}
+
+        with patch("core.content._call_llm", new_callable=AsyncMock, return_value="not-json"):
+            summarized_stories, summarized_ph = await summarize_briefing_content(stories, ph)
+
+        assert summarized_stories == stories
+        assert summarized_ph == ph
+
+
+class TestRecipeAndArtwallFallbacks:
+    @pytest.mark.asyncio
+    async def test_recipe_invalid_json_uses_fallback(self):
+        with patch("core.content._call_llm", new_callable=AsyncMock, return_value="broken json"):
+            result = await generate_recipe_content()
+
+        assert "breakfast" in result
+        assert result["lunch"]["meat"]
+        assert result["nutrition"]
+
+    @pytest.mark.asyncio
+    async def test_artwall_title_failure_keeps_image_prompt_fallback(self):
+        with patch("core.content._call_llm", new_callable=AsyncMock, side_effect=LLMKeyMissingError("missing key")):
+            result = await generate_artwall_content(
+                date_str="2月14日",
+                weather_str="晴 15°C",
+                festival="情人节",
+                image_api_key="",
+                fallback_title="墨韵天成",
+            )
+
+        assert result["artwork_title"] == "墨韵天成"
+        assert result["image_url"] == ""
+        assert result["prompt"]

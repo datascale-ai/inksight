@@ -94,10 +94,10 @@ def _load_bitmap_font(font_name: str, size: int) -> ImageFont.ImageFont | None:
                 return ImageFont.load(path)
             load_size = _bitmap_load_size_from_path(path, size)
             return ImageFont.truetype(path, load_size)
-        except Exception:
+        except OSError:
             if rel not in _bitmap_warned:
                 _bitmap_warned.add(rel)
-                logger.warning(f"[FONT] Failed to load bitmap font: {path}")
+                logger.warning(f"[FONT] Failed to load bitmap font: {path}", exc_info=True)
     return None
 
 
@@ -179,7 +179,8 @@ def get_mode_icon(mode: str) -> Image.Image | None:
         info = get_registry().get_mode_info(mode)
         if info:
             icon_name = info.icon
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
+        logger.warning("[FONT] Falling back to static mode icon mapping for %s", mode, exc_info=True)
         # Registry may be unavailable in some test/bootstrap paths.
         fallback_icons = {
             "DAILY": "sunny",

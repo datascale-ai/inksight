@@ -71,7 +71,7 @@ class TestContentCache:
         assert result is None
 
     def test_cache_key_format(self, cache):
-        assert cache._get_cache_key("AA:BB", "STOIC") == "AA:BB:STOIC"
+        assert cache._get_cache_key("AA:BB", "STOIC") == "AA:BB:STOIC:400x300"
 
     def test_ttl_minutes_calculation(self, cache, config):
         ttl = cache._get_ttl_minutes(config)
@@ -119,6 +119,16 @@ class TestContentCache:
         config = {"modes": ["BRIEFING", "ARTWALL"], "refresh_interval": 60}
         result = await cache.check_and_regenerate_all("AA:BB:CC:DD:EE:FF", config, 3.3)
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_disables_persistent_cache_after_repeated_db_failures(self, cache, config):
+        with patch.object(cache, "_get_from_db", new_callable=AsyncMock, side_effect=RuntimeError("db broken")) as mock_get:
+            for _ in range(4):
+                result = await cache.get("AA:BB:CC:DD:EE:FF", "STOIC", config)
+                assert result is None
+
+        assert mock_get.await_count == 3
+        assert cache._db_disabled_until is not None
 
 
 class TestGenerateSingleMode:

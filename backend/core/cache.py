@@ -46,15 +46,41 @@ class ContentCache:
         self._cache: dict[str, tuple[Image.Image, datetime]] = {}
         self._lock = asyncio.Lock()
         self._regenerating: set[str] = set()
+        self._db_failure_count = 0
+        self._db_disabled_until: datetime | None = None
 
     def _get_cache_key(
         self, mac: str, persona: str,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> str:
         persona = (persona or "").upper()
-        if screen_w == SCREEN_WIDTH and screen_h == SCREEN_HEIGHT:
-            return f"{mac}:{persona}"
         return f"{mac}:{persona}:{screen_w}x{screen_h}"
+
+    def _persistent_cache_available(self) -> bool:
+        if self._db_disabled_until is None:
+            return True
+        if datetime.now() >= self._db_disabled_until:
+            logger.info("[CACHE] Persistent cache DB re-enabled after cooldown")
+            self._db_disabled_until = None
+            self._db_failure_count = 0
+            return True
+        return False
+
+    def _record_db_failure(self, operation: str, exc: Exception):
+        self._db_failure_count += 1
+        logger.warning("[CACHE] Persistent cache %s failed (%s)", operation, exc, exc_info=True)
+        if self._db_failure_count >= 3 and self._db_disabled_until is None:
+            self._db_disabled_until = datetime.now() + timedelta(minutes=5)
+            logger.error(
+                "[CACHE] Persistent cache disabled for 5 minutes after %s consecutive failures",
+                self._db_failure_count,
+            )
+
+    def _record_db_success(self):
+        if self._db_failure_count > 0 or self._db_disabled_until is not None:
+            logger.info("[CACHE] Persistent cache DB recovered")
+        self._db_failure_count = 0
+        self._db_disabled_until = None
 
     def _get_ttl_minutes(self, config: dict) -> int:
         """Calculate cache TTL based on refresh interval and number of modes"""
@@ -84,13 +110,15 @@ class ContentCache:
                     logger.debug(f"[CACHE] {key} expired (TTL={ttl_minutes}min)")
                     del self._cache[key]
             # Try SQLite persistent cache
-            try:
-                img = await self._get_from_db(key, ttl_minutes=ttl_minutes)
-                if img:
-                    self._cache[key] = (img, datetime.now())
-                    return img.copy()
-            except Exception:
-                pass
+            if self._persistent_cache_available():
+                try:
+                    img = await self._get_from_db(key, ttl_minutes=ttl_minutes)
+                    self._record_db_success()
+                    if img:
+                        self._cache[key] = (img, datetime.now())
+                        return img.copy()
+                except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
+                    self._record_db_failure("load", exc)
             return None
 
     async def set(
@@ -102,10 +130,12 @@ class ContentCache:
             key = self._get_cache_key(mac, persona, screen_w, screen_h)
             img_copy = img.copy()
             self._cache[key] = (img_copy, datetime.now())
-            try:
-                await self._save_to_db(key, img_copy)
-            except Exception:
-                pass
+            if self._persistent_cache_available():
+                try:
+                    await self._save_to_db(key, img_copy)
+                    self._record_db_success()
+                except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
+                    self._record_db_failure("save", exc)
 
     async def check_and_regenerate_all(
         self, mac: str, config: dict, v: float = 3.3,
@@ -174,7 +204,7 @@ class ContentCache:
         """Background task that wraps _generate_all_modes with cleanup of _regenerating."""
         try:
             await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h)
-        except Exception as e:
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"[CACHE] Background regeneration failed for {mac}: {e}")
         finally:
             self._regenerating.discard(mac)
@@ -188,7 +218,7 @@ class ContentCache:
         date_ctx = await get_date_context()
 
         tasks = [
-            self._generate_single_mode(
+            self._render_single_mode_for_batch(
                 mac, persona, battery_pct, copy.deepcopy(config), copy.deepcopy(date_ctx),
                 screen_w, screen_h,
             )
@@ -196,8 +226,57 @@ class ContentCache:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        success_count = sum(1 for r in results if r is True)
+        generated_entries: list[tuple[str, Image.Image]] = []
+        for result in results:
+            if isinstance(result, tuple):
+                generated_entries.append(result)
+
+        async with self._lock:
+            now = datetime.now()
+            for persona, img in generated_entries:
+                key = self._get_cache_key(mac, persona, screen_w, screen_h)
+                self._cache[key] = (img.copy(), now)
+
+        if generated_entries and self._persistent_cache_available():
+            try:
+                await self._save_many_to_db(
+                    [
+                        (self._get_cache_key(mac, persona, screen_w, screen_h), img)
+                        for persona, img in generated_entries
+                    ]
+                )
+                self._record_db_success()
+            except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
+                self._record_db_failure("batch-save", exc)
+
+        success_count = len(generated_entries)
         logger.info(f"[CACHE] ✓ Generated {success_count}/{len(modes)} modes for {mac}")
+
+    async def _render_single_mode_for_batch(
+        self,
+        mac: str,
+        persona: str,
+        battery_pct: float,
+        config: dict,
+        date_ctx: dict,
+        screen_w: int = SCREEN_WIDTH,
+        screen_h: int = SCREEN_HEIGHT,
+    ) -> tuple[str, Image.Image] | None:
+        try:
+            logger.info(f"[CACHE] Generating {mac}:{persona}...")
+            effective_cfg = get_effective_mode_config(config, persona)
+            city = effective_cfg.get("city")
+            weather = await get_weather(city=city)
+
+            img, _content = await generate_and_render(
+                persona, config, date_ctx, weather, battery_pct,
+                screen_w=screen_w, screen_h=screen_h,
+            )
+            logger.info(f"[CACHE] ✓ {mac}:{persona}")
+            return persona, img
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
+            logger.error(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
+            return None
 
     async def _generate_single_mode(
         self,
@@ -237,7 +316,7 @@ class ContentCache:
             logger.info(f"[CACHE] ✓ {mac}:{persona}")
             return True
 
-        except Exception as e:
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
             return False
 
@@ -259,8 +338,9 @@ class ContentCache:
             img = Image.open(io.BytesIO(row[0]))
             img.load()
             return img
-        except Exception:
-            return None
+        except (OSError, TypeError, ValueError) as exc:
+            logger.warning("[CACHE] Failed to decode cached image for %s", key, exc_info=True)
+            raise RuntimeError(f"decode failed for cache key {key}") from exc
 
     async def _save_to_db(self, key: str, img: Image.Image):
         buf = io.BytesIO()
@@ -274,16 +354,41 @@ class ContentCache:
             (key, data, datetime.now().isoformat(), data, datetime.now().isoformat()),
         )
         await db.commit()
+        await db.close()
+
+    async def _save_many_to_db(self, items: list[tuple[str, Image.Image]]):
+        if not items:
+            return
+        rows = []
+        now = datetime.now().isoformat()
+        for key, img in items:
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            data = buf.getvalue()
+            rows.append((key, data, now, data, now))
+        db = await get_cache_db()
+        await db.executemany(
+            """INSERT INTO image_cache (cache_key, image_data, created_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(cache_key) DO UPDATE SET image_data = ?, created_at = ?""",
+            rows,
+        )
+        await db.commit()
+        await db.close()
 
     async def cleanup_expired(self, max_age_hours: int = 48):
         """Remove cache entries older than max_age_hours."""
         cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+        if not self._persistent_cache_available():
+            return
         try:
             db = await get_cache_db()
             await db.execute("DELETE FROM image_cache WHERE created_at < ?", (cutoff,))
             await db.commit()
-        except Exception:
-            pass
+            await db.close()
+            self._record_db_success()
+        except (aiosqlite.Error, OSError, ValueError) as exc:
+            self._record_db_failure("cleanup", exc)
 
 
 # Global cache instance

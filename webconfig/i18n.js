@@ -1,69 +1,9 @@
 (function () {
   const STORAGE_KEY = "ink_lang";
   const SUPPORTED = ["zh-CN", "en-US"];
-
   const fallbackDict = {
     "zh-CN": {},
-    "en-US": {
-      "InkSight 配置管理": "InkSight Configuration",
-      "模式编辑器": "Mode Editor",
-      "点击「预览」按钮查看效果": "Click Preview to render",
-      "实时预览": "Live Preview",
-      "就绪": "Ready",
-      "字符": "chars",
-      "预览": "Preview",
-      "保存模式": "Save Mode",
-      "选择模板...": "Select template...",
-      "语录模板 (Quote)": "Quote Template",
-      "列表模板 (List)": "List Template",
-      "禅意模板 (Zen)": "Zen Template",
-      "综合模板 (Sections)": "Sections Template",
-      "JSON 有效 ✓": "Valid JSON ✓",
-      "JSON 无效 ✗": "Invalid JSON ✗",
-      "JSON 错误:": "JSON error:",
-      "加载中...": "Loading...",
-      "预览失败:": "Preview failed:",
-      "保存成功 ✓": "Saved ✓",
-      "请选择模板...": "Select a template...",
-      "暂无数据": "No data",
-      "暂无记录": "No records",
-      "加载失败": "Load failed",
-      "暂无内容历史": "No content history",
-      "暂无收藏": "No favorites",
-      "全部模式": "All modes",
-      "展开更多模式": "Show more modes",
-      "收起更多模式": "Collapse modes",
-      "已发现设备：": "Discovered devices:",
-      "最近活跃:": "Last active:",
-      "渲染失败:": "Render failed:",
-      "渲染": "Rendering",
-      "中...": "...",
-      "显示": "Show",
-      "隐藏": "Hide",
-      "删除": "Delete",
-      "请输入习惯名称": "Please enter habit name",
-      "打卡失败:": "Check-in failed:",
-      "删除失败:": "Delete failed:",
-      "配置保存失败，请手动配置": "Failed to save config, please configure manually",
-      "欢迎使用 InkSight": "Welcome to InkSight",
-      "让我们快速完成初始配置": "Let's finish initial setup quickly",
-      "AI 模型": "AI Model",
-      "内容模式": "Content Modes",
-      "基本设置": "Basic Settings",
-      "AI 服务商": "AI Provider",
-      "输入你的 API Key": "Enter your API key",
-      "前往对应服务商官网获取 API Key": "Get API key from provider website",
-      "下一步": "Next",
-      "推荐模式": "Recommended",
-      "文艺模式": "Literary",
-      "效率模式": "Efficiency",
-      "极简模式": "Minimal",
-      "完成": "Finish",
-      "上一步": "Back",
-      "请先登录": "Please sign in",
-      "上次在线:": "Last seen:",
-      "上次刷新": "Last refresh"
-    }
+    "en-US": {}
   };
 
   function normalizeLang(value) {
@@ -84,7 +24,10 @@
   async function loadDict(lang) {
     try {
       const res = await fetch(`/webconfig/locales/${lang}.json`, { cache: "no-store" });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const remote = await res.json();
+        return { ...(fallbackDict[lang] || {}), ...(remote || {}) };
+      }
     } catch (_) {}
     return fallbackDict[lang] || {};
   }

@@ -3,28 +3,25 @@
 import { useEffect, useState, useCallback, Suspense, useMemo, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { DeviceInfo } from "@/components/config/device-info";
+import { LlmProviderConfig } from "@/components/config/llm-provider-config";
+import { ModeSelector } from "@/components/config/mode-selector";
+import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
+import { Field, StatCard } from "@/components/config/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Settings,
   Sliders,
   Cpu,
-  Globe,
-  Sparkles,
-  Eye,
   BarChart3,
   RefreshCw,
-  Heart,
-  ChevronDown,
   Save,
   AlertCircle,
-  CheckCircle2,
   Loader2,
   Plus,
   Trash2,
   Monitor,
-  LayoutGrid,
-  ArrowLeft,
   X,
 } from "lucide-react";
 import { authHeaders, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
@@ -393,7 +390,7 @@ function ConfigPageInner() {
     if (alreadyBound) {
       window.location.href = `${withLocalePath(locale, "/config")}?mac=${encodeURIComponent(normalizedMac)}`;
     }
-  }, [currentUser, devicesLoading, mac, preferMac, userDevices]);
+  }, [currentUser, devicesLoading, locale, mac, preferMac, userDevices]);
 
   const handlePairDevice = async () => {
     const normalized = pairCodeInput.trim().toUpperCase();
@@ -557,6 +554,7 @@ function ConfigPageInner() {
   const [stats, setStats] = useState<DeviceStats | null>(null);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewStatusText, setPreviewStatusText] = useState("");
   const [previewMode, setPreviewMode] = useState("");
   const [previewNoCacheOnce, setPreviewNoCacheOnce] = useState(false);
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
@@ -565,6 +563,7 @@ function ConfigPageInner() {
   const [favoritedModes, setFavoritedModes] = useState<Set<string>>(new Set());
   const favoritesLoadedMacRef = useRef<string>("");
   const memoSettingsInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const previewStreamRef = useRef<EventSource | null>(null);
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("unknown");
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
@@ -834,6 +833,7 @@ function ConfigPageInner() {
     const forceFresh = forceNoCache || consumeNoCacheOnce;
     setPreviewCacheHit(null);
     setPreviewLoading(true);
+    setPreviewStatusText(tr("正在生成...", "Generating..."));
     try {
       const params = new URLSearchParams({ persona: m });
       if (mac) params.set("mac", mac);
@@ -869,15 +869,52 @@ function ConfigPageInner() {
       const cityChanged = previewCity.length > 0 && (modeCity ? modeCity !== savedModeCity : globalCity !== savedGlobalCity);
       if (cityChanged) params.set("city_override", previewCity);
       if (forceFresh || cityChanged || hasModeOverride) params.set("no_cache", "1");
-      const res = await fetch(`/api/preview?${params}`);
-      if (!res.ok) throw new Error("Preview failed");
-      const blob = await res.blob();
-      setPreviewImg(URL.createObjectURL(blob));
-      const cacheHeader = res.headers.get("x-cache-hit");
-      setPreviewCacheHit(cacheHeader === "1" ? true : cacheHeader === "0" ? false : null);
+      previewStreamRef.current?.close();
+      const stream = new EventSource(`/api/preview/stream?${params.toString()}`);
+      previewStreamRef.current = stream;
+
+      await new Promise<void>((resolve, reject) => {
+        stream.addEventListener("status", (event) => {
+          try {
+            const data = JSON.parse((event as MessageEvent<string>).data) as { message?: string };
+            setPreviewStatusText(data.message || tr("正在生成...", "Generating..."));
+          } catch {
+            setPreviewStatusText(tr("正在生成...", "Generating..."));
+          }
+        });
+
+        stream.addEventListener("result", (event) => {
+          try {
+            const data = JSON.parse((event as MessageEvent<string>).data) as {
+              message?: string;
+              image_url?: string;
+              cache_hit?: boolean;
+            };
+            if (!data.image_url) {
+              reject(new Error("Preview image missing"));
+              return;
+            }
+            setPreviewImg(data.image_url);
+            setPreviewCacheHit(typeof data.cache_hit === "boolean" ? data.cache_hit : null);
+            setPreviewStatusText(data.message || tr("完成", "Done"));
+            stream.close();
+            previewStreamRef.current = null;
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        stream.onerror = () => {
+          stream.close();
+          previewStreamRef.current = null;
+          reject(new Error("Preview failed"));
+        };
+      });
     } catch {
       showToast("预览失败", "error");
       setPreviewCacheHit(null);
+      setPreviewStatusText("");
     } finally {
       if (consumeNoCacheOnce) setPreviewNoCacheOnce(false);
       setPreviewLoading(false);
@@ -958,6 +995,13 @@ function ConfigPageInner() {
       setSettingsMode(null);
     }
   }, [mac, currentUser]);
+
+  useEffect(() => {
+    return () => {
+      previewStreamRef.current?.close();
+      previewStreamRef.current = null;
+    };
+  }, []);
 
   const handleGenerateMode = async () => {
     if (!customDesc.trim()) { showToast("请输入模式描述", "error"); return; }
@@ -1300,24 +1344,17 @@ function ConfigPageInner() {
             </div>
           </div>
         ) : mac ? (
-          <p className="text-ink-light text-sm flex items-center gap-2">
-            <CheckCircle2 size={14} className={statusIconClass} />
-            {tr("设备 MAC", "Device MAC")}: <code className="bg-paper-dark px-2 py-0.5 rounded text-xs">{mac}</code>
-            {currentUserRole && (
-              <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-paper-dark text-ink">
-                {currentUserRole === "owner" ? "Owner" : "Member"}
-              </span>
-            )}
-            <span className={`ml-1 inline-flex items-center rounded px-2 py-0.5 text-xs ${statusClass}`}>{statusLabel}</span>
-            {lastSeen && (
-              <span className="text-xs text-ink-light">
-                {tr("上次在线", "Last seen")}: {new Date(lastSeen).toLocaleString(isEn ? "en-US" : "zh-CN")}
-              </span>
-            )}
-            <Link href={withLocalePath(locale, "/config")} className="text-xs text-ink-light hover:text-ink underline ml-2">
-              {tr("返回设备列表", "Back to Device List")}
-            </Link>
-          </p>
+          <DeviceInfo
+            mac={mac}
+            currentUserRole={currentUserRole}
+            statusIconClass={statusIconClass}
+            statusClass={statusClass}
+            statusLabel={statusLabel}
+            lastSeen={lastSeen}
+            isEn={isEn}
+            localeConfigPath={withLocalePath(locale, "/config")}
+            tr={tr}
+          />
         ) : (
           <div className="space-y-4">
             {requestsLoading ? (
@@ -1584,338 +1621,100 @@ function ConfigPageInner() {
             {/* Modes Tab */}
             {activeTab === "modes" && (
               <div className="space-y-6">
-                <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><LayoutGrid size={18} /> {tr("内容模式", "Content Modes")}</CardTitle></CardHeader>
-                  <CardContent>
-                    <ModeGrid
-                      title={tr("核心模式", "Core Modes")} modes={CORE_MODES}
-                      selectedModes={selectedModes} favoritedModes={favoritedModes}
-                      onPreview={handleModePreview} onApply={handleModeApply} onFavorite={handleModeFavorite}
-                      onSettings={(m) => setSettingsMode(m)}
-                    />
-                    <ModeGrid
-                      title={tr("更多模式", "More Modes")} modes={EXTRA_MODES} collapsible
-                      selectedModes={selectedModes} favoritedModes={favoritedModes}
-                      onPreview={handleModePreview} onApply={handleModeApply} onFavorite={handleModeFavorite}
-                      onSettings={(m) => setSettingsMode(m)}
-                    />
-                    <ModeGrid
-                      title={tr("自定义模式", "Custom Modes")}
-                      modes={customModes.map((cm) => cm.mode_id)}
-                      selectedModes={selectedModes}
-                      favoritedModes={favoritedModes}
-                      onPreview={handleModePreview}
-                      onApply={handleModeApply}
-                      onFavorite={handleModeFavorite}
-                      onSettings={(m) => setSettingsMode(m)}
-                      onDelete={handleDeleteCustomMode}
-                      customMeta={customModeMeta}
-                    />
-                    <div className="mb-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-1.5">
-                        <div className="relative flex">
-                          <button
-                            onClick={() => { setEditingCustomMode(true); setCustomJson(""); setCustomDesc(""); setCustomModeName(""); setCustomPreviewImg(null); }}
-                            className="flex-1 aspect-square rounded-lg border border-dashed border-ink/20 p-1.5 flex flex-col items-center justify-center transition-all hover:border-ink/40 hover:bg-paper-dark bg-white text-ink-light"
-                          >
-                            <Plus size={18} className="mb-0.5" />
-                            <div className="text-[10px] leading-tight">{tr("新建", "New")}</div>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {editingCustomMode ? (
-                      <div className="mt-4 pt-4 border-t border-ink/10">
-                        <div className="flex items-center gap-2 mb-4">
-                          <button onClick={() => setEditingCustomMode(false)} className="p-1 rounded hover:bg-paper-dark transition-colors">
-                            <ArrowLeft size={16} className="text-ink-light" />
-                          </button>
-                          <span className="text-sm font-medium">{tr("创建自定义模式", "Create Custom Mode")}</span>
-                        </div>
-
-                        <div className="flex gap-1 mb-4">
-                          <button onClick={() => setEditorTab("ai")} className={`px-3 py-1.5 rounded-sm text-xs transition-colors ${editorTab === "ai" ? "bg-ink text-white" : "bg-paper-dark text-ink-light hover:text-ink"}`}>
-                            <Sparkles size={12} className="inline mr-1" />{tr("AI 生成", "AI Generate")}
-                          </button>
-                          <button onClick={() => setEditorTab("template")} className={`px-3 py-1.5 rounded-sm text-xs transition-colors ${editorTab === "template" ? "bg-ink text-white" : "bg-paper-dark text-ink-light hover:text-ink"}`}>
-                            <LayoutGrid size={12} className="inline mr-1" />{tr("从模板", "From Template")}
-                          </button>
-                        </div>
-
-                        {editorTab === "ai" ? (
-                          <div className="space-y-3 mb-4">
-                            <textarea value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} rows={3} maxLength={2000} placeholder={tr("描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中", "Describe your mode, e.g. show one English word and definition daily with a large centered font")} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y" />
-                            <Button size="sm" onClick={handleGenerateMode} disabled={customGenerating || !customDesc.trim()}>
-                              {customGenerating ? <><Loader2 size={14} className="animate-spin mr-1" /> {tr("生成中...", "Generating...")}</> : tr("AI 生成模式", "Generate Mode with AI")}
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="space-y-3 mb-4">
-                            <select onChange={(e) => { const t = MODE_TEMPLATES[e.target.value]; if (t) { setCustomJson(JSON.stringify(t.def, null, 2)); setCustomModeName((t.def?.display_name || "").toString()); } }} defaultValue="" className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                              <option value="" disabled>{tr("选择模板...", "Select template...")}</option>
-                              {Object.entries(MODE_TEMPLATES).map(([k, t]) => (
-                                <option key={k} value={k}>{t.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        <div className="space-y-3">
-                          <input
-                            value={customModeName}
-                            onChange={(e) => setCustomModeName(e.target.value)}
-                            placeholder={tr("模式名称（例如：今日英语）", "Mode name (e.g. Daily English)")}
-                            className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                          />
-                          <textarea value={customJson} onChange={(e) => setCustomJson(e.target.value)} rows={14} spellCheck={false} placeholder={tr("模式 JSON 定义", "Mode JSON definition")} className="ink-strong-select w-full rounded-sm border border-ink/20 px-3 py-2 text-xs font-mono resize-y bg-ink text-green-400" />
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={handleCustomPreview} disabled={!customJson.trim() || customPreviewLoading}>
-                              {customPreviewImg ? tr("重新生成预览", "Regenerate Preview") : tr("预览效果", "Preview")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleApplyCustomPreviewToScreen}
-                              disabled={!mac || !customPreviewImg || customPreviewLoading || customApplyToScreenLoading}
-                            >
-                              {customApplyToScreenLoading ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                              {tr("应用到墨水屏", "Apply to E-Ink")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleSaveCustomMode}
-                              disabled={!customJson.trim()}
-                              className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
-                            >
-                              {tr("保存模式", "Save Mode")}
-                            </Button>
-                          </div>
-                          {(customPreviewLoading || customPreviewImg) && (
-                            <div className="mt-3 border border-ink/10 rounded-sm p-2 bg-paper flex justify-center">
-                              {customPreviewLoading ? (
-                                <div className="flex items-center gap-2 text-ink-light text-sm py-8">
-                                  <Loader2 size={18} className="animate-spin" /> {tr("预览生成中...", "Generating preview...")}
-                                </div>
-                              ) : (
-                                <img src={customPreviewImg!} alt="Custom preview" className="max-w-[400px] w-full border border-ink/10" />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-xs text-ink-light mt-3">{tr("已选", "Selected")} {selectedModes.size} {tr("个模式", "modes")}</p>
-                        <div className="mt-6 pt-6 border-t border-ink/10">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Eye size={16} className="text-ink-light" />
-                            <span className="text-sm font-medium">
-                              {tr("预览", "Preview")}{previewMode ? `: ${MODE_META[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode}` : ""}
-                            </span>
-                            {previewLoading && <Loader2 size={14} className="animate-spin text-ink-light" />}
-                          </div>
-                          <div className="mb-3">
-                            {previewImg && !previewLoading && previewCacheHit === true && (
-                              <div className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1.5">
-                                {tr("当前预览为历史缓存。如需查看最新效果，请点击“重新生成预览”。", "Current preview is from cache. Click \"Regenerate Preview\" to fetch latest output.")}
-                              </div>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handlePreview(undefined, true)}
-                              disabled={!previewMode || previewLoading}
-                              className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50 mr-2"
-                            >
-                              {tr("重新生成预览", "Regenerate Preview")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleApplyPreviewToScreen}
-                              disabled={!mac || !previewMode || !previewImg || previewLoading || applyToScreenLoading}
-                              className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
-                            >
-                              {applyToScreenLoading ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                              {tr("应用到墨水屏", "Apply to E-Ink")}
-                            </Button>
-                          </div>
-                          {previewLoading ? (
-                            <div className="border border-ink/10 rounded-sm p-3 bg-paper flex justify-center">
-                              <div className="flex items-center gap-2 text-ink-light text-sm py-8">
-                                <Loader2 size={18} className="animate-spin" /> {tr("预览生成中...", "Generating preview...")}
-                              </div>
-                            </div>
-                          ) : previewImg ? (
-                            <div className="border border-ink/10 rounded-sm p-3 bg-paper flex justify-center">
-                              <img src={previewImg} alt="Preview" className="max-w-[400px] w-full border border-ink/10" />
-                            </div>
-                          ) : (
-                            <div className="text-sm text-ink-light text-center py-8">
-                              {tr("点击任意模式的「预览」查看效果", "Click Preview on any mode to view output")}
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+                <ModeSelector
+                  tr={tr}
+                  selectedModes={selectedModes}
+                  favoritedModes={favoritedModes}
+                  customModes={customModes.map((cm) => cm.mode_id)}
+                  customModeMeta={customModeMeta}
+                  modeMeta={MODE_META}
+                  coreModes={CORE_MODES}
+                  extraModes={EXTRA_MODES}
+                  modeTemplates={MODE_TEMPLATES}
+                  previewMode={previewMode}
+                  previewImg={previewImg}
+                  previewLoading={previewLoading}
+                  previewStatusText={previewStatusText}
+                  previewCacheHit={previewCacheHit}
+                  applyToScreenLoading={applyToScreenLoading}
+                  handlePreview={handlePreview}
+                  handleModePreview={handleModePreview}
+                  handleModeApply={handleModeApply}
+                  handleModeFavorite={handleModeFavorite}
+                  setSettingsMode={setSettingsMode}
+                  handleDeleteCustomMode={handleDeleteCustomMode}
+                  editingCustomMode={editingCustomMode}
+                  setEditingCustomMode={setEditingCustomMode}
+                  editorTab={editorTab}
+                  setEditorTab={setEditorTab}
+                  customDesc={customDesc}
+                  setCustomDesc={setCustomDesc}
+                  customModeName={customModeName}
+                  setCustomModeName={setCustomModeName}
+                  customJson={customJson}
+                  setCustomJson={setCustomJson}
+                  customGenerating={customGenerating}
+                  customPreviewImg={customPreviewImg}
+                  customPreviewLoading={customPreviewLoading}
+                  customApplyToScreenLoading={customApplyToScreenLoading}
+                  handleGenerateMode={handleGenerateMode}
+                  handleCustomPreview={handleCustomPreview}
+                  handleApplyCustomPreviewToScreen={handleApplyCustomPreviewToScreen}
+                  handleSaveCustomMode={handleSaveCustomMode}
+                  handleApplyPreviewToScreen={handleApplyPreviewToScreen}
+                  mac={mac}
+                />
 
               </div>
             )}
 
             {/* Preferences Tab */}
             {activeTab === "preferences" && (
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Globe size={18} /> {tr("个性化设置", "Preferences")}</CardTitle></CardHeader>
-                <CardContent className="space-y-5">
-                  <Field label={tr("城市（全局默认）", "City (global default)")}>
-                    <input
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder={tr("如：深圳", "e.g. Shenzhen")}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                    />
-                  </Field>
-                  <Field label={tr("语言", "Language")}>
-                    <div className="flex flex-wrap gap-2">
-                      {LANGUAGE_OPTIONS.map((opt) => (
-                        <Chip key={opt.value} selected={language === opt.value} onClick={() => setLanguage(opt.value)}>{opt.label}</Chip>
-                      ))}
-                    </div>
-                  </Field>
-                  <Field label={tr("内容语气", "Tone")}>
-                    <div className="flex flex-wrap gap-2">
-                      {TONE_OPTIONS.map((opt) => (
-                        <Chip key={opt.value} selected={contentTone === opt.value} onClick={() => setContentTone(opt.value)}>{opt.label}</Chip>
-                      ))}
-                    </div>
-                  </Field>
-                  <Field label={tr("人设风格", "Persona Style")}>
-                    <div className="flex flex-wrap gap-2">
-                      {PERSONA_PRESETS.map((v) => (
-                        <Chip key={v} selected={characterTones.includes(v)} onClick={() => {
-                          setCharacterTones((prev) => prev.includes(v) ? prev.filter((t) => t !== v) : [...prev, v]);
-                        }}>{v}</Chip>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        value={customPersonaTone}
-                        onChange={(e) => setCustomPersonaTone(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddCustomPersona();
-                          }
-                        }}
-                        placeholder={tr("自定义人设风格", "Custom persona style")}
-                        className="flex-1 rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                      />
-                      <Button variant="outline" size="sm" onClick={handleAddCustomPersona}>
-                        {tr("添加", "Add")}
-                      </Button>
-                    </div>
-                    {characterTones.filter((v) => !PERSONA_PRESETS.includes(v as typeof PERSONA_PRESETS[number])).length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {characterTones
-                          .filter((v) => !PERSONA_PRESETS.includes(v as typeof PERSONA_PRESETS[number]))
-                          .map((v) => (
-                            <Chip
-                              key={v}
-                              selected
-                              onClick={() => setCharacterTones((prev) => prev.filter((t) => t !== v))}
-                            >
-                              {v}
-                            </Chip>
-                          ))}
-                      </div>
-                    )}
-                  </Field>
-                  <Field label={tr("刷新策略", "Refresh Strategy")}>
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {Object.entries(STRATEGIES).map(([k, desc]) => (
-                        <button
-                          key={k}
-                          onClick={() => setStrategy(k)}
-                          className={`group p-3 rounded-sm border text-left transition-colors ${
-                            strategy === k ? "border-ink bg-ink text-white" : "border-ink/10 hover:bg-ink hover:text-white"
-                          }`}
-                        >
-                          <div className="text-sm font-medium">{k}</div>
-                          <div className={`text-xs mt-1 ${strategy === k ? "text-white/70" : "text-ink-light group-hover:text-white/80"}`}>{desc}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <label className="block text-sm font-medium mb-2">{tr("刷新间隔 (分钟)", "Refresh interval (minutes)")}</label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={1440}
-                      value={refreshMin}
-                      onChange={(e) => setRefreshMin(Number(e.target.value))}
-                      className="w-32 rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                    />
-                  </Field>
-                </CardContent>
-              </Card>
+              <RefreshStrategyEditor
+                tr={tr}
+                city={city}
+                setCity={setCity}
+                language={language}
+                setLanguage={setLanguage}
+                contentTone={contentTone}
+                setContentTone={setContentTone}
+                characterTones={characterTones}
+                setCharacterTones={setCharacterTones}
+                customPersonaTone={customPersonaTone}
+                setCustomPersonaTone={setCustomPersonaTone}
+                handleAddCustomPersona={handleAddCustomPersona}
+                strategy={strategy}
+                setStrategy={setStrategy}
+                refreshMin={refreshMin}
+                setRefreshMin={setRefreshMin}
+                languageOptions={LANGUAGE_OPTIONS}
+                toneOptions={TONE_OPTIONS}
+                personaPresets={PERSONA_PRESETS}
+                strategies={STRATEGIES}
+              />
             )}
 
             {/* AI Model Tab */}
             {activeTab === "ai" && (
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Cpu size={18} /> {tr("AI 模型", "AI Models")}</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <Field label={tr("文本模型服务商", "Text model provider")}>
-                    <select value={llmProvider} onChange={(e) => { setLlmProvider(e.target.value); setLlmModel(LLM_MODELS[e.target.value]?.[0]?.v || ""); }} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                      <option value="deepseek">DeepSeek</option>
-                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
-                      <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
-                    </select>
-                  </Field>
-                  <Field label={tr("文本模型", "Text model")}>
-                    <select value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                      {(LLM_MODELS[llmProvider] || []).map((m) => (
-                        <option key={m.v} value={m.v}>{m.n}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label={tr("文本 API Key", "Text API Key")}>
-                    <input
-                      type="password"
-                      value={llmApiKey}
-                      onChange={(e) => setLlmApiKey(e.target.value)}
-                      placeholder={config.has_api_key ? tr("已配置，留空不修改", "Configured, leave empty to keep") : tr("可选，设备专用 Key，留空使用服务器默认", "Optional device-level key, leave empty to use server default")}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
-                      autoComplete="off"
-                    />
-                  </Field>
-                  <Field label={tr("图像模型服务商", "Image model provider")}>
-                    <select value={imageProvider} onChange={(e) => { setImageProvider(e.target.value); setImageModel(IMAGE_MODELS[e.target.value]?.[0]?.v || ""); }} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
-                    </select>
-                  </Field>
-                  <Field label={tr("图像模型", "Image model")}>
-                    <select value={imageModel} onChange={(e) => setImageModel(e.target.value)} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                      {(IMAGE_MODELS[imageProvider] || []).map((m) => (
-                        <option key={m.v} value={m.v}>{m.n}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label={tr("图像 API Key", "Image API Key")}>
-                    <input
-                      type="password"
-                      value={imageApiKey}
-                      onChange={(e) => setImageApiKey(e.target.value)}
-                      placeholder={config.has_image_api_key ? tr("已配置，留空不修改", "Configured, leave empty to keep") : tr("可选，设备专用 Key，留空使用服务器默认", "Optional device-level key, leave empty to use server default")}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
-                      autoComplete="off"
-                    />
-                  </Field>
-                </CardContent>
-              </Card>
+              <LlmProviderConfig
+                tr={tr}
+                llmProvider={llmProvider}
+                setLlmProvider={setLlmProvider}
+                llmModel={llmModel}
+                setLlmModel={setLlmModel}
+                imageProvider={imageProvider}
+                setImageProvider={setImageProvider}
+                imageModel={imageModel}
+                setImageModel={setImageModel}
+                llmApiKey={llmApiKey}
+                setLlmApiKey={setLlmApiKey}
+                imageApiKey={imageApiKey}
+                setImageApiKey={setImageApiKey}
+                hasApiKey={Boolean(config.has_api_key)}
+                hasImageApiKey={Boolean(config.has_image_api_key)}
+                llmModels={LLM_MODELS}
+                imageModels={IMAGE_MODELS}
+              />
             )}
 
             {/* Stats Tab */}
@@ -2288,179 +2087,6 @@ function ConfigPageInner() {
           {toast.msg}
         </div>
       )}
-    </div>
-  );
-}
-
-function ModeGrid({
-  title,
-  modes,
-  selectedModes,
-  favoritedModes,
-  onPreview,
-  onApply,
-  onFavorite,
-  onSettings,
-  onDelete,
-  customMeta,
-  collapsible,
-}: {
-  title: string;
-  modes: string[];
-  selectedModes: Set<string>;
-  favoritedModes: Set<string>;
-  onPreview: (m: string) => void;
-  onApply: (m: string) => void;
-  onFavorite: (m: string) => void;
-  onSettings: (m: string) => void;
-  onDelete?: (m: string) => void;
-  customMeta?: Record<string, { name: string; tip: string }>;
-  collapsible?: boolean;
-}) {
-  const [collapsed, setCollapsed] = useState(!!collapsible);
-  const [openMode, setOpenMode] = useState<string | null>(null);
-  if (modes.length === 0) return null;
-  return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2 mb-2">
-        <h4 className="text-sm font-medium text-ink-light">{title}</h4>
-        {collapsible && (
-          <button onClick={() => setCollapsed(!collapsed)} className="text-xs text-ink-light hover:text-ink flex items-center gap-1 transition-colors">
-            {collapsed ? "展开" : "收起"}
-            <ChevronDown size={14} className={`transition-transform ${collapsed ? "" : "rotate-180"}`} />
-          </button>
-        )}
-      </div>
-      {!collapsed && (
-        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
-          {modes.map((m) => {
-            const meta = customMeta?.[m] || MODE_META[m] || { name: m, tip: "" };
-            const isSelected = selectedModes.has(m);
-            const isFavorited = favoritedModes.has(m);
-            const sel = isSelected;
-            const isOpen = openMode === m;
-            const menuItems = [
-              {
-                key: "preview",
-                label: "预览",
-                icon: Eye,
-                onClick: () => onPreview(m),
-              },
-              {
-                key: "apply",
-                label: isSelected ? "移出轮播" : "加入轮播",
-                icon: Plus,
-                onClick: () => onApply(m),
-              },
-              {
-                key: "favorite",
-                label: isFavorited ? "取消收藏" : "收藏",
-                icon: Heart,
-                onClick: () => onFavorite(m),
-                iconClass: isFavorited ? "fill-current text-ink/70" : "text-ink/50",
-              },
-              {
-                key: "settings",
-                label: "设置",
-                icon: Settings,
-                onClick: () => onSettings(m),
-              },
-              ...(onDelete
-                ? [{
-                    key: "delete",
-                    label: "删除",
-                    icon: Trash2,
-                    onClick: () => onDelete(m),
-                  }]
-                : []),
-            ];
-            return (
-              <div key={m} className="relative flex">
-                <div className="flex-1 aspect-square relative">
-                  <button
-                    onClick={() => setOpenMode(isOpen ? null : m)}
-                    className={`w-full h-full rounded-lg border-r-0 rounded-r-none border p-1.5 flex flex-col justify-center transition-all ${
-                      sel ? "bg-ink text-white border-ink" : "bg-white text-ink border-ink/10 hover:border-ink/30"
-                    }`}
-                  >
-                    <div className="font-semibold text-sm leading-tight text-center">{meta.name}</div>
-                  </button>
-                  {isOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setOpenMode(null)} />
-                      <div className="absolute inset-0 z-20 bg-white border border-ink/15 rounded-lg shadow-lg flex flex-col justify-center py-0.5">
-                        {menuItems.map((item) => {
-                          const Icon = item.icon;
-                          return (
-                            <button
-                              key={item.key}
-                              onClick={() => { item.onClick(); setOpenMode(null); }}
-                              className="flex-1 px-1 py-0.5 text-[10px] leading-none text-ink hover:bg-paper-dark rounded-sm flex items-center justify-center gap-1 whitespace-nowrap"
-                            >
-                              <Icon size={10} className={`shrink-0 ${item.iconClass || "text-ink/50"}`} />
-                              {item.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-col items-center justify-center gap-0 px-0.5 rounded-r-lg border border-l-0 transition-all bg-white border-ink/10">
-                  <button onClick={() => onPreview(m)} className="p-0.5 rounded transition-colors hover:bg-ink/10">
-                    <Eye size={10} className="text-ink/35" />
-                  </button>
-                  <button onClick={() => onApply(m)} className="p-0.5 rounded transition-colors hover:bg-ink/10">
-                    <Plus size={10} className={isSelected ? "text-ink" : "text-ink/20"} />
-                  </button>
-                  <button onClick={() => onFavorite(m)} className="p-0.5 rounded transition-colors hover:bg-ink/10">
-                    <Heart size={10} className={`${isFavorited ? "fill-current text-ink" : "text-ink/20"}`} />
-                  </button>
-                  <button onClick={() => onSettings(m)} className="p-0.5 rounded transition-colors hover:bg-ink/10">
-                    <Settings size={10} className="text-ink/35" />
-                  </button>
-                  {onDelete && (
-                    <button onClick={() => onDelete(m)} className="p-0.5 rounded transition-colors hover:bg-ink/10">
-                      <Trash2 size={10} className="text-ink/35" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Chip({ children, selected, onClick }: { children: string; selected: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`group px-3 py-1.5 rounded-full text-xs border transition-colors ${
-        selected ? "bg-ink text-white border-ink" : "bg-white text-ink-light border-ink/15 hover:bg-ink hover:text-white hover:border-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-ink mb-1.5">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="p-3 rounded-sm border border-ink/10 bg-paper">
-      <div className="text-xs text-ink-light">{label}</div>
-      <div className="text-lg font-semibold text-ink mt-1">{value}</div>
     </div>
   );
 }

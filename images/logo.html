@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InkSight Logo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Raleway:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0f1a;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 80px;
+    padding: 60px 40px;
+    font-family: 'Raleway', sans-serif;
+  }
+
+  .section-label {
+    color: #475569;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-family: 'Raleway', sans-serif;
+    font-weight: 500;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  /* ============================================================
+     VARIANT A — Primary Mark (Dark BG)
+     E-ink screen icon + wordmark
+  ============================================================ */
+  .logo-primary {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .icon-wrap {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+  }
+
+  /* E-ink screen frame */
+  .icon-wrap svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .wordmark-main {
+    font-family: 'Lora', serif;
+    font-size: 32px;
+    font-weight: 600;
+    color: #F8FAFC;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .wordmark-main span.ink {
+    color: #F8FAFC;
+  }
+
+  .wordmark-main span.sight {
+    color: #94A3B8;
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  .wordmark-sub {
+    font-family: 'Raleway', sans-serif;
+    font-size: 10px;
+    font-weight: 400;
+    color: #475569;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    padding-left: 2px;
+  }
+
+  /* ============================================================
+     VARIANT B — Compact / Icon Only (Symbol Mark)
+  ============================================================ */
+  .logo-icon-only {
+    width: 80px;
+    height: 80px;
+  }
+
+  /* ============================================================
+     VARIANT C — Light Background
+  ============================================================ */
+  .logo-light-bg {
+    background: #F8FAFC;
+    border-radius: 16px;
+    padding: 32px 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .logo-light-bg .wordmark-main span.ink {
+    color: #0F172A;
+  }
+
+  .logo-light-bg .wordmark-main span.sight {
+    color: #64748B;
+  }
+
+  .logo-light-bg .wordmark-sub {
+    color: #94A3B8;
+  }
+
+  /* ============================================================
+     VARIANT D — Horizontal + tagline
+  ============================================================ */
+  .logo-full {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .tagline {
+    font-family: 'Raleway', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #475569;
+    letter-spacing: 0.1em;
+    font-style: italic;
+  }
+
+  /* ============================================================
+     VARIANT E — Monochrome / White only
+  ============================================================ */
+  .logo-mono .wordmark-main span.ink,
+  .logo-mono .wordmark-main span.sight {
+    color: #F8FAFC;
+    font-style: normal;
+  }
+
+  .logo-mono .wordmark-sub {
+    color: #94A3B8;
+  }
+
+  /* Layout helpers */
+  .variant-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .variants-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 60px 80px;
+    align-items: start;
+  }
+
+  .variant-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* Color swatches */
+  .swatch-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .swatch-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    color: #475569;
+    font-family: 'Raleway', sans-serif;
+  }
+
+  /* Glow animation */
+  @keyframes pulse-glow {
+    0%, 100% { filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.3)); }
+    50% { filter: drop-shadow(0 0 14px rgba(148, 163, 184, 0.6)); }
+  }
+
+  .glow-animated {
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  /* divider */
+  .divider {
+    width: 1px;
+    height: 40px;
+    background: #1E293B;
+  }
+
+  hr.section-divider {
+    width: 320px;
+    border: none;
+    border-top: 1px solid #1E293B;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== SECTION: WORDMARK VARIANTS ===== -->
+<div class="variant-row">
+  <p class="section-label">Brand Logo — InkSight</p>
+
+  <div class="variants-grid">
+
+    <!-- A. Primary (dark) -->
+    <div class="variant-block">
+      <p class="section-label">Primary · Dark</p>
+      <div class="logo-primary glow-animated">
+        <div class="icon-wrap">
+          <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- E-ink device frame -->
+            <rect x="4" y="6" width="48" height="38" rx="5" stroke="#94A3B8" stroke-width="1.5" fill="none"/>
+            <!-- Screen bezel (inner) -->
+            <rect x="8" y="10" width="40" height="30" rx="2.5" stroke="#475569" stroke-width="0.8" fill="#0F172A"/>
+
+            <!-- Content lines (simulating e-ink text) -->
+            <line x1="12" y1="16" x2="34" y2="16" stroke="#F8FAFC" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="12" y1="20" x2="44" y2="20" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+            <line x1="12" y1="24" x2="40" y2="24" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+            <line x1="12" y1="28" x2="36" y2="28" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+
+            <!-- Eye / insight pupil -->
+            <circle cx="40" cy="22" r="6" fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+            <circle cx="40" cy="22" r="2.5" fill="#F8FAFC"/>
+            <circle cx="41" cy="21" r="0.8" fill="#0F172A"/>
+
+            <!-- USB connector bottom -->
+            <rect x="24" y="44" width="8" height="3" rx="1" fill="#334155"/>
+            <line x1="28" y1="47" x2="28" y2="50" stroke="#334155" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="wordmark">
+          <div class="wordmark-main">
+            <span class="ink">Ink</span><span class="sight">Sight</span>
+          </div>
+          <div class="wordmark-sub">slow information · e-ink companion</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B. Compact icon -->
+    <div class="variant-block">
+      <p class="section-label">Symbol · App Icon</p>
+      <svg class="logo-icon-only glow-animated" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Rounded square bg -->
+        <rect width="80" height="80" rx="18" fill="#1E293B"/>
+        <!-- Device frame -->
+        <rect x="10" y="13" width="60" height="46" rx="6" stroke="#94A3B8" stroke-width="1.5" fill="none"/>
+        <rect x="14" y="17" width="52" height="38" rx="3" fill="#0F172A" stroke="#334155" stroke-width="0.8"/>
+
+        <!-- Text lines -->
+        <line x1="19" y1="24" x2="42" y2="24" stroke="#F8FAFC" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="19" y1="29" x2="56" y2="29" stroke="#475569" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="19" y1="34" x2="50" y2="34" stroke="#475569" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="19" y1="39" x2="46" y2="39" stroke="#475569" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="19" y1="44" x2="38" y2="44" stroke="#334155" stroke-width="1" stroke-linecap="round"/>
+
+        <!-- Eye lens -->
+        <circle cx="52" cy="32" r="9" fill="#0F172A" stroke="#94A3B8" stroke-width="1.2"/>
+        <circle cx="52" cy="32" r="4" fill="#F8FAFC"/>
+        <circle cx="53.5" cy="30.5" r="1.2" fill="#1E293B"/>
+
+        <!-- USB nub -->
+        <rect x="33" y="59" width="14" height="4" rx="2" fill="#334155"/>
+        <line x1="40" y1="63" x2="40" y2="68" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <!-- C. Horizontal compact -->
+    <div class="variant-block">
+      <p class="section-label">Compact · Horizontal</p>
+      <div class="logo-primary" style="gap:14px;">
+        <svg width="40" height="40" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="6" width="48" height="38" rx="5" stroke="#94A3B8" stroke-width="1.5" fill="none"/>
+          <rect x="8" y="10" width="40" height="30" rx="2.5" stroke="#475569" stroke-width="0.8" fill="#0F172A"/>
+          <line x1="12" y1="16" x2="34" y2="16" stroke="#F8FAFC" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="12" y1="20" x2="44" y2="20" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+          <line x1="12" y1="24" x2="40" y2="24" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+          <line x1="12" y1="28" x2="36" y2="28" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+          <circle cx="40" cy="22" r="6" fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+          <circle cx="40" cy="22" r="2.5" fill="#F8FAFC"/>
+          <circle cx="41" cy="21" r="0.8" fill="#0F172A"/>
+          <rect x="24" y="44" width="8" height="3" rx="1" fill="#334155"/>
+          <line x1="28" y1="47" x2="28" y2="50" stroke="#334155" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="wordmark">
+          <div class="wordmark-main" style="font-size:24px;">
+            <span class="ink">Ink</span><span class="sight">Sight</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- D. Light background -->
+    <div class="variant-block">
+      <p class="section-label">Light Background</p>
+      <div class="logo-light-bg">
+        <svg width="44" height="44" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="6" width="48" height="38" rx="5" stroke="#334155" stroke-width="1.5" fill="none"/>
+          <rect x="8" y="10" width="40" height="30" rx="2.5" stroke="#94A3B8" stroke-width="0.8" fill="#F8FAFC"/>
+          <line x1="12" y1="16" x2="34" y2="16" stroke="#0F172A" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="12" y1="20" x2="44" y2="20" stroke="#94A3B8" stroke-width="1" stroke-linecap="round"/>
+          <line x1="12" y1="24" x2="40" y2="24" stroke="#94A3B8" stroke-width="1" stroke-linecap="round"/>
+          <line x1="12" y1="28" x2="36" y2="28" stroke="#94A3B8" stroke-width="1" stroke-linecap="round"/>
+          <circle cx="40" cy="22" r="6" fill="#F8FAFC" stroke="#334155" stroke-width="1"/>
+          <circle cx="40" cy="22" r="2.5" fill="#0F172A"/>
+          <circle cx="41" cy="21" r="0.8" fill="#F8FAFC"/>
+          <rect x="24" y="44" width="8" height="3" rx="1" fill="#94A3B8"/>
+          <line x1="28" y1="47" x2="28" y2="50" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="wordmark">
+          <div class="wordmark-main" style="font-size:28px;">
+            <span style="color:#0F172A;font-family:'Lora',serif;font-weight:600;">Ink</span><span style="color:#64748B;font-family:'Lora',serif;font-style:italic;font-weight:400;">Sight</span>
+          </div>
+          <div style="font-family:'Raleway',sans-serif;font-size:10px;font-weight:400;color:#94A3B8;letter-spacing:0.3em;text-transform:uppercase;padding-left:2px;">e-ink companion</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- E. Full with tagline -->
+    <div class="variant-block">
+      <p class="section-label">Full Lockup · Tagline</p>
+      <div class="logo-full">
+        <div class="logo-primary glow-animated">
+          <svg width="48" height="48" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="6" width="48" height="38" rx="5" stroke="#94A3B8" stroke-width="1.5" fill="none"/>
+            <rect x="8" y="10" width="40" height="30" rx="2.5" stroke="#475569" stroke-width="0.8" fill="#0F172A"/>
+            <line x1="12" y1="16" x2="34" y2="16" stroke="#F8FAFC" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="12" y1="20" x2="44" y2="20" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+            <line x1="12" y1="24" x2="40" y2="24" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+            <line x1="12" y1="28" x2="36" y2="28" stroke="#475569" stroke-width="1" stroke-linecap="round"/>
+            <circle cx="40" cy="22" r="6" fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+            <circle cx="40" cy="22" r="2.5" fill="#F8FAFC"/>
+            <circle cx="41" cy="21" r="0.8" fill="#0F172A"/>
+            <rect x="24" y="44" width="8" height="3" rx="1" fill="#334155"/>
+            <line x1="28" y1="47" x2="28" y2="50" stroke="#334155" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <div class="wordmark">
+            <div class="wordmark-main">
+              <span class="ink">Ink</span><span class="sight">Sight</span>
+            </div>
+          </div>
+        </div>
+        <p class="tagline">calm, meaningful slow information</p>
+      </div>
+    </div>
+
+    <!-- F. Inco (墨鱼) variant -->
+    <div class="variant-block">
+      <p class="section-label">inco · 墨鱼 Edition</p>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <svg width="64" height="64" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Squid / inco silhouette — abstract -->
+          <rect width="80" height="80" rx="20" fill="#0F172A" stroke="#1E293B" stroke-width="1"/>
+          <!-- Mantle (top oval) -->
+          <ellipse cx="40" cy="26" rx="18" ry="13" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+          <!-- Eye left -->
+          <circle cx="33" cy="24" r="4" fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+          <circle cx="33" cy="24" r="1.8" fill="#F8FAFC"/>
+          <!-- Eye right -->
+          <circle cx="47" cy="24" r="4" fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+          <circle cx="47" cy="24" r="1.8" fill="#F8FAFC"/>
+          <!-- Tentacles -->
+          <path d="M28 37 Q24 48 26 58" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+          <path d="M32 39 Q30 52 32 62" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+          <path d="M36 40 Q36 54 36 65" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+          <path d="M40 40 Q40 54 40 65" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+          <path d="M44 40 Q44 54 44 65" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+          <path d="M48 39 Q50 52 48 62" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+          <path d="M52 37 Q56 48 54 58" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+          <!-- Fin / e-ink lines inside mantle -->
+          <line x1="32" y1="22" x2="48" y2="22" stroke="#F8FAFC" stroke-width="1" stroke-linecap="round" opacity="0.4"/>
+          <line x1="32" y1="26" x2="48" y2="26" stroke="#475569" stroke-width="0.8" stroke-linecap="round" opacity="0.5"/>
+          <line x1="34" y1="30" x2="46" y2="30" stroke="#475569" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
+        </svg>
+        <div style="text-align:center;">
+          <div style="font-family:'Lora',serif;font-size:20px;font-weight:500;color:#F8FAFC;letter-spacing:0.05em;">inco</div>
+          <div style="font-family:'Raleway',sans-serif;font-size:10px;color:#475569;letter-spacing:0.2em;margin-top:2px;">墨 鱼</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ===== SECTION: COLOR PALETTE ===== -->
+<div class="variant-row">
+  <p class="section-label">Brand Color Palette</p>
+  <div class="swatch-row">
+    <div class="swatch-label">
+      <div class="swatch" style="background:#0F172A;"></div>
+      <span>#0F172A</span>
+      <span style="color:#334155;">Background</span>
+    </div>
+    <div class="swatch-label">
+      <div class="swatch" style="background:#1E293B;"></div>
+      <span>#1E293B</span>
+      <span style="color:#334155;">Surface</span>
+    </div>
+    <div class="swatch-label">
+      <div class="swatch" style="background:#334155;"></div>
+      <span>#334155</span>
+      <span style="color:#334155;">Border</span>
+    </div>
+    <div class="swatch-label">
+      <div class="swatch" style="background:#475569;"></div>
+      <span>#475569</span>
+      <span style="color:#334155;">Muted</span>
+    </div>
+    <div class="swatch-label">
+      <div class="swatch" style="background:#94A3B8;"></div>
+      <span>#94A3B8</span>
+      <span style="color:#334155;">Secondary</span>
+    </div>
+    <div class="swatch-label">
+      <div class="swatch" style="background:#F8FAFC;"></div>
+      <span>#F8FAFC</span>
+      <span style="color:#334155;">Primary Text</span>
+    </div>
+    <div class="swatch-label">
+      <div class="swatch" style="background:#22C55E;"></div>
+      <span>#22C55E</span>
+      <span style="color:#334155;">Accent</span>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ===== SECTION: TYPOGRAPHY ===== -->
+<div class="variant-row" style="text-align:center;gap:12px;">
+  <p class="section-label">Typography</p>
+  <div style="display:flex;gap:60px;justify-content:center;align-items:flex-start;">
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
+      <span style="color:#475569;font-size:10px;letter-spacing:0.2em;font-family:'Raleway',sans-serif;">HEADINGS</span>
+      <div style="font-family:'Lora',serif;font-size:28px;font-weight:600;color:#F8FAFC;">InkSight</div>
+      <div style="font-family:'Lora',serif;font-size:18px;font-style:italic;font-weight:400;color:#94A3B8;">Slow Information</div>
+      <span style="color:#334155;font-size:10px;font-family:'Raleway',sans-serif;">Lora — Serif, Calm</span>
+    </div>
+    <div class="divider" style="height:80px;margin-top:28px;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
+      <span style="color:#475569;font-size:10px;letter-spacing:0.2em;font-family:'Raleway',sans-serif;">BODY / UI</span>
+      <div style="font-family:'Raleway',sans-serif;font-size:18px;font-weight:500;color:#F8FAFC;">E-ink Companion</div>
+      <div style="font-family:'Raleway',sans-serif;font-size:13px;font-weight:300;color:#94A3B8;letter-spacing:0.1em;">22 BUILT-IN MODES</div>
+      <span style="color:#334155;font-size:10px;font-family:'Raleway',sans-serif;">Raleway — Sans, Modern</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

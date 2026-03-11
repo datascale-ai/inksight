@@ -403,8 +403,8 @@ async def add_favorite(mac: str, mode_id: str, content_json: str | None):
     content_hash = ""
     try:
         content_hash = _compute_content_hash(json.loads(content_str))
-    except Exception:
-        pass
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.warning("[Stats] Failed to parse favorite content JSON for %s:%s", mac, mode_id, exc_info=True)
     db = await get_main_db()
     await db.execute(
         """INSERT INTO content_history (mac, mode_id, content, content_hash, is_favorite, created_at)
@@ -467,8 +467,8 @@ async def get_recent_content_summaries(mac: str, mode_id: str, limit: int = 3) -
                 if key in data and data[key]:
                     summaries.append(str(data[key])[:80])
                     break
-        except Exception:
-            pass
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("[Stats] Failed to parse content summary JSON for %s:%s", mac, mode_id, exc_info=True)
     return summaries
 
 

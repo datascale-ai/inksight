@@ -18,7 +18,7 @@ def _get_fernet() -> Fernet:
     if env_key:
         try:
             return Fernet(env_key)
-        except Exception:
+        except (TypeError, ValueError):
             derived = base64.urlsafe_b64encode(hashlib.sha256(env_key.encode()).digest())
             return Fernet(derived)
     derived = base64.urlsafe_b64encode(hashlib.sha256(_FALLBACK_KEY_SEED.encode()).digest())
@@ -38,6 +38,6 @@ def decrypt_api_key(ciphertext: str) -> str:
     try:
         f = _get_fernet()
         return f.decrypt(ciphertext.encode()).decode()
-    except (InvalidToken, Exception) as e:
+    except (InvalidToken, TypeError, ValueError) as e:
         logger.warning(f"Failed to decrypt API key: {e}")
         return ""

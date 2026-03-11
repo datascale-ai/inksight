@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import random
+from json import JSONDecodeError
 from typing import Any
 
 import httpx
@@ -48,8 +49,8 @@ async def _prefetch_images(content: dict, mode_def: dict) -> dict:
                     resp = await client.get(url)
                     if resp.status_code < 400:
                         content[f"_prefetched_{field_name}"] = resp.content
-                except Exception:
-                    pass  # Renderer will show placeholder
+                except httpx.HTTPError:
+                    logger.warning("[JSONContent] Failed to prefetch image field %s", field_name, exc_info=True)
     return content
 
 
@@ -191,8 +192,8 @@ async def generate_json_mode_content(
             summaries = await get_recent_content_summaries(mac, mode_id, limit=3)
             if summaries:
                 dedup_hint = "\n请避免与以下近期内容重复：" + "；".join(summaries)
-        except Exception:
-            pass
+        except (OSError, TypeError, ValueError):
+            logger.warning("[JSONContent] Failed to load dedup context for %s:%s", mac, mode_id, exc_info=True)
 
     for attempt in range(1 + DEDUP_MAX_RETRIES):
         prompt = base_prompt
@@ -201,7 +202,7 @@ async def generate_json_mode_content(
 
         try:
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
-        except Exception as e:
+        except (httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
             return dict(fallback)
 
@@ -308,7 +309,8 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
                 "week_progress": completed,
                 "week_total": total,
             }
-        except Exception:
+        except (OSError, TypeError, ValueError):
+            logger.warning("[JSONContent] Failed to load habit status for %s", mac, exc_info=True)
             return dict(fallback)
 
     return dict(fallback)
@@ -382,8 +384,8 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
             merged = dict(fallback)
             merged.update(data)
             return merged
-        except Exception as e:
-            logger.warning(f"[JSONContent] Failed to get weather forecast: {e}")
+        except (httpx.HTTPError, TypeError, ValueError, JSONDecodeError) as e:
+            logger.warning(f"[JSONContent] Failed to get weather forecast: {e}", exc_info=True)
             return dict(fallback)
 
     return dict(fallback)
@@ -431,8 +433,8 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             part = await generate_json_mode_content(step_mode_def, **kwargs)
             if isinstance(part, dict):
                 result.update(part)
-        except Exception as e:
-            logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}")
+        except (httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
+            logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}", exc_info=True)
             # Continue with next step instead of failing entirely
             continue
     if not result:
