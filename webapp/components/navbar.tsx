@@ -17,6 +17,7 @@ export function Navbar() {
     { href: "/docs", label: t(locale, "nav.docs") },
     { href: "/flash", label: t(locale, "nav.flash") },
     { href: "/config", label: t(locale, "nav.config") },
+    { href: "/preview", label: t(locale, "nav.preview", locale === "zh" ? "无设备体验" : "No-device Demo") },
   ];
   const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
