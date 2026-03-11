@@ -1,52 +1,55 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
+import { cookies } from "next/headers";
 import { DocsMobileNav } from "./mobile-nav";
+import { normalizeLocale, t, withLocalePath } from "@/lib/i18n";
 
 const sidebarSections = [
   {
-    title: "入门",
+    titleKey: "docs.section.gettingStarted",
     items: [
-      { label: "项目介绍", href: "/docs" },
-      { label: "架构说明", href: "/docs/architecture" },
-      { label: "硬件清单", href: "/docs/hardware" },
-      { label: "组装指南", href: "/docs/assembly" },
+      { labelKey: "docs.item.intro", href: "/docs" },
+      { labelKey: "docs.item.architecture", href: "/docs/architecture" },
+      { labelKey: "docs.item.hardware", href: "/docs/hardware" },
+      { labelKey: "docs.item.assembly", href: "/docs/assembly" },
     ],
   },
   {
-    title: "使用",
+    titleKey: "docs.section.usage",
     items: [
-      { label: "Web 在线刷机", href: "/docs/flash" },
-      { label: "按键说明", href: "/docs/button-controls" },
-      { label: "配置 API Key", href: "/docs/api-key" },
-      { label: "Web 在线配置", href: "/docs/config" },
+      { labelKey: "docs.item.flash", href: "/docs/flash" },
+      { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
+      { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
+      { labelKey: "docs.item.config", href: "/docs/config" },
     ],
   },
   {
-    title: "进阶",
+    titleKey: "docs.section.advanced",
     items: [
-      { label: "插件开发", href: "/docs/plugin-dev" },
-      { label: "API 参考", href: "/docs/api-reference" },
-      { label: "常见问题", href: "/docs/faq" },
+      { labelKey: "docs.item.pluginDev", href: "/docs/plugin-dev" },
+      { labelKey: "docs.item.apiReference", href: "/docs/api-reference" },
+      { labelKey: "docs.item.faq", href: "/docs/faq" },
     ],
   },
 ];
 
-function Sidebar() {
+async function Sidebar() {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
   return (
     <nav className="space-y-6">
       {sidebarSections.map((section) => (
-        <div key={section.title}>
+        <div key={section.titleKey}>
           <h4 className="text-xs font-semibold text-ink-light uppercase tracking-widest mb-2.5 px-3">
-            {section.title}
+            {t(locale, section.titleKey)}
           </h4>
           <ul className="space-y-0.5">
             {section.items.map((item) => (
               <li key={item.href}>
                 <Link
-                  href={item.href}
+                  href={withLocalePath(locale, item.href)}
                   className="block px-3 py-1.5 text-sm text-ink-muted rounded-sm hover:text-ink hover:bg-ink/[0.04] transition-colors"
                 >
-                  {item.label}
+                  {t(locale, item.labelKey)}
                 </Link>
               </li>
             ))}
@@ -57,11 +60,12 @@ function Sidebar() {
   );
 }
 
-export default function DocsLayout({
+export default async function DocsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Mobile nav trigger */}
@@ -75,7 +79,7 @@ export default function DocsLayout({
           <div className="sticky top-24">
             <div className="flex items-center gap-2 mb-6 px-3">
               <BookOpen size={16} className="text-ink" />
-              <span className="text-sm font-semibold text-ink">文档中心</span>
+              <span className="text-sm font-semibold text-ink">{t(locale, "docs.center")}</span>
             </div>
             <Sidebar />
           </div>

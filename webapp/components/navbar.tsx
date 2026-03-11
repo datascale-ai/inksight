@@ -5,17 +5,19 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Menu, X, Github, User, LogOut } from "lucide-react";
 import { authHeaders, clearToken, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
-
-const navLinks = [
-  { href: "/", label: "首页" },
-  { href: "/docs", label: "文档" },
-  { href: "/flash", label: "在线刷机" },
-  { href: "/config", label: "设备配置" },
-];
+import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 
 export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const locale = localeFromPathname(pathname || "/");
+  const otherLocale = locale === "en" ? "zh" : "en";
+  const navLinks = [
+    { href: "/", label: t(locale, "nav.home") },
+    { href: "/docs", label: t(locale, "nav.docs") },
+    { href: "/flash", label: t(locale, "nav.flash") },
+    { href: "/config", label: t(locale, "nav.config") },
+  ];
   const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
 
@@ -49,9 +51,9 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-ink/10 bg-white/80 backdrop-blur-md">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="flex items-center gap-2 group">
+        <Link href={withLocalePath(locale, "/")} className="flex items-center gap-2 group">
           <div className="flex h-8 w-8 items-center justify-center rounded-sm border border-ink bg-ink text-white text-xs font-bold font-serif">
-            墨
+            {locale === "en" ? "I" : "墨"}
           </div>
           <span className="text-lg font-semibold text-ink tracking-tight">
             InkSight
@@ -63,7 +65,7 @@ export function Navbar() {
           {navLinks.map((link) => (
             <Link
               key={link.href}
-              href={link.href}
+              href={withLocalePath(locale, link.href)}
               className="text-sm text-ink-light hover:text-ink transition-colors"
             >
               {link.label}
@@ -83,15 +85,18 @@ export function Navbar() {
                 <User size={14} />
                 {username}
               </span>
-              <button onClick={handleLogout} className="text-ink-light hover:text-ink transition-colors" title="退出">
+              <button onClick={handleLogout} className="text-ink-light hover:text-ink transition-colors" title={t(locale, "nav.logout")}>
                 <LogOut size={16} />
               </button>
             </div>
           ) : (
-            <Link href="/login" className="text-sm text-ink-light hover:text-ink transition-colors">
-              登录
+            <Link href={withLocalePath(locale, "/login")} className="text-sm text-ink-light hover:text-ink transition-colors">
+              {t(locale, "nav.login")}
             </Link>
           )}
+          <Link href={withLocalePath(otherLocale, pathname || "/")} className="text-sm text-ink-light hover:text-ink transition-colors">
+            {t(locale, "nav.language")}
+          </Link>
         </div>
 
         {/* Mobile toggle */}
@@ -111,7 +116,7 @@ export function Navbar() {
             {navLinks.map((link) => (
               <Link
                 key={link.href}
-                href={link.href}
+                href={withLocalePath(locale, link.href)}
                 className="text-sm text-ink-light hover:text-ink transition-colors py-1"
                 onClick={() => setMobileOpen(false)}
               >
@@ -134,18 +139,25 @@ export function Navbar() {
                   {username}
                 </span>
                 <button onClick={handleLogout} className="text-sm text-ink-light hover:text-ink">
-                  退出
+                  {t(locale, "nav.logout")}
                 </button>
               </div>
             ) : (
               <Link
-                href="/login"
+                href={withLocalePath(locale, "/login")}
                 className="text-sm text-ink-light hover:text-ink transition-colors py-1"
                 onClick={() => setMobileOpen(false)}
               >
-                登录
+                {t(locale, "nav.login")}
               </Link>
             )}
+            <Link
+              href={withLocalePath(otherLocale, pathname || "/")}
+              className="text-sm text-ink-light hover:text-ink transition-colors py-1"
+              onClick={() => setMobileOpen(false)}
+            >
+              {t(locale, "nav.language")}
+            </Link>
           </div>
         </div>
       )}

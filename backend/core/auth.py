@@ -19,6 +19,7 @@ import jwt
 from fastapi import Cookie, Header, HTTPException, Request, Response
 
 from .config_store import validate_device_token, get_device_state
+from .i18n import detect_lang_from_request, msg, normalize_lang
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +45,13 @@ _COOKIE_NAME = "ink_session"
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
 
-def validate_mac_param(mac: str) -> str:
+def validate_mac_param(mac: str, lang: str = "zh") -> str:
     """校验并规范化 MAC 地址路径参数。
 
     返回大写 MAC，格式无效时抛出 400。
     """
     if not mac or not _MAC_RE.match(mac):
-        raise HTTPException(status_code=400, detail="MAC 地址格式无效，应为 AA:BB:CC:DD:EE:FF")
+        raise HTTPException(status_code=400, detail=msg("auth.invalid_mac_format", normalize_lang(lang)))
     return mac.upper()
 
 
@@ -69,16 +70,19 @@ def is_admin_authorized(authorization: Optional[str]) -> bool:
 
 def require_admin(
     authorization: Optional[str] = Header(default=None),
+    accept_language: Optional[str] = Header(default=None, alias="Accept-Language"),
 ) -> None:
     """FastAPI 依赖：管理端点鉴权。"""
     if not is_admin_authorized(authorization):
-        raise HTTPException(status_code=403, detail="需要管理员认证")
+        raise HTTPException(status_code=403, detail=msg("auth.admin_required", normalize_lang(accept_language)))
 
 
 async def require_device_token(
     mac: str,
     x_device_token: Optional[str] = Header(default=None),
+    accept_language: Optional[str] = Header(default=None, alias="Accept-Language"),
 ) -> bool:
+    lang = normalize_lang(accept_language)
     if x_device_token:
         valid = await validate_device_token(mac, x_device_token)
         if valid:
@@ -87,8 +91,8 @@ async def require_device_token(
     state = await get_device_state(mac)
     if state and state.get("auth_token"):
         logger.warning(f"[AUTH] 设备 Token 校验失败: {mac}")
-        raise HTTPException(status_code=401, detail="设备 Token 无效或缺失")
-    raise HTTPException(status_code=401, detail="设备 Token 缺失，请先完成设备注册")
+        raise HTTPException(status_code=401, detail=msg("auth.device_token_invalid", lang))
+    raise HTTPException(status_code=401, detail=msg("auth.device_token_required", lang))
 
 
 def create_session_token(user_id: int, username: str) -> str:
@@ -145,7 +149,7 @@ async def require_user(
 ) -> int:
     payload = _extract_user(ink_session, request)
     if not payload:
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail=msg("auth.login_required", detect_lang_from_request(request)))
     return int(payload["sub"])
 
 

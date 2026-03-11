@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Serif_SC } from "next/font/google";
+import { cookies } from "next/headers";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { normalizeLocale, t } from "@/lib/i18n";
 import "./globals.css";
 
 const inter = Inter({
@@ -16,9 +18,8 @@ const notoSerifSc = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  title: "InkSight 墨见 — 桌面上的多场景AI搭档",
-  description:
-    "一款极简主义的智能电子墨水屏桌面摆件，通过 LLM 生成有温度的慢信息。支持 19 种内容模式，ESP32-C3 驱动，BOM 成本约 220 元以内。",
+  title: "InkSight",
+  description: "InkSight E-Ink AI desktop companion.",
   keywords: ["InkSight", "墨见", "电子墨水屏", "E-Ink", "ESP32", "LLM", "桌面摆件"],
   manifest: "/manifest.json",
   other: {
@@ -28,13 +29,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  const title = t(locale, "meta.title");
+  const description = t(locale, "meta.description");
+  const lang = locale === "en" ? "en-US" : "zh-CN";
+
   return (
-    <html lang="zh-CN">
+    <html lang={lang}>
+      <head>
+        <title>{title}</title>
+        <meta name="description" content={description} />
+      </head>
       <body className={`${inter.variable} ${notoSerifSc.variable} antialiased`}>
         <Navbar />
         <main className="min-h-screen">{children}</main>

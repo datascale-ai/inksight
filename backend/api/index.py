@@ -8,6 +8,7 @@ import logging
 import os
 import random
 import time
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -154,6 +155,7 @@ from core.auth import (
     clear_session_cookie,
     is_admin_authorized,
 )
+from core.i18n import detect_lang_from_request, msg
 
 
 @asynccontextmanager
@@ -181,15 +183,16 @@ async def _require_membership_access(
     *,
     owner_only: bool = False,
 ) -> dict:
-    mac = validate_mac_param(mac)
+    lang = detect_lang_from_request(request)
+    mac = validate_mac_param(mac, lang)
     user_id = await _resolve_user_id(request, ink_session)
     if user_id is None:
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail=msg("auth.login_required", lang))
     membership = await get_device_membership(mac, user_id)
     if not membership:
-        raise HTTPException(status_code=403, detail="无设备访问权限")
+        raise HTTPException(status_code=403, detail=msg("auth.no_device_access", lang))
     if owner_only and membership.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="仅 owner 可执行此操作")
+        raise HTTPException(status_code=403, detail=msg("auth.owner_only", lang))
     return membership
 
 
@@ -202,7 +205,8 @@ async def _ensure_web_or_device_access(
     owner_only: bool = False,
     allow_device_token: bool = True,
 ) -> dict:
-    mac = validate_mac_param(mac)
+    lang = detect_lang_from_request(request)
+    mac = validate_mac_param(mac, lang)
     if allow_device_token and x_device_token:
         await require_device_token(mac, x_device_token)
         return {"mode": "device", "role": "device"}
@@ -1309,6 +1313,17 @@ async def editor_page():
     return HTMLResponse(content=_load_web_page_html("editor.html"))
 
 
+@app.get("/webconfig/{asset_path:path}")
+async def webconfig_asset(asset_path: str):
+    project_root = Path(__file__).resolve().parent.parent.parent
+    file_path = (project_root / "webconfig" / asset_path).resolve()
+    webconfig_root = (project_root / "webconfig").resolve()
+    if not str(file_path).startswith(str(webconfig_root)) or not file_path.exists() or not file_path.is_file():
+        return JSONResponse({"error": "asset_not_found", "message": "Webconfig asset not found"}, status_code=404)
+    media_type, _ = mimetypes.guess_type(str(file_path))
+    return Response(content=file_path.read_bytes(), media_type=media_type or "application/octet-stream")
+
+
 @app.get("/thumbs/{filename}")
 async def get_thumb(filename: str):
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -1333,7 +1348,10 @@ def _load_web_page_html(filename: str) -> str:
     html_path = project_root / "webconfig" / filename
     if not html_path.exists():
         raise FileNotFoundError(f"Static page not found in webconfig: {filename}")
-    return html_path.read_text(encoding="utf-8")
+    html = html_path.read_text(encoding="utf-8")
+    if "/webconfig/i18n.js" not in html:
+        html = html.replace("</body>", '<script src="/webconfig/i18n.js"></script></body>')
+    return html
 
 
 # ── Device control endpoints ─────────────────────────────────

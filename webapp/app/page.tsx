@@ -1,7 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
+import { cookies } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { normalizeLocale, withLocalePath } from "@/lib/i18n";
 import {
   Brain,
   Layers,
@@ -200,7 +202,53 @@ const specs = [
   },
 ];
 
-export default function Home() {
+const modeTextEn: Record<string, { label: string; desc: string; descLines?: string[] }> = {
+  DAILY: { label: "Daily", desc: "Quotes, book picks and curious facts", descLines: ["Quotes, book picks", "and curious facts"] },
+  WEATHER: { label: "Weather", desc: "Live weather and trend board", descLines: ["Live weather and", "trend board"] },
+  POETRY: { label: "Poetry", desc: "Classical poems with short notes", descLines: ["Classical poems", "with short notes"] },
+  ARTWALL: { label: "Gallery", desc: "Seasonal black-and-white artwork", descLines: ["Seasonal B/W", "artwork"] },
+  ALMANAC: { label: "Almanac", desc: "Lunar calendar and daily dos", descLines: ["Lunar calendar", "and daily dos"] },
+  BRIEFING: { label: "Briefing", desc: "Tech hot topics + AI insights", descLines: ["Tech topics + AI", "insight brief"] },
+  STOIC: { label: "Stoic", desc: "A daily philosophical quote" },
+  ZEN: { label: "Zen", desc: "One large character for your mood" },
+  RECIPE: { label: "Recipe", desc: "Meal ideas by time of day" },
+  COUNTDOWN: { label: "Countdown", desc: "Countdown or count-up for events" },
+  MEMO: { label: "Memo", desc: "Display your custom note text" },
+  HABIT: { label: "Habit", desc: "Daily habit completion progress" },
+  ROAST: { label: "Roast", desc: "Light, humorous roasting style" },
+  FITNESS: { label: "Fitness", desc: "Home workout tips and moves" },
+  LETTER: { label: "Letter", desc: "A slow letter across time" },
+  THISDAY: { label: "On This Day", desc: "Historic events of today" },
+  RIDDLE: { label: "Riddle", desc: "Riddles and brain teasers" },
+  QUESTION: { label: "Question", desc: "One open-ended question each day" },
+  BIAS: { label: "Bias", desc: "A cognitive bias per day" },
+  STORY: { label: "Story", desc: "A complete micro-story in three acts" },
+  LIFEBAR: { label: "Life Bar", desc: "Progress view for year/month/week/life" },
+  CHALLENGE: { label: "Challenge", desc: "A 5-minute daily micro challenge" },
+};
+
+export default async function Home() {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  const isEn = locale === "en";
+  const coreModesLocalized = coreModes.map((mode) => ({
+    ...mode,
+    label: isEn ? (modeTextEn[mode.name]?.label || mode.label) : mode.label,
+    desc: isEn ? (modeTextEn[mode.name]?.desc || mode.desc) : mode.desc,
+    descLines: isEn ? (modeTextEn[mode.name]?.descLines || mode.descLines) : mode.descLines,
+  }));
+  const moreModesLocalized = moreModes.map((mode) => ({
+    ...mode,
+    label: isEn ? (modeTextEn[mode.name]?.label || mode.label) : mode.label,
+  }));
+  const specsLocalized = isEn
+    ? [
+        { icon: Cpu, label: "ESP32-C3", desc: "RISC-V architecture, WiFi, low power" },
+        { icon: Monitor, label: '4.2" E-Paper', desc: "400x300 resolution, paper-like and glare-free" },
+        { icon: Battery, label: "6-Month Battery", desc: "LiFePO4 battery + Deep Sleep mode" },
+        { icon: DollarSign, label: "BOM < CNY 220", desc: "Open hardware for everyone" },
+      ]
+    : specs;
+
   return (
     <>
       {/* Hero Section */}
@@ -213,23 +261,25 @@ export default function Home() {
                 Open Source &middot; ESP32-C3 &middot; E-Ink
               </p>
               <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-ink leading-tight mb-6">
-                InkSight 墨水屏
+                {isEn ? "InkSight E-Ink" : "InkSight 墨水屏"}
                 <br />
-                <span className="text-ink-muted text-3xl md:text-4xl lg:text-5xl">桌面上的多场景AI搭档</span>
+                <span className="text-ink-muted text-3xl md:text-4xl lg:text-5xl">
+                  {isEn ? "Your Multi-Scenario AI Companion on Desk" : "桌面上的多场景AI搭档"}
+                </span>
               </h1>
               <p className="text-lg text-ink-light leading-relaxed mb-8 max-w-lg">
-                一款极简主义的智能电子墨水屏桌面摆件，通过 LLM
-                生成有温度的「慢信息」。数十种内容模式，从每日推荐到 AI
-                简报，为你的桌面带来有温度的智能陪伴。
+                {isEn
+                  ? "A minimalist smart E-Ink desktop device. InkSight uses LLMs to generate warm, slow information for your daily desk flow."
+                  : "一款极简主义的智能电子墨水屏桌面摆件，通过 LLM 生成有温度的「慢信息」。数十种内容模式，从每日推荐到 AI 简报，为你的桌面带来有温度的智能陪伴。"}
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link href="/flash">
+                <Link href={withLocalePath(locale, "/flash")}>
                   <Button
                     variant="outline"
                     size="lg"
                     className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white"
                   >
-                    开始制作
+                    {isEn ? "Build Yours" : "开始制作"}
                   </Button>
                 </Link>
               </div>
@@ -240,7 +290,7 @@ export default function Home() {
               <div className="relative w-full max-w-md aspect-[4/3] rounded-sm border border-ink/10 overflow-hidden">
                 <Image
                   src="/images/intro.jpg"
-                  alt="InkSight 展示图"
+                  alt={isEn ? "InkSight product preview" : "InkSight 展示图"}
                   fill
                   className="object-cover"
                   priority
@@ -257,28 +307,28 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="text-center mb-14">
             <h2 className="font-serif text-3xl font-bold text-ink mb-3">
-              核心特性
+              {isEn ? "Core Features" : "核心特性"}
             </h2>
             <p className="text-ink-light">
-              硬件 + 软件 + AI，三位一体的桌面智能体验
+              {isEn ? "Hardware + software + AI, one integrated desk experience" : "硬件 + 软件 + AI，三位一体的桌面智能体验"}
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
                 icon: Brain,
-                title: "AI 驱动",
-                desc: "接入 DeepSeek / 通义千问 / Kimi，根据天气、时间、节气实时生成个性化内容。",
+                title: isEn ? "AI Powered" : "AI 驱动",
+                desc: isEn ? "Connect DeepSeek / Qwen / Kimi to generate contextual content in real time." : "接入 DeepSeek / 通义千问 / Kimi，根据天气、时间、节气实时生成个性化内容。",
               },
               {
                 icon: Layers,
-                title: "电子墨水",
-                desc: "4.2 英寸 E-Paper 显示屏，类纸质感，不发光，专注不打扰，单次充电续航 6 个月。",
+                title: isEn ? "E-Ink Experience" : "电子墨水",
+                desc: isEn ? '4.2" E-Paper display with paper-like feeling, glare-free and distraction-free.' : "4.2 英寸 E-Paper 显示屏，类纸质感，不发光，专注不打扰，单次充电续航 6 个月。",
               },
               {
                 icon: LayoutGrid,
-                title: "无限扩展",
-                desc: "支持 10 种内容模式和 4 种刷新策略，从哲学语录到股票行情，满足一切需求。",
+                title: isEn ? "Highly Extensible" : "无限扩展",
+                desc: isEn ? "Multiple content modes and refresh strategies, from philosophy to market snapshots." : "支持 10 种内容模式和 4 种刷新策略，从哲学语录到股票行情，满足一切需求。",
               },
             ].map((feature) => (
               <Card key={feature.title} className="p-8 text-center group hover:border-ink/20 transition-colors">
@@ -304,15 +354,15 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="text-center mb-14">
             <h2 className="font-serif text-3xl font-bold text-ink mb-3">
-              多种内容模式
+              {isEn ? "Rich Content Modes" : "多种内容模式"}
             </h2>
             <p className="text-ink-light">
-              从哲学思辨到烟火日常，总有一款属于你的「慢信息」，支持自定义模式，支持 AI 生成模式。
+              {isEn ? "From philosophy to daily life, there is always a slow-information mode for you." : "从哲学思辨到烟火日常，总有一款属于你的「慢信息」，支持自定义模式，支持 AI 生成模式。"}
             </p>
           </div>
 
           <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-            {coreModes.map((mode) => (
+            {coreModesLocalized.map((mode) => (
               <div key={mode.name} className="aspect-square">
                 <Card className="group h-full p-3 md:p-4 hover:border-ink/20 transition-all duration-200 hover:-translate-y-0.5">
                   <CardContent className="h-full p-0 text-center flex flex-col items-center">
@@ -347,7 +397,7 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-10 gap-4">
-            {moreModes.slice(0, 8).map((mode) => (
+            {moreModesLocalized.slice(0, 8).map((mode) => (
               <div key={mode.name} className="aspect-square">
                 <Card className="group h-full p-3 md:p-4 hover:border-ink/20 transition-all duration-200 hover:-translate-y-0.5">
                   <CardContent className="h-full p-0 text-center flex flex-col items-center">
@@ -375,16 +425,16 @@ export default function Home() {
                     CUSTOM
                   </h4>
                   <p className="font-serif text-sm md:text-base font-medium text-ink mb-1">
-                    自定义模式
+                    {isEn ? "Custom Mode" : "自定义模式"}
                   </p>
                   <p className="text-[clamp(10px,0.9vw,12px)] text-ink-light leading-[1.35] whitespace-normal break-words text-balance">
-                    更多内容，由你定义
+                    {isEn ? "Define your own content" : "更多内容，由你定义"}
                   </p>
                 </CardContent>
               </Card>
             </div>
 
-            {moreModes.slice(8).map((mode) => (
+            {moreModesLocalized.slice(8).map((mode) => (
               <div key={mode.name} className="aspect-square">
                 <Card className="group h-full p-3 md:p-4 hover:border-ink/20 transition-all duration-200 hover:-translate-y-0.5">
                   <CardContent className="h-full p-0 text-center flex flex-col items-center">
@@ -410,14 +460,14 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="text-center mb-14">
             <h2 className="font-serif text-3xl font-bold mb-3">
-              硬件参数
+              {isEn ? "Hardware Specs" : "硬件参数"}
             </h2>
             <p className="text-white/60">
-              总 BOM 成本约 220 元以内，人人都能拥有
+              {isEn ? "Approx. BOM cost under CNY 220" : "总 BOM 成本约 220 元以内，人人都能拥有"}
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {specs.map((spec) => (
+            {specsLocalized.map((spec) => (
               <div key={spec.label} className="text-center p-6">
                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-sm border border-white/20 mb-4">
                   <spec.icon size={22} className="text-white/80" />
@@ -435,20 +485,24 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-20 text-center">
           <Sparkles size={28} className="mx-auto text-ink-light mb-4" />
           <h2 className="font-serif text-3xl font-bold text-ink mb-4">
-            开始你的 InkSight 之旅
+            {isEn ? "Start Your InkSight Journey" : "开始你的 InkSight 之旅"}
           </h2>
           <p className="text-ink-light mb-8 max-w-md mx-auto">
-            无需编程基础，通过浏览器即可完成固件烧录。
-            <br />
-            只需一块 ESP32 和一块墨水屏。
+            {isEn ? "No coding required. Flash firmware directly in browser with an ESP32 and E-Ink panel." : "无需编程基础，通过浏览器即可完成固件烧录。"}
+            {!isEn && (
+              <>
+                <br />
+                只需一块 ESP32 和一块墨水屏。
+              </>
+            )}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/flash">
-              <Button size="lg">在线刷机</Button>
+            <Link href={withLocalePath(locale, "/flash")}>
+              <Button size="lg">{isEn ? "Web Flasher" : "在线刷机"}</Button>
             </Link>
-            <Link href="/config">
+            <Link href={withLocalePath(locale, "/config")}>
               <Button variant="outline" size="lg">
-                设备配置
+                {isEn ? "Device Config" : "设备配置"}
               </Button>
             </Link>
             <a
@@ -457,7 +511,7 @@ export default function Home() {
               rel="noopener noreferrer"
             >
               <Button variant="outline" size="lg">
-                查看源码
+                {isEn ? "View Source" : "查看源码"}
               </Button>
             </a>
           </div>

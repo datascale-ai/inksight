@@ -2,38 +2,42 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
+import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 
 const sidebarSections = [
   {
-    title: "入门",
+    titleKey: "docs.section.gettingStarted",
     items: [
-      { label: "项目介绍", href: "/docs" },
-      { label: "架构说明", href: "/docs/architecture" },
-      { label: "硬件清单", href: "/docs/hardware" },
-      { label: "组装指南", href: "/docs/assembly" },
+      { labelKey: "docs.item.intro", href: "/docs" },
+      { labelKey: "docs.item.architecture", href: "/docs/architecture" },
+      { labelKey: "docs.item.hardware", href: "/docs/hardware" },
+      { labelKey: "docs.item.assembly", href: "/docs/assembly" },
     ],
   },
   {
-    title: "使用",
+    titleKey: "docs.section.usage",
     items: [
-      { label: "Web 在线刷机", href: "/docs/flash" },
-      { label: "按键说明", href: "/docs/button-controls" },
-      { label: "配置 API Key", href: "/docs/api-key" },
-      { label: "Web 在线配置", href: "/docs/config" },
+      { labelKey: "docs.item.flash", href: "/docs/flash" },
+      { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
+      { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
+      { labelKey: "docs.item.config", href: "/docs/config" },
     ],
   },
   {
-    title: "进阶",
+    titleKey: "docs.section.advanced",
     items: [
-      { label: "插件开发", href: "/docs/plugin-dev" },
-      { label: "API 参考", href: "/docs/api-reference" },
-      { label: "常见问题", href: "/docs/faq" },
+      { labelKey: "docs.item.pluginDev", href: "/docs/plugin-dev" },
+      { labelKey: "docs.item.apiReference", href: "/docs/api-reference" },
+      { labelKey: "docs.item.faq", href: "/docs/faq" },
     ],
   },
 ];
 
 export function DocsMobileNav() {
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname || "/");
   const [open, setOpen] = useState(false);
 
   return (
@@ -44,7 +48,7 @@ export function DocsMobileNav() {
       >
         <span className="flex items-center gap-2">
           <BookOpen size={15} />
-          目录
+          {t(locale, "docs.menu")}
         </span>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
@@ -52,19 +56,19 @@ export function DocsMobileNav() {
       {open && (
         <div className="border-t border-ink/10 px-4 py-3 space-y-4">
           {sidebarSections.map((section) => (
-            <div key={section.title}>
+            <div key={section.titleKey}>
               <h4 className="text-xs font-semibold text-ink-light uppercase tracking-widest mb-1.5">
-                {section.title}
+                {t(locale, section.titleKey)}
               </h4>
               <ul className="space-y-0.5">
                 {section.items.map((item) => (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={withLocalePath(locale, item.href)}
                       className="block py-1 text-sm text-ink-muted hover:text-ink transition-colors"
                       onClick={() => setOpen(false)}
                     >
-                      {item.label}
+                      {t(locale, item.labelKey)}
                     </Link>
                   </li>
                 ))}

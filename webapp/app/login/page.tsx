@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { setToken } from "@/lib/auth";
+import { localeFromPathname } from "@/lib/i18n";
 
 function LoginForm() {
   const router = useRouter();
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname || "/");
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/config";
+  const next = searchParams.get("next") || `/${locale}/config`;
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -34,11 +37,11 @@ function LoginForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "操作失败");
+        setError(data.error || (locale === "en" ? "Operation failed" : "操作失败"));
         return;
       }
       if (mode === "register") {
-        setSuccessMsg("注册成功，请登录");
+        setSuccessMsg(locale === "en" ? "Registration successful, please sign in" : "注册成功，请登录");
         setMode("login");
         setPassword("");
         return;
@@ -47,7 +50,7 @@ function LoginForm() {
       router.push(next);
       router.refresh();
     } catch {
-      setError("网络错误");
+      setError(locale === "en" ? "Network error" : "网络错误");
     } finally {
       setLoading(false);
     }
@@ -58,13 +61,13 @@ function LoginForm() {
       <Card>
         <CardHeader>
           <CardTitle className="text-center font-serif text-2xl">
-            {mode === "login" ? "登录" : "注册"}
+            {mode === "login" ? (locale === "en" ? "Sign In" : "登录") : (locale === "en" ? "Sign Up" : "注册")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-ink mb-1">用户名</label>
+              <label className="block text-sm font-medium text-ink mb-1">{locale === "en" ? "Username" : "用户名"}</label>
               <input
                 type="text"
                 value={username}
@@ -77,7 +80,7 @@ function LoginForm() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink mb-1">密码</label>
+              <label className="block text-sm font-medium text-ink mb-1">{locale === "en" ? "Password" : "密码"}</label>
               <input
                 type="password"
                 value={password}
@@ -96,22 +99,22 @@ function LoginForm() {
             )}
             <Button type="submit" disabled={loading} className="w-full">
               {loading && <Loader2 size={14} className="animate-spin mr-1" />}
-              {mode === "login" ? "登录" : "注册"}
+              {mode === "login" ? (locale === "en" ? "Sign In" : "登录") : (locale === "en" ? "Sign Up" : "注册")}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-ink-light">
             {mode === "login" ? (
               <span>
-                没有账号？{" "}
+                {locale === "en" ? "No account?" : "没有账号？"}{" "}
                 <button onClick={() => { setMode("register"); setError(""); }} className="text-ink underline">
-                  注册
+                  {locale === "en" ? "Sign up" : "注册"}
                 </button>
               </span>
             ) : (
               <span>
-                已有账号？{" "}
+                {locale === "en" ? "Already have an account?" : "已有账号？"}{" "}
                 <button onClick={() => { setMode("login"); setError(""); }} className="text-ink underline">
-                  登录
+                  {locale === "en" ? "Sign in" : "登录"}
                 </button>
               </span>
             )}

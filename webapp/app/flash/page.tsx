@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Usb,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { fetchCurrentUser, onAuthChanged } from "@/lib/auth";
+import { localeFromPathname, withLocalePath } from "@/lib/i18n";
 
 declare global {
   interface Navigator {
@@ -87,6 +89,28 @@ const FLASH_STATUS_LABEL: Record<FlashStatus, string> = {
 };
 
 export default function FlashPage() {
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname || "/");
+  const isEn = locale === "en";
+  const stepsLocalized = isEn
+    ? [
+        { icon: Usb, title: "Connect USB", desc: "Connect your ESP32-C3 board using a USB-C data cable." },
+        { icon: MousePointerClick, title: "Click Flash", desc: 'Click "Flash Firmware" and allow serial port access.' },
+        { icon: ListOrdered, title: "Select Port", desc: "Select the serial port corresponding to your ESP32 device." },
+        { icon: Zap, title: "Start Flashing", desc: "Firmware will be downloaded and written automatically." },
+      ]
+    : steps;
+  const flashStatusLabel = isEn
+    ? {
+        initializing: "Initializing",
+        loading_releases: "Loading releases",
+        ready: "Ready",
+        connecting: "Waiting serial permission",
+        flashing: "Flashing",
+        success: "Success",
+        failed: "Failed, retry",
+      }
+    : FLASH_STATUS_LABEL;
   const [status, setStatus] = useState<FlashStatus>("initializing");
   const [releases, setReleases] = useState<FirmwareRelease[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>("");
@@ -99,9 +123,9 @@ export default function FlashPage() {
   const [flashProgress, setFlashProgress] = useState<number>(0);
   const [serialSupported, setSerialSupported] = useState<boolean | null>(null);
   const [logs, setLogs] = useState<string[]>([
-    "[系统] InkSight Web Flasher 已就绪",
-    "[提示] 请使用 Chrome 或 Edge 浏览器以获得最佳体验",
-    "[提示] 确保已安装 ESP32 USB 驱动程序",
+    isEn ? "[system] InkSight Web Flasher ready" : "[系统] InkSight Web Flasher 已就绪",
+    isEn ? "[tip] Use Chrome or Edge for best compatibility" : "[提示] 请使用 Chrome 或 Edge 浏览器以获得最佳体验",
+    isEn ? "[tip] Ensure ESP32 USB driver is installed" : "[提示] 确保已安装 ESP32 USB 驱动程序",
   ]);
   const [showPostFlashGuide, setShowPostFlashGuide] = useState(false);
   const [authState, setAuthState] = useState<"checking" | "logged_in" | "guest">("checking");
@@ -198,6 +222,7 @@ export default function FlashPage() {
   }, []);
 
   const selectedRelease = releases.find((r) => r.version === selectedVersion);
+  const loginHref = `${withLocalePath(locale, "/login")}?next=${encodeURIComponent(withLocalePath(locale, "/flash"))}`;
   const [actualChip, setActualChip] = useState<string | null>(null);
   const [actualSizeMB, setActualSizeMB] = useState<string | null>(null);
   const sizeMB = actualSizeMB
@@ -436,12 +461,14 @@ export default function FlashPage() {
           <Zap size={24} className="text-ink" />
         </div>
         <h1 className="font-serif text-3xl md:text-4xl font-bold text-ink mb-3">
-          在线刷机
+          {isEn ? "Web Flasher" : "在线刷机"}
         </h1>
         <p className="text-ink-light max-w-lg mx-auto">
-          无需安装任何软件，直接在浏览器中为你的 InkSight 设备烧录最新固件。
+          {isEn
+            ? "No extra software required. Flash the latest firmware directly in your browser."
+            : "无需安装任何软件，直接在浏览器中为你的 InkSight 设备烧录最新固件。"}
           <br />
-          基于 WebSerial API，支持 Chrome 和 Edge 浏览器。
+          {isEn ? "Powered by WebSerial API, works with Chrome and Edge." : "基于 WebSerial API，支持 Chrome 和 Edge 浏览器。"}
         </p>
       </div>
 
@@ -450,10 +477,10 @@ export default function FlashPage() {
         <div>
           <h2 className="text-lg font-semibold text-ink mb-6 flex items-center gap-2">
             <ListOrdered size={18} />
-            操作步骤
+            {isEn ? "Steps" : "操作步骤"}
           </h2>
           <div className="space-y-6">
-            {steps.map((step, i) => (
+            {stepsLocalized.map((step, i) => (
               <div key={i} className="flex gap-4 group">
                 <div className="flex-shrink-0 flex items-start">
                   <div className="flex items-center justify-center w-10 h-10 rounded-sm border border-ink/10 bg-white group-hover:bg-ink group-hover:text-white transition-colors">
@@ -480,24 +507,24 @@ export default function FlashPage() {
           <div className="mt-8 p-4 rounded-sm border border-ink/10 bg-paper">
             <h3 className="text-sm font-semibold text-ink mb-2 flex items-center gap-2">
               <AlertCircle size={14} />
-              注意事项
+              {isEn ? "Notes" : "注意事项"}
             </h3>
             <ul className="space-y-1.5 text-sm text-ink-light">
               <li className="flex items-start gap-2">
                 <span className="text-ink mt-0.5">·</span>
-                需要使用 Chrome 89+ 或 Edge 89+ 浏览器
+                {isEn ? "Use Chrome 89+ or Edge 89+" : "需要使用 Chrome 89+ 或 Edge 89+ 浏览器"}
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-ink mt-0.5">·</span>
-                确保 USB 数据线支持数据传输（非仅充电线）
+                {isEn ? "Use a USB cable that supports data transfer" : "确保 USB 数据线支持数据传输（非仅充电线）"}
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-ink mt-0.5">·</span>
-                刷写过程中请勿断开设备连接
+                {isEn ? "Do not unplug device while flashing" : "刷写过程中请勿断开设备连接"}
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-ink mt-0.5">·</span>
-                刷写完成后设备将自动重启并进入配网模式
+                {isEn ? "Device reboots and enters provisioning mode after flashing" : "刷写完成后设备将自动重启并进入配网模式"}
               </li>
             </ul>
           </div>
@@ -507,25 +534,25 @@ export default function FlashPage() {
         <div>
           <h2 className="text-lg font-semibold text-ink mb-6 flex items-center gap-2">
             <Zap size={18} />
-            固件烧录
+            {isEn ? "Firmware Flash" : "固件烧录"}
           </h2>
 
           <div className="rounded-sm border border-ink/10 bg-white p-8 text-center">
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 text-sm text-ink-light mb-2">
                 <CheckCircle2 size={14} className={status === "success" ? "text-green-600" : status === "failed" ? "text-red-500" : status === "flashing" ? "text-amber-500 animate-pulse" : "text-ink-light"} />
-                当前状态: {FLASH_STATUS_LABEL[status]}
+                {isEn ? "Status" : "当前状态"}: {flashStatusLabel[status]}
                 {status === "flashing" ? ` ${flashProgress}%` : ""}
               </div>
               <p className="text-xs text-ink-light">
-                芯片: {actualChip ?? selectedRelease?.chip_family ?? "ESP32-C3"} &middot; 固件大小:{" "}
-                {sizeMB ? `${sizeMB} MB` : "未知"}
+                {isEn ? "Chip" : "芯片"}: {actualChip ?? selectedRelease?.chip_family ?? "ESP32-C3"} &middot; {isEn ? "Size" : "固件大小"}:{" "}
+                {sizeMB ? `${sizeMB} MB` : isEn ? "Unknown" : "未知"}
               </p>
             </div>
 
             <div className="mb-4">
               <label className="block text-xs text-ink-light mb-2 text-left">
-                固件来源
+                {isEn ? "Source" : "固件来源"}
               </label>
               <div className="mb-2 grid grid-cols-2 gap-2 text-sm">
                 <Button
@@ -546,7 +573,7 @@ export default function FlashPage() {
                     setManualUrlVerified(false);
                   }}
                 >
-                  手动 URL
+                  {isEn ? "Manual URL" : "手动 URL"}
                 </Button>
               </div>
 
@@ -569,7 +596,7 @@ export default function FlashPage() {
                       onClick={handleVerifyManualUrl}
                       disabled={!manualFirmwareUrl || manualUrlVerifying}
                     >
-                      {manualUrlVerifying ? "校验中..." : "校验链接"}
+                      {manualUrlVerifying ? (isEn ? "Verifying..." : "校验中...") : (isEn ? "Verify URL" : "校验链接")}
                     </Button>
                   </div>
                   {manualUrlMessage ? (
@@ -582,7 +609,7 @@ export default function FlashPage() {
                     </p>
                   ) : null}
                   <p className="mt-2 text-xs text-ink-light text-left">
-                    请输入可直接下载的 `.bin` 固件 URL（建议使用 GitHub Releases 资产链接）。
+                    {isEn ? "Enter a direct downloadable .bin firmware URL (GitHub Releases asset link recommended)." : "请输入可直接下载的 `.bin` 固件 URL（建议使用 GitHub Releases 资产链接）。"}
                   </p>
                 </div>
               ) : (
@@ -611,12 +638,14 @@ export default function FlashPage() {
               )}
               {!useManualFirmware && releaseError ? (
                 <p className="mt-2 text-xs text-red-600 text-left">
-                  固件版本加载失败：{releaseError}
+                  {isEn ? "Failed to load firmware versions" : "固件版本加载失败"}: {releaseError}
                 </p>
               ) : null}
               {!process.env.NEXT_PUBLIC_FIRMWARE_API_BASE && !useManualFirmware ? (
                 <p className="mt-2 text-xs text-ink-light text-left">
-                  未配置 NEXT_PUBLIC_FIRMWARE_API_BASE 环境变量：GitHub Releases 列表会走当前站点的 /api/firmware/releases。
+                  {isEn
+                    ? "NEXT_PUBLIC_FIRMWARE_API_BASE not set. Releases list uses /api/firmware/releases on current site."
+                    : "未配置 NEXT_PUBLIC_FIRMWARE_API_BASE 环境变量：GitHub Releases 列表会走当前站点的 /api/firmware/releases。"}
                 </p>
               ) : null}
             </div>
@@ -625,45 +654,45 @@ export default function FlashPage() {
             <div className="mb-6">
               {authState === "checking" ? (
                 <div className="mb-3 p-3 rounded-sm border border-ink/10 bg-paper text-sm text-ink-light">
-                  正在检查登录状态...
+                  {isEn ? "Checking auth status..." : "正在检查登录状态..."}
                 </div>
               ) : authState === "guest" && !skipLoginGate ? (
                 <div className="mb-3 p-3 rounded-sm border border-amber-200 bg-amber-50 text-left">
-                  <p className="text-sm text-amber-800">建议先登录，再开始刷机</p>
+                  <p className="text-sm text-amber-800">{isEn ? "Sign in first for a smoother flow" : "建议先登录，再开始刷机"}</p>
                   <p className="mt-1 text-xs text-amber-700">
-                    登录后可更顺畅完成 刷机 -&gt; 配网 -&gt; 在线配置。
+                    {isEn ? "After sign in: flash -> provisioning -> online configuration." : "登录后可更顺畅完成 刷机 -&gt; 配网 -&gt; 在线配置。"}
                   </p>
                   <div className="mt-3 flex gap-2">
                     <Button
                       size="sm"
                       onClick={() => {
-                        window.location.href = `/login?next=${encodeURIComponent("/flash")}`;
+                        window.location.href = loginHref;
                       }}
                     >
-                      登录后继续
+                      {isEn ? "Sign in and continue" : "登录后继续"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => {
                         setSkipLoginGate(true);
-                        addLog("已选择跳过登录，继续刷机");
+                        addLog(isEn ? "Continue flashing without sign in" : "已选择跳过登录，继续刷机");
                       }}
                     >
-                      跳过登录，直接刷机
+                      {isEn ? "Skip sign in" : "跳过登录，直接刷机"}
                     </Button>
                   </div>
                 </div>
               ) : authState === "logged_in" ? (
                 <div className="mb-3 p-3 rounded-sm border border-green-200 bg-green-50 text-sm text-green-700">
-                  已登录，可直接完成刷机后的在线配置流程。
+                  {isEn ? "Signed in. You can continue to online config after flashing." : "已登录，可直接完成刷机后的在线配置流程。"}
                 </div>
               ) : null}
 
               {serialSupported === false ? (
                 <div className="p-4 rounded-sm border border-red-200 bg-red-50 text-sm text-red-700">
                   <AlertCircle size={16} className="inline mr-2 align-text-bottom" />
-                  你的浏览器不支持 WebSerial API，请使用 Chrome 或 Edge 浏览器。
+                  {isEn ? "Your browser does not support WebSerial API. Please use Chrome or Edge." : "你的浏览器不支持 WebSerial API，请使用 Chrome 或 Edge 浏览器。"}
                 </div>
               ) : (
                 <Button
@@ -675,10 +704,10 @@ export default function FlashPage() {
                   disabled={!canStartFlash || status === "connecting" || status === "flashing"}
                 >
                   {status === "connecting"
-                    ? "正在连接..."
+                    ? (isEn ? "Connecting..." : "正在连接...")
                     : status === "flashing"
-                    ? `刷写中 ${flashProgress}%`
-                    : "刷写固件"}
+                    ? (isEn ? `Flashing ${flashProgress}%` : `刷写中 ${flashProgress}%`)
+                    : (isEn ? "Flash Firmware" : "刷写固件")}
                 </Button>
               )}
 
@@ -700,7 +729,7 @@ export default function FlashPage() {
               <div className="mt-4 rounded-sm border border-green-200 bg-green-50 p-5 text-left">
                 <h3 className="text-sm font-semibold text-green-800 mb-3 flex items-center gap-2">
                   <CheckCircle2 size={16} />
-                  刷写成功 — 下一步配网
+                  {isEn ? "Flashed Successfully - Next: Provisioning" : "刷写成功 — 下一步配网"}
                 </h3>
                 <ol className="space-y-2 text-sm text-green-700 list-decimal list-inside">
                   <li>断开 USB，给设备上电</li>
@@ -711,10 +740,10 @@ export default function FlashPage() {
                 </ol>
                 {status === "success" ? (
                   <div className="mt-4">
-                    <Button size="sm" onClick={() => window.open("/config", "_blank")}>
-                      前往配置页面
+                    <Button size="sm" onClick={() => window.open(withLocalePath(locale, "/config"), "_blank")}>
+                      {isEn ? "Open Configuration Page" : "前往配置页面"}
                     </Button>
-                    <p className="mt-2 text-xs text-green-600">配置页面会自动检测设备上线</p>
+                    <p className="mt-2 text-xs text-green-600">{isEn ? "Configuration page will detect device online status automatically." : "配置页面会自动检测设备上线"}</p>
                   </div>
                 ) : null}
               </div>
@@ -725,7 +754,7 @@ export default function FlashPage() {
           <div className="mt-6">
             <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
               <Terminal size={14} />
-              控制台日志
+              {isEn ? "Console Logs" : "控制台日志"}
             </h3>
             <div className="ink-strong-select rounded-sm border border-ink/10 bg-ink text-green-400 font-mono text-xs p-4 h-48 overflow-y-auto">
               {logs.map((log, i) => (
@@ -748,13 +777,13 @@ export default function FlashPage() {
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 size={20} className="text-green-600" />
-                  <h2 className="text-lg font-semibold text-ink">刷写成功</h2>
+                  <h2 className="text-lg font-semibold text-ink">{isEn ? "Flash Completed" : "刷写成功"}</h2>
                 </div>
                 <button onClick={() => setShowPostFlashGuide(false)} className="p-1 text-ink-light hover:text-ink">
                   <X size={18} />
                 </button>
               </div>
-              <p className="text-sm text-ink-light mb-4">固件已烧录成功，请按以下步骤完成配网：</p>
+              <p className="text-sm text-ink-light mb-4">{isEn ? "Firmware flashed successfully. Follow the steps below to finish provisioning:" : "固件已烧录成功，请按以下步骤完成配网："}</p>
               <ol className="space-y-3 text-sm text-ink">
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-xs flex items-center justify-center font-medium">1</span>

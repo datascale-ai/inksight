@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, Suspense, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { authHeaders, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
+import { localeFromPathname, withLocalePath } from "@/lib/i18n";
 
 interface UserDevice {
   mac: string;
@@ -279,6 +280,10 @@ interface DeviceStats {
 type RuntimeMode = "active" | "interval" | "unknown";
 
 function ConfigPageInner() {
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname || "/");
+  const isEn = locale === "en";
+  const tr = (zh: string, en: string) => (isEn ? en : zh);
   const searchParams = useSearchParams();
   const mac = searchParams.get("mac") || "";
   const preferMac = searchParams.get("prefer_mac") || "";
@@ -386,7 +391,7 @@ function ConfigPageInner() {
     if (!normalizedMac) return;
     const alreadyBound = userDevices.some((item) => item.mac.toUpperCase() === normalizedMac);
     if (alreadyBound) {
-      window.location.href = `/config?mac=${encodeURIComponent(normalizedMac)}`;
+      window.location.href = `${withLocalePath(locale, "/config")}?mac=${encodeURIComponent(normalizedMac)}`;
     }
   }, [currentUser, devicesLoading, mac, preferMac, userDevices]);
 
@@ -409,7 +414,7 @@ function ConfigPageInner() {
       if (data.status === "claimed" || data.status === "already_member" || data.status === "active") {
         await loadUserDevices();
         await loadPendingRequests();
-        window.location.href = `/config?mac=${encodeURIComponent(data.mac)}`;
+        window.location.href = `${withLocalePath(locale, "/config")}?mac=${encodeURIComponent(data.mac)}`;
         return;
       }
       await loadPendingRequests();
@@ -590,8 +595,8 @@ function ConfigPageInner() {
       if (prefillCode) params.set("code", prefillCode);
     }
     const query = params.toString();
-    return query ? `/config?${query}` : "/config";
-  }, [mac, preferMac, prefillCode]);
+    return query ? `${withLocalePath(locale, "/config")}?${query}` : withLocalePath(locale, "/config");
+  }, [locale, mac, preferMac, prefillCode]);
 
   useEffect(() => {
     fetch("/api/modes").then((r) => r.json()).then((d) => {
@@ -1239,7 +1244,11 @@ function ConfigPageInner() {
   const currentDeviceMembership = userDevices.find((d) => d.mac.toUpperCase() === mac.toUpperCase()) || null;
   const denyByMembership = Boolean(mac && currentUser && !devicesLoading && !currentDeviceMembership);
   const currentUserRole = currentDeviceMembership?.role || "";
-  const statusLabel = !isOnline ? "离线" : runtimeMode === "active" ? "活跃状态" : "间歇状态";
+  const statusLabel = !isOnline
+    ? tr("离线", "Offline")
+    : runtimeMode === "active"
+    ? tr("活跃状态", "Active")
+    : tr("间歇状态", "Interval");
   const statusClass = !isOnline
     ? "bg-paper-dark text-ink-light border border-ink/10"
     : runtimeMode === "active"
@@ -1250,24 +1259,32 @@ function ConfigPageInner() {
     : runtimeMode === "active"
     ? "text-green-600"
     : "text-amber-600";
+  const tabs = isEn
+    ? [
+        { id: "modes", label: "Modes", icon: Settings },
+        { id: "preferences", label: "Preferences", icon: Sliders },
+        { id: "ai", label: "AI Models", icon: Cpu },
+        { id: "stats", label: "Status", icon: BarChart3 },
+      ] as const
+    : TABS;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="font-serif text-3xl font-bold text-ink mb-2">设备配置</h1>
+        <h1 className="font-serif text-3xl font-bold text-ink mb-2">{tr("设备配置", "Device Configuration")}</h1>
         {currentUser === undefined ? (
           <div className="flex items-center gap-2 text-ink-light text-sm py-4">
-            <Loader2 size={16} className="animate-spin" /> 加载中...
+            <Loader2 size={16} className="animate-spin" /> {tr("加载中...", "Loading...")}
           </div>
         ) : currentUser === null ? (
           <div className="flex items-start gap-2 p-3 rounded-sm border border-amber-200 bg-amber-50 text-sm text-amber-800">
             <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium">请先登录</p>
-              <p className="text-xs mt-0.5">{mac ? "登录后才能配置设备。" : "登录后可以管理你的设备列表。"}</p>
-              <Link href={`/login?next=${encodeURIComponent(nextConfigPath)}`}>
-                <Button size="sm" className="mt-2">登录 / 注册</Button>
+              <p className="font-medium">{tr("请先登录", "Please sign in first")}</p>
+              <p className="text-xs mt-0.5">{mac ? tr("登录后才能配置设备。", "Sign in to configure this device.") : tr("登录后可以管理你的设备列表。", "Sign in to manage your device list.")}</p>
+              <Link href={`${withLocalePath(locale, "/login")}?next=${encodeURIComponent(nextConfigPath)}`}>
+                <Button size="sm" className="mt-2">{tr("登录 / 注册", "Sign In / Sign Up")}</Button>
               </Link>
             </div>
           </div>
@@ -1275,17 +1292,17 @@ function ConfigPageInner() {
           <div className="flex items-start gap-2 p-3 rounded-sm border border-red-200 bg-red-50 text-sm text-red-800">
             <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium">无权访问该设备</p>
-              <p className="text-xs mt-0.5">该设备未绑定到当前账号，或你不是被授权成员。</p>
-              <Link href="/config">
-                <Button size="sm" variant="outline" className="mt-2">返回设备列表</Button>
+              <p className="font-medium">{tr("无权访问该设备", "No permission to access this device")}</p>
+              <p className="text-xs mt-0.5">{tr("该设备未绑定到当前账号，或你不是被授权成员。", "This device is not bound to your account, or you are not an authorized member.")}</p>
+              <Link href={withLocalePath(locale, "/config")}>
+                <Button size="sm" variant="outline" className="mt-2">{tr("返回设备列表", "Back to Device List")}</Button>
               </Link>
             </div>
           </div>
         ) : mac ? (
           <p className="text-ink-light text-sm flex items-center gap-2">
             <CheckCircle2 size={14} className={statusIconClass} />
-            设备 MAC: <code className="bg-paper-dark px-2 py-0.5 rounded text-xs">{mac}</code>
+            {tr("设备 MAC", "Device MAC")}: <code className="bg-paper-dark px-2 py-0.5 rounded text-xs">{mac}</code>
             {currentUserRole && (
               <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-paper-dark text-ink">
                 {currentUserRole === "owner" ? "Owner" : "Member"}
@@ -1294,22 +1311,22 @@ function ConfigPageInner() {
             <span className={`ml-1 inline-flex items-center rounded px-2 py-0.5 text-xs ${statusClass}`}>{statusLabel}</span>
             {lastSeen && (
               <span className="text-xs text-ink-light">
-                上次在线: {new Date(lastSeen).toLocaleString("zh-CN")}
+                {tr("上次在线", "Last seen")}: {new Date(lastSeen).toLocaleString(isEn ? "en-US" : "zh-CN")}
               </span>
             )}
-            <Link href="/config" className="text-xs text-ink-light hover:text-ink underline ml-2">
-              返回设备列表
+            <Link href={withLocalePath(locale, "/config")} className="text-xs text-ink-light hover:text-ink underline ml-2">
+              {tr("返回设备列表", "Back to Device List")}
             </Link>
           </p>
         ) : (
           <div className="space-y-4">
             {requestsLoading ? (
               <div className="flex items-center gap-2 text-ink-light text-sm py-2">
-                <Loader2 size={16} className="animate-spin" /> 加载待处理请求...
+                <Loader2 size={16} className="animate-spin" /> {tr("加载待处理请求...", "Loading pending requests...")}
               </div>
             ) : pendingRequests.length > 0 ? (
               <div className="p-3 rounded-sm border border-amber-200 bg-amber-50">
-                <p className="text-sm font-medium text-amber-900 mb-2">待你处理的绑定请求</p>
+                <p className="text-sm font-medium text-amber-900 mb-2">{tr("待你处理的绑定请求", "Pending binding requests")}</p>
                 <div className="space-y-2">
                   {pendingRequests.map((item) => (
                     <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
@@ -1318,8 +1335,8 @@ function ConfigPageInner() {
                         <p className="text-xs text-amber-800 font-mono">{item.mac}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleRejectRequest(item.id)}>拒绝</Button>
-                        <Button size="sm" onClick={() => handleApproveRequest(item.id)}>同意</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleRejectRequest(item.id)}>{tr("拒绝", "Reject")}</Button>
+                        <Button size="sm" onClick={() => handleApproveRequest(item.id)}>{tr("同意", "Approve")}</Button>
                       </div>
                     </div>
                   ))}
@@ -1329,39 +1346,39 @@ function ConfigPageInner() {
 
             <div className="p-3 rounded-sm border border-ink/10 bg-paper">
               <p className="text-sm font-medium text-ink mb-2 flex items-center gap-1">
-                <Monitor size={14} /> 配对设备
+                <Monitor size={14} /> {tr("配对设备", "Pair Device")}
               </p>
-              <p className="text-xs text-ink-light mb-3">在设备配网页查看配对码，输入后即可认领或申请绑定设备。</p>
+              <p className="text-xs text-ink-light mb-3">{tr("在设备配网页查看配对码，输入后即可认领或申请绑定设备。", "Find the pair code in the device portal page, then claim or request binding.")}</p>
               <div className="flex gap-2 flex-wrap items-center">
                 <input
                   value={pairCodeInput}
                   onChange={(e) => setPairCodeInput(e.target.value.toUpperCase())}
-                  placeholder="配对码"
+                  placeholder={tr("配对码", "Pair Code")}
                   className="w-full sm:w-64 rounded-sm border border-ink/20 px-3 py-1.5 text-sm font-mono uppercase tracking-[0.2em]"
                 />
                 <Button size="sm" variant="outline" onClick={handlePairDevice} disabled={!pairCodeInput.trim() || pairingDevice}>
                   {pairingDevice ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                  立即配对
+                  {tr("立即配对", "Pair Now")}
                 </Button>
               </div>
             </div>
 
             <div className="p-3 rounded-sm border border-ink/10 bg-paper">
               <p className="text-sm font-medium text-ink mb-2 flex items-center gap-1">
-                <Plus size={14} /> 按 MAC 手动绑定
+                <Plus size={14} /> {tr("按 MAC 手动绑定", "Bind by MAC")}
               </p>
-              <p className="text-xs text-ink-light mb-3">请优先使用配对码配对。</p>
+              <p className="text-xs text-ink-light mb-3">{tr("请优先使用配对码配对。", "Pair code is recommended first.")}</p>
               <div className="flex gap-2 flex-wrap items-center">
                 <input
                   value={bindMacInput}
                   onChange={(e) => setBindMacInput(e.target.value)}
-                  placeholder="MAC 地址 (如 AA:BB:CC:DD:EE:FF)"
+                  placeholder={tr("MAC 地址 (如 AA:BB:CC:DD:EE:FF)", "MAC address (e.g. AA:BB:CC:DD:EE:FF)")}
                   className="w-full sm:w-[360px] rounded-sm border border-ink/20 px-3 py-1.5 text-sm font-mono"
                 />
                 <input
                   value={bindNicknameInput}
                   onChange={(e) => setBindNicknameInput(e.target.value)}
-                  placeholder="别名（可选）"
+                  placeholder={tr("别名（可选）", "Nickname (optional)")}
                   className="w-32 rounded-sm border border-ink/20 px-3 py-1.5 text-sm"
                 />
                 <Button size="sm" variant="outline" onClick={async () => {
@@ -1371,14 +1388,14 @@ function ConfigPageInner() {
                   if (!result) return;
                   if (result.status === "claimed" || result.status === "active") {
                     showToast("设备已绑定", "success");
-                    window.location.href = `/config?mac=${encodeURIComponent(targetMac)}`;
+                    window.location.href = `${withLocalePath(locale, "/config")}?mac=${encodeURIComponent(targetMac)}`;
                     return;
                   }
                   if (result.status === "pending_approval") {
                     showToast("已提交绑定申请，等待 owner 同意", "info");
                   }
                 }}>
-                  绑定
+                  {tr("绑定", "Bind")}
                 </Button>
               </div>
             </div>
@@ -1386,7 +1403,7 @@ function ConfigPageInner() {
             {/* Device list */}
             {devicesLoading ? (
               <div className="flex items-center gap-2 text-ink-light text-sm py-4">
-                <Loader2 size={16} className="animate-spin" /> 加载设备列表...
+                <Loader2 size={16} className="animate-spin" /> {tr("加载设备列表...", "Loading devices...")}
               </div>
             ) : userDevices.length > 0 ? (
               <div className="space-y-2">
@@ -1402,25 +1419,25 @@ function ConfigPageInner() {
                           <p className="text-xs text-ink-light font-mono">{d.mac}</p>
                         )}
                         <p className="text-xs text-ink-light">
-                          权限: {d.role === "owner" ? "Owner" : "Member"}
+                          {tr("权限", "Role")}: {d.role === "owner" ? "Owner" : "Member"}
                         </p>
                         <p className="text-xs text-ink-light">
                           {d.last_seen
-                            ? `上次在线: ${new Date(d.last_seen).toLocaleString("zh-CN")}`
-                            : "尚未上线"}
+                            ? `${tr("上次在线", "Last seen")}: ${new Date(d.last_seen).toLocaleString(isEn ? "en-US" : "zh-CN")}`
+                            : tr("尚未上线", "Never online")}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Link href={`/config?mac=${encodeURIComponent(d.mac)}`}>
+                      <Link href={`${withLocalePath(locale, "/config")}?mac=${encodeURIComponent(d.mac)}`}>
                         <Button size="sm" variant="outline">
-                          <Settings size={14} className="mr-1" /> 配置
+                          <Settings size={14} className="mr-1" /> {tr("配置", "Configure")}
                         </Button>
                       </Link>
                       <button
                         onClick={() => handleUnbindDevice(d.mac)}
                         className="p-1.5 text-ink-light hover:text-red-600 transition-colors"
-                        title="解绑设备"
+                        title={tr("解绑设备", "Unbind device")}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1432,8 +1449,8 @@ function ConfigPageInner() {
               <div className="flex items-start gap-2 p-3 rounded-sm border border-amber-200 bg-amber-50 text-sm text-amber-800">
                 <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">未绑定设备</p>
-                  <p className="text-xs mt-0.5">当前账号下还没有设备。</p>
+                  <p className="font-medium">{tr("未绑定设备", "No bound devices")}</p>
+                  <p className="text-xs mt-0.5">{tr("当前账号下还没有设备。", "There are no devices under this account yet.")}</p>
                 </div>
               </div>
             )}
@@ -1444,7 +1461,7 @@ function ConfigPageInner() {
 
       {mac && currentUser && !(macAccessDenied || denyByMembership) && loading && (
         <div className="flex items-center justify-center py-20 text-ink-light">
-          <Loader2 size={24} className="animate-spin mr-2" /> 加载配置中...
+          <Loader2 size={24} className="animate-spin mr-2" /> {tr("加载配置中...", "Loading configuration...")}
         </div>
       )}
 
@@ -1517,7 +1534,7 @@ function ConfigPageInner() {
             {/* Sidebar tabs */}
             <nav className="w-44 flex-shrink-0 hidden md:block">
             <div className="sticky top-24 space-y-1">
-              {TABS.map((tab) => (
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -1539,7 +1556,7 @@ function ConfigPageInner() {
                   className="w-full bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
-                  保存到设备
+                  {tr("保存到设备", "Save to Device")}
                 </Button>
               </div>
             </div>
@@ -1548,7 +1565,7 @@ function ConfigPageInner() {
             {/* Mobile tabs */}
             <div className="md:hidden w-full mb-4 overflow-x-auto">
             <div className="flex gap-1 min-w-max pb-2">
-              {TABS.map((tab) => (
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -1568,22 +1585,22 @@ function ConfigPageInner() {
             {activeTab === "modes" && (
               <div className="space-y-6">
                 <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><LayoutGrid size={18} /> 内容模式</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="flex items-center gap-2"><LayoutGrid size={18} /> {tr("内容模式", "Content Modes")}</CardTitle></CardHeader>
                   <CardContent>
                     <ModeGrid
-                      title="核心模式" modes={CORE_MODES}
+                      title={tr("核心模式", "Core Modes")} modes={CORE_MODES}
                       selectedModes={selectedModes} favoritedModes={favoritedModes}
                       onPreview={handleModePreview} onApply={handleModeApply} onFavorite={handleModeFavorite}
                       onSettings={(m) => setSettingsMode(m)}
                     />
                     <ModeGrid
-                      title="更多模式" modes={EXTRA_MODES} collapsible
+                      title={tr("更多模式", "More Modes")} modes={EXTRA_MODES} collapsible
                       selectedModes={selectedModes} favoritedModes={favoritedModes}
                       onPreview={handleModePreview} onApply={handleModeApply} onFavorite={handleModeFavorite}
                       onSettings={(m) => setSettingsMode(m)}
                     />
                     <ModeGrid
-                      title="自定义模式"
+                      title={tr("自定义模式", "Custom Modes")}
                       modes={customModes.map((cm) => cm.mode_id)}
                       selectedModes={selectedModes}
                       favoritedModes={favoritedModes}
@@ -1602,7 +1619,7 @@ function ConfigPageInner() {
                             className="flex-1 aspect-square rounded-lg border border-dashed border-ink/20 p-1.5 flex flex-col items-center justify-center transition-all hover:border-ink/40 hover:bg-paper-dark bg-white text-ink-light"
                           >
                             <Plus size={18} className="mb-0.5" />
-                            <div className="text-[10px] leading-tight">新建</div>
+                            <div className="text-[10px] leading-tight">{tr("新建", "New")}</div>
                           </button>
                         </div>
                       </div>
@@ -1614,29 +1631,29 @@ function ConfigPageInner() {
                           <button onClick={() => setEditingCustomMode(false)} className="p-1 rounded hover:bg-paper-dark transition-colors">
                             <ArrowLeft size={16} className="text-ink-light" />
                           </button>
-                          <span className="text-sm font-medium">创建自定义模式</span>
+                          <span className="text-sm font-medium">{tr("创建自定义模式", "Create Custom Mode")}</span>
                         </div>
 
                         <div className="flex gap-1 mb-4">
                           <button onClick={() => setEditorTab("ai")} className={`px-3 py-1.5 rounded-sm text-xs transition-colors ${editorTab === "ai" ? "bg-ink text-white" : "bg-paper-dark text-ink-light hover:text-ink"}`}>
-                            <Sparkles size={12} className="inline mr-1" />AI 生成
+                            <Sparkles size={12} className="inline mr-1" />{tr("AI 生成", "AI Generate")}
                           </button>
                           <button onClick={() => setEditorTab("template")} className={`px-3 py-1.5 rounded-sm text-xs transition-colors ${editorTab === "template" ? "bg-ink text-white" : "bg-paper-dark text-ink-light hover:text-ink"}`}>
-                            <LayoutGrid size={12} className="inline mr-1" />从模板
+                            <LayoutGrid size={12} className="inline mr-1" />{tr("从模板", "From Template")}
                           </button>
                         </div>
 
                         {editorTab === "ai" ? (
                           <div className="space-y-3 mb-4">
-                            <textarea value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} rows={3} maxLength={2000} placeholder="描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中" className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y" />
+                            <textarea value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} rows={3} maxLength={2000} placeholder={tr("描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中", "Describe your mode, e.g. show one English word and definition daily with a large centered font")} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y" />
                             <Button size="sm" onClick={handleGenerateMode} disabled={customGenerating || !customDesc.trim()}>
-                              {customGenerating ? <><Loader2 size={14} className="animate-spin mr-1" /> 生成中...</> : "AI 生成模式"}
+                              {customGenerating ? <><Loader2 size={14} className="animate-spin mr-1" /> {tr("生成中...", "Generating...")}</> : tr("AI 生成模式", "Generate Mode with AI")}
                             </Button>
                           </div>
                         ) : (
                           <div className="space-y-3 mb-4">
                             <select onChange={(e) => { const t = MODE_TEMPLATES[e.target.value]; if (t) { setCustomJson(JSON.stringify(t.def, null, 2)); setCustomModeName((t.def?.display_name || "").toString()); } }} defaultValue="" className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                              <option value="" disabled>选择模板...</option>
+                              <option value="" disabled>{tr("选择模板...", "Select template...")}</option>
                               {Object.entries(MODE_TEMPLATES).map(([k, t]) => (
                                 <option key={k} value={k}>{t.label}</option>
                               ))}
@@ -1648,13 +1665,13 @@ function ConfigPageInner() {
                           <input
                             value={customModeName}
                             onChange={(e) => setCustomModeName(e.target.value)}
-                            placeholder="模式名称（例如：今日英语）"
+                            placeholder={tr("模式名称（例如：今日英语）", "Mode name (e.g. Daily English)")}
                             className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                           />
-                          <textarea value={customJson} onChange={(e) => setCustomJson(e.target.value)} rows={14} spellCheck={false} placeholder="模式 JSON 定义" className="ink-strong-select w-full rounded-sm border border-ink/20 px-3 py-2 text-xs font-mono resize-y bg-ink text-green-400" />
+                          <textarea value={customJson} onChange={(e) => setCustomJson(e.target.value)} rows={14} spellCheck={false} placeholder={tr("模式 JSON 定义", "Mode JSON definition")} className="ink-strong-select w-full rounded-sm border border-ink/20 px-3 py-2 text-xs font-mono resize-y bg-ink text-green-400" />
                           <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={handleCustomPreview} disabled={!customJson.trim() || customPreviewLoading}>
-                              {customPreviewImg ? "重新生成预览" : "预览效果"}
+                              {customPreviewImg ? tr("重新生成预览", "Regenerate Preview") : tr("预览效果", "Preview")}
                             </Button>
                             <Button
                               variant="outline"
@@ -1663,7 +1680,7 @@ function ConfigPageInner() {
                               disabled={!mac || !customPreviewImg || customPreviewLoading || customApplyToScreenLoading}
                             >
                               {customApplyToScreenLoading ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                              应用到墨水屏
+                              {tr("应用到墨水屏", "Apply to E-Ink")}
                             </Button>
                             <Button
                               variant="outline"
@@ -1672,14 +1689,14 @@ function ConfigPageInner() {
                               disabled={!customJson.trim()}
                               className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
                             >
-                              保存模式
+                              {tr("保存模式", "Save Mode")}
                             </Button>
                           </div>
                           {(customPreviewLoading || customPreviewImg) && (
                             <div className="mt-3 border border-ink/10 rounded-sm p-2 bg-paper flex justify-center">
                               {customPreviewLoading ? (
                                 <div className="flex items-center gap-2 text-ink-light text-sm py-8">
-                                  <Loader2 size={18} className="animate-spin" /> 预览生成中...
+                                  <Loader2 size={18} className="animate-spin" /> {tr("预览生成中...", "Generating preview...")}
                                 </div>
                               ) : (
                                 <img src={customPreviewImg!} alt="Custom preview" className="max-w-[400px] w-full border border-ink/10" />
@@ -1690,19 +1707,19 @@ function ConfigPageInner() {
                       </div>
                     ) : (
                       <>
-                        <p className="text-xs text-ink-light mt-3">已选 {selectedModes.size} 个模式</p>
+                        <p className="text-xs text-ink-light mt-3">{tr("已选", "Selected")} {selectedModes.size} {tr("个模式", "modes")}</p>
                         <div className="mt-6 pt-6 border-t border-ink/10">
                           <div className="flex items-center gap-2 mb-3">
                             <Eye size={16} className="text-ink-light" />
                             <span className="text-sm font-medium">
-                              预览{previewMode ? `：${MODE_META[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode}` : ""}
+                              {tr("预览", "Preview")}{previewMode ? `: ${MODE_META[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode}` : ""}
                             </span>
                             {previewLoading && <Loader2 size={14} className="animate-spin text-ink-light" />}
                           </div>
                           <div className="mb-3">
                             {previewImg && !previewLoading && previewCacheHit === true && (
                               <div className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1.5">
-                                当前预览为历史缓存。如需查看最新效果，请点击“重新生成预览”。
+                                {tr("当前预览为历史缓存。如需查看最新效果，请点击“重新生成预览”。", "Current preview is from cache. Click \"Regenerate Preview\" to fetch latest output.")}
                               </div>
                             )}
                             <Button
@@ -1712,7 +1729,7 @@ function ConfigPageInner() {
                               disabled={!previewMode || previewLoading}
                               className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50 mr-2"
                             >
-                              重新生成预览
+                              {tr("重新生成预览", "Regenerate Preview")}
                             </Button>
                             <Button
                               variant="outline"
@@ -1722,13 +1739,13 @@ function ConfigPageInner() {
                               className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
                             >
                               {applyToScreenLoading ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                              应用到墨水屏
+                              {tr("应用到墨水屏", "Apply to E-Ink")}
                             </Button>
                           </div>
                           {previewLoading ? (
                             <div className="border border-ink/10 rounded-sm p-3 bg-paper flex justify-center">
                               <div className="flex items-center gap-2 text-ink-light text-sm py-8">
-                                <Loader2 size={18} className="animate-spin" /> 预览生成中...
+                                <Loader2 size={18} className="animate-spin" /> {tr("预览生成中...", "Generating preview...")}
                               </div>
                             </div>
                           ) : previewImg ? (
@@ -1737,7 +1754,7 @@ function ConfigPageInner() {
                             </div>
                           ) : (
                             <div className="text-sm text-ink-light text-center py-8">
-                              点击任意模式的「预览」查看效果
+                              {tr("点击任意模式的「预览」查看效果", "Click Preview on any mode to view output")}
                             </div>
                           )}
                         </div>
@@ -1752,31 +1769,31 @@ function ConfigPageInner() {
             {/* Preferences Tab */}
             {activeTab === "preferences" && (
               <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Globe size={18} /> 个性化设置</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Globe size={18} /> {tr("个性化设置", "Preferences")}</CardTitle></CardHeader>
                 <CardContent className="space-y-5">
-                  <Field label="城市（全局默认）">
+                  <Field label={tr("城市（全局默认）", "City (global default)")}>
                     <input
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      placeholder="如：深圳"
+                      placeholder={tr("如：深圳", "e.g. Shenzhen")}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
                     />
                   </Field>
-                  <Field label="语言">
+                  <Field label={tr("语言", "Language")}>
                     <div className="flex flex-wrap gap-2">
                       {LANGUAGE_OPTIONS.map((opt) => (
                         <Chip key={opt.value} selected={language === opt.value} onClick={() => setLanguage(opt.value)}>{opt.label}</Chip>
                       ))}
                     </div>
                   </Field>
-                  <Field label="内容语气">
+                  <Field label={tr("内容语气", "Tone")}>
                     <div className="flex flex-wrap gap-2">
                       {TONE_OPTIONS.map((opt) => (
                         <Chip key={opt.value} selected={contentTone === opt.value} onClick={() => setContentTone(opt.value)}>{opt.label}</Chip>
                       ))}
                     </div>
                   </Field>
-                  <Field label="人设风格">
+                  <Field label={tr("人设风格", "Persona Style")}>
                     <div className="flex flex-wrap gap-2">
                       {PERSONA_PRESETS.map((v) => (
                         <Chip key={v} selected={characterTones.includes(v)} onClick={() => {
@@ -1794,11 +1811,11 @@ function ConfigPageInner() {
                             handleAddCustomPersona();
                           }
                         }}
-                        placeholder="自定义人设风格"
+                        placeholder={tr("自定义人设风格", "Custom persona style")}
                         className="flex-1 rounded-sm border border-ink/20 px-3 py-2 text-sm"
                       />
                       <Button variant="outline" size="sm" onClick={handleAddCustomPersona}>
-                        添加
+                        {tr("添加", "Add")}
                       </Button>
                     </div>
                     {characterTones.filter((v) => !PERSONA_PRESETS.includes(v as typeof PERSONA_PRESETS[number])).length > 0 && (
@@ -1817,7 +1834,7 @@ function ConfigPageInner() {
                       </div>
                     )}
                   </Field>
-                  <Field label="刷新策略">
+                  <Field label={tr("刷新策略", "Refresh Strategy")}>
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       {Object.entries(STRATEGIES).map(([k, desc]) => (
                         <button
@@ -1832,7 +1849,7 @@ function ConfigPageInner() {
                         </button>
                       ))}
                     </div>
-                    <label className="block text-sm font-medium mb-2">刷新间隔 (分钟)</label>
+                    <label className="block text-sm font-medium mb-2">{tr("刷新间隔 (分钟)", "Refresh interval (minutes)")}</label>
                     <input
                       type="number"
                       min={10}
@@ -1849,50 +1866,50 @@ function ConfigPageInner() {
             {/* AI Model Tab */}
             {activeTab === "ai" && (
               <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Cpu size={18} /> AI 模型</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Cpu size={18} /> {tr("AI 模型", "AI Models")}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <Field label="文本模型服务商">
+                  <Field label={tr("文本模型服务商", "Text model provider")}>
                     <select value={llmProvider} onChange={(e) => { setLlmProvider(e.target.value); setLlmModel(LLM_MODELS[e.target.value]?.[0]?.v || ""); }} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
                       <option value="deepseek">DeepSeek</option>
-                      <option value="aliyun">阿里百炼</option>
-                      <option value="moonshot">月之暗面 (Kimi)</option>
+                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
+                      <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
                     </select>
                   </Field>
-                  <Field label="文本模型">
+                  <Field label={tr("文本模型", "Text model")}>
                     <select value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
                       {(LLM_MODELS[llmProvider] || []).map((m) => (
                         <option key={m.v} value={m.v}>{m.n}</option>
                       ))}
                     </select>
                   </Field>
-                  <Field label="文本 API Key">
+                  <Field label={tr("文本 API Key", "Text API Key")}>
                     <input
                       type="password"
                       value={llmApiKey}
                       onChange={(e) => setLlmApiKey(e.target.value)}
-                      placeholder={config.has_api_key ? "已配置，留空不修改" : "可选，设备专用 Key，留空使用服务器默认"}
+                      placeholder={config.has_api_key ? tr("已配置，留空不修改", "Configured, leave empty to keep") : tr("可选，设备专用 Key，留空使用服务器默认", "Optional device-level key, leave empty to use server default")}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
                       autoComplete="off"
                     />
                   </Field>
-                  <Field label="图像模型服务商">
+                  <Field label={tr("图像模型服务商", "Image model provider")}>
                     <select value={imageProvider} onChange={(e) => { setImageProvider(e.target.value); setImageModel(IMAGE_MODELS[e.target.value]?.[0]?.v || ""); }} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
-                      <option value="aliyun">阿里百炼</option>
+                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
                     </select>
                   </Field>
-                  <Field label="图像模型">
+                  <Field label={tr("图像模型", "Image model")}>
                     <select value={imageModel} onChange={(e) => setImageModel(e.target.value)} className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white">
                       {(IMAGE_MODELS[imageProvider] || []).map((m) => (
                         <option key={m.v} value={m.v}>{m.n}</option>
                       ))}
                     </select>
                   </Field>
-                  <Field label="图像 API Key">
+                  <Field label={tr("图像 API Key", "Image API Key")}>
                     <input
                       type="password"
                       value={imageApiKey}
                       onChange={(e) => setImageApiKey(e.target.value)}
-                      placeholder={config.has_image_api_key ? "已配置，留空不修改" : "可选，设备专用 Key，留空使用服务器默认"}
+                      placeholder={config.has_image_api_key ? tr("已配置，留空不修改", "Configured, leave empty to keep") : tr("可选，设备专用 Key，留空使用服务器默认", "Optional device-level key, leave empty to use server default")}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
                       autoComplete="off"
                     />
@@ -1906,27 +1923,27 @@ function ConfigPageInner() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <BarChart3 size={18} /> 设备状态
+                    <BarChart3 size={18} /> {tr("设备状态", "Device Status")}
                     {mac && <Button variant="ghost" size="sm" onClick={loadStats}><RefreshCw size={12} /></Button>}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {!mac && <p className="text-sm text-ink-light">需要连接设备后才能查看状态</p>}
-                  {mac && !stats && <p className="text-sm text-ink-light">暂无统计数据</p>}
+                  {!mac && <p className="text-sm text-ink-light">{tr("需要连接设备后才能查看状态", "Connect a device to view status")}</p>}
+                  {mac && !stats && <p className="text-sm text-ink-light">{tr("暂无统计数据", "No stats yet")}</p>}
                   {stats && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                      <StatCard label="总渲染次数" value={stats.total_renders ?? "-"} />
-                      <StatCard label="缓存命中率" value={stats.cache_hit_rate != null ? `${Math.round(stats.cache_hit_rate * 100)}%` : "-"} />
-                      <StatCard label="电量" value={batteryPct != null ? `${batteryPct}%` : "-"} />
-                      <StatCard label="电压" value={stats.last_battery_voltage ? `${stats.last_battery_voltage.toFixed(2)}V` : "-"} />
-                      <StatCard label="WiFi 信号" value={stats.last_rssi ? `${stats.last_rssi} dBm` : "-"} />
-                      <StatCard label="错误次数" value={stats.error_count ?? "-"} />
-                      {stats.last_refresh && <StatCard label="上次刷新" value={new Date(stats.last_refresh).toLocaleString("zh-CN")} />}
+                      <StatCard label={tr("总渲染次数", "Total Renders")} value={stats.total_renders ?? "-"} />
+                      <StatCard label={tr("缓存命中率", "Cache Hit Rate")} value={stats.cache_hit_rate != null ? `${Math.round(stats.cache_hit_rate * 100)}%` : "-"} />
+                      <StatCard label={tr("电量", "Battery")} value={batteryPct != null ? `${batteryPct}%` : "-"} />
+                      <StatCard label={tr("电压", "Voltage")} value={stats.last_battery_voltage ? `${stats.last_battery_voltage.toFixed(2)}V` : "-"} />
+                      <StatCard label={tr("WiFi 信号", "WiFi RSSI")} value={stats.last_rssi ? `${stats.last_rssi} dBm` : "-"} />
+                      <StatCard label={tr("错误次数", "Error Count")} value={stats.error_count ?? "-"} />
+                      {stats.last_refresh && <StatCard label={tr("上次刷新", "Last Refresh")} value={new Date(stats.last_refresh).toLocaleString(isEn ? "en-US" : "zh-CN")} />}
                     </div>
                   )}
                   {stats?.mode_frequency && Object.keys(stats.mode_frequency).length > 0 && (
                     <div className="mt-6">
-                      <h4 className="text-sm font-medium mb-3">模式使用频率</h4>
+                      <h4 className="text-sm font-medium mb-3">{tr("模式使用频率", "Mode Frequency")}</h4>
                       <div className="space-y-2">
                         {Object.entries(stats.mode_frequency)
                           .sort(([, a], [, b]) => b - a)
@@ -1957,7 +1974,7 @@ function ConfigPageInner() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between text-base">
                     <span>
-                      模式设置：{MODE_META[settingsMode]?.name || customModeMeta[settingsMode]?.name || settingsMode}
+                      {tr("模式设置", "Mode Settings")}: {MODE_META[settingsMode]?.name || customModeMeta[settingsMode]?.name || settingsMode}
                     </span>
                     <button className="text-ink-light hover:text-ink" onClick={() => setSettingsMode(null)}>
                       <X size={16} />
@@ -1965,7 +1982,7 @@ function ConfigPageInner() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Field label="API 服务商">
+                  <Field label={tr("API 服务商", "API Provider")}>
                     <select
                       value={getModeOverride(settingsMode).llm_provider || llmProvider}
                       onChange={(e) => {
@@ -1981,11 +1998,11 @@ function ConfigPageInner() {
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                     >
                       <option value="deepseek">DeepSeek</option>
-                      <option value="aliyun">阿里百炼</option>
-                      <option value="moonshot">月之暗面 (Kimi)</option>
+                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
+                      <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
                     </select>
                   </Field>
-                  <Field label="模型">
+                  <Field label={tr("模型", "Model")}>
                     <select
                       value={getModeOverride(settingsMode).llm_model || llmModel}
                       onChange={(e) => updateModeOverride(settingsMode, { llm_model: e.target.value })}

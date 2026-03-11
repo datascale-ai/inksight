@@ -1,6 +1,9 @@
 import { Github } from "lucide-react";
+import { cookies } from "next/headers";
+import { normalizeLocale, t } from "@/lib/i18n";
 
-export function Footer() {
+export async function Footer() {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
   return (
     <footer className="border-t border-ink/10 bg-paper">
       <div className="mx-auto max-w-6xl px-6 py-12">
@@ -9,22 +12,20 @@ export function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-ink bg-ink text-white text-xs font-bold font-serif">
-                墨
+                {locale === "en" ? "I" : "墨"}
               </div>
               <span className="text-base font-semibold text-ink tracking-tight">
                 InkSight
               </span>
             </div>
             <p className="text-sm text-ink-light leading-relaxed">
-              一款极简主义的智能电子墨水屏桌面摆件，
-              <br />
-              通过 LLM 生成有温度的慢信息。
+              {t(locale, "footer.desc")}
             </p>
           </div>
 
           {/* Links */}
           <div>
-            <h4 className="text-sm font-semibold text-ink mb-3">链接</h4>
+            <h4 className="text-sm font-semibold text-ink mb-3">{t(locale, "footer.links")}</h4>
             <ul className="space-y-2 text-sm text-ink-light">
               <li>
                 <a
@@ -34,7 +35,7 @@ export function Footer() {
                   className="hover:text-ink transition-colors inline-flex items-center gap-1.5"
                 >
                   <Github size={14} />
-                  GitHub 仓库
+                  {t(locale, "footer.githubRepo")}
                 </a>
               </li>
               <li>
@@ -44,7 +45,7 @@ export function Footer() {
                   rel="noopener noreferrer"
                   className="hover:text-ink transition-colors"
                 >
-                  硬件指南
+                  {t(locale, "footer.hardwareGuide")}
                 </a>
               </li>
               <li>
@@ -54,7 +55,7 @@ export function Footer() {
                   rel="noopener noreferrer"
                   className="hover:text-ink transition-colors"
                 >
-                  API 文档
+                  {t(locale, "footer.apiDocs")}
                 </a>
               </li>
             </ul>
@@ -62,11 +63,11 @@ export function Footer() {
 
           {/* Tech */}
           <div>
-            <h4 className="text-sm font-semibold text-ink mb-3">技术栈</h4>
+            <h4 className="text-sm font-semibold text-ink mb-3">{t(locale, "footer.techStack")}</h4>
             <ul className="space-y-2 text-sm text-ink-light">
-              <li>ESP32-C3 + 4.2&quot; E-Paper</li>
-              <li>Python FastAPI Backend</li>
-              <li>DeepSeek / 通义千问 / Kimi</li>
+              <li>{t(locale, "footer.tech.item1")}</li>
+              <li>{t(locale, "footer.tech.item2")}</li>
+              <li>{t(locale, "footer.tech.item3")}</li>
             </ul>
           </div>
         </div>
@@ -76,7 +77,7 @@ export function Footer() {
             &copy; {new Date().getFullYear()} InkSight. Released under the MIT License.
           </p>
           <p className="text-xs text-ink-light">
-            Made with care for slow information.
+            {t(locale, "footer.tagline")}
           </p>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { normalizeLocale, t } from "@/lib/i18n";
 
 type DocConfig = {
   title: string;
@@ -11,23 +13,33 @@ type DocConfig = {
 };
 
 const DOCS: Record<string, DocConfig> = {
-  architecture: { title: "架构说明", file: "architecture.md" },
-  hardware: { title: "硬件清单", file: "hardware.md" },
-  assembly: { title: "组装指南", file: "assembly.md" },
-  flash: { title: "Web 在线刷机", file: "flash.md" },
-  "button-controls": { title: "按键说明", file: "button-controls.md" },
-  "api-key": { title: "配置 API Key", file: "api-key.md" },
-  config: { title: "Web 在线配置", file: "config.md" },
-  "plugin-dev": { title: "插件开发", file: "plugin-dev.md" },
-  "api-reference": { title: "API 参考", file: "api.md" },
-  faq: { title: "常见问题", file: "faq.md" },
+  architecture: { title: "Architecture", file: "architecture.md" },
+  hardware: { title: "Hardware", file: "hardware.md" },
+  assembly: { title: "Assembly Guide", file: "assembly.md" },
+  flash: { title: "Web Flasher", file: "flash.md" },
+  "button-controls": { title: "Button Controls", file: "button-controls.md" },
+  "api-key": { title: "Configure API Key", file: "api-key.md" },
+  config: { title: "Web Configuration", file: "config.md" },
+  "plugin-dev": { title: "Plugin Development", file: "plugin-dev.md" },
+  "api-reference": { title: "API Reference", file: "api.md" },
+  faq: { title: "FAQ", file: "faq.md" },
 };
 
-async function readDocMarkdown(fileName: string): Promise<string | null> {
+async function readDocMarkdown(fileName: string, locale: "zh" | "en"): Promise<string | null> {
   try {
-    const filePath = path.resolve(process.cwd(), "..", "docs", fileName);
+    const filePath = locale === "en"
+      ? path.resolve(process.cwd(), "..", "docs", "en", fileName)
+      : path.resolve(process.cwd(), "..", "docs", fileName);
     return await fs.readFile(filePath, "utf-8");
   } catch {
+    if (locale === "en") {
+      try {
+        const zhPath = path.resolve(process.cwd(), "..", "docs", fileName);
+        return await fs.readFile(zhPath, "utf-8");
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 }
@@ -40,9 +52,13 @@ export default async function DocSlugPage({
   const { slug } = await params;
   const cfg = DOCS[slug];
   if (!cfg) notFound();
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
 
-  const markdown = cfg.file ? await readDocMarkdown(cfg.file) : null;
-  const content = markdown || cfg.fallback || `# ${cfg.title}\n\n内容建设中。`;
+  const markdown = cfg.file ? await readDocMarkdown(cfg.file, locale) : null;
+  const content =
+    markdown ||
+    cfg.fallback ||
+    `# ${cfg.title}\n\n${t(locale, "docs.fallbackTitle")}.`;
 
   return (
     <article className="docs-prose">

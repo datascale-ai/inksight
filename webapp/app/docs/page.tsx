@@ -1,7 +1,51 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Lightbulb, Zap } from "lucide-react";
+import { normalizeLocale, withLocalePath } from "@/lib/i18n";
 
-export default function DocsPage() {
+export default async function DocsPage() {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  if (locale === "en") {
+    return (
+      <article className="docs-prose">
+        <h1>Quick Start</h1>
+        <blockquote>
+          InkSight is an open-source smart E-Ink desktop project. With a few simple steps, you can build an AI-powered
+          slow-information terminal.
+        </blockquote>
+        <p>
+          This guide walks you through hardware preparation, firmware flashing, Wi-Fi setup, and backend launch.
+        </p>
+        <h2>Suggested Reading Order</h2>
+        <ul>
+          <li><Link href={withLocalePath(locale, "/docs/hardware")}>Hardware</Link></li>
+          <li><Link href={withLocalePath(locale, "/docs/assembly")}>Assembly Guide</Link></li>
+          <li><Link href={withLocalePath(locale, "/docs/flash")}>Web Flasher</Link></li>
+          <li><Link href={withLocalePath(locale, "/docs/api-key")}>Configure API Key</Link></li>
+          <li><Link href={withLocalePath(locale, "/docs/config")}>Web Configuration</Link></li>
+        </ul>
+        <div className="callout callout-tip">
+          <div className="callout-icon">
+            <Lightbulb size={16} />
+          </div>
+          <div>
+            <p className="callout-title">Tip</p>
+            <p>For first-time setup, use USB power and Web Flasher to reduce troubleshooting complexity.</p>
+          </div>
+        </div>
+        <div className="callout callout-important">
+          <div className="callout-icon">
+            <Zap size={16} />
+          </div>
+          <div>
+            <p className="callout-title">Recommended</p>
+            <p>Use Chrome or Edge for WebSerial support and best flashing compatibility.</p>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article className="docs-prose">
       {/* H1 */}
@@ -59,7 +103,7 @@ export default function DocsPage() {
             ESP32-C3 SuperMini 是目前性价比最高的选择。购买墨水屏时注意选择
             <strong>SPI 接口</strong>版本（非 I2C），驱动芯片为 SSD1683 或
             IL0398。详细的引脚接线图请参考{" "}
-            <Link href="/docs/hardware">硬件清单</Link> 页面。
+            <Link href={withLocalePath(locale, "/docs/hardware")}>硬件清单</Link> 页面。
           </p>
         </div>
       </div>
@@ -86,7 +130,7 @@ export default function DocsPage() {
           <p className="callout-title">推荐方式</p>
           <p>
             推荐使用官网的{" "}
-            <Link href="/flash">Web Flasher</Link>{" "}
+            <Link href={withLocalePath(locale, "/flash")}>Web Flasher</Link>{" "}
             进行一键刷机。现在支持从 GitHub Releases 动态选择固件版本，并可手动刷新版本列表后再刷写。
           </p>
         </div>
@@ -169,7 +213,7 @@ python -m uvicorn api.index:app --host 0.0.0.0 --port 8080`}</code>
       <p>
         服务启动后，访问{" "}
         <code>http://localhost:8080</code> 即可看到预览控制台。详细配置请参考{" "}
-        <Link href="/docs/api-key">配置 API Key</Link> 章节。
+        <Link href={withLocalePath(locale, "/docs/api-key")}>配置 API Key</Link> 章节。
       </p>
 
       {/* Divider */}
@@ -177,7 +221,7 @@ python -m uvicorn api.index:app --host 0.0.0.0 --port 8080`}</code>
 
       <p>
         恭喜！你的 InkSight 已经可以正常工作了。接下来可以通过{" "}
-        <Link href="/docs/config">Web 在线配置</Link>{" "}
+        <Link href={withLocalePath(locale, "/docs/config")}>Web 在线配置</Link>{" "}
         自定义内容模式、刷新策略和显示风格。
       </p>
     </article>
