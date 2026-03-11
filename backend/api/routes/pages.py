@@ -4,6 +4,7 @@ import io
 import mimetypes
 import os
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -25,7 +26,7 @@ def _load_web_page_html(filename: str) -> str:
     return html
 
 
-def _build_primary_config_url(mac: str | None = None) -> str | None:
+def _build_primary_config_url(mac: Optional[str] = None) -> Optional[str]:
     base = os.getenv("INKSIGHT_PRIMARY_WEBAPP_URL", "").strip().rstrip("/")
     if not base:
         return None
@@ -35,7 +36,7 @@ def _build_primary_config_url(mac: str | None = None) -> str | None:
     return target
 
 
-def _legacy_config_bridge_html(mac: str | None = None) -> str:
+def _legacy_config_bridge_html(mac: Optional[str] = None) -> str:
     primary_url = _build_primary_config_url(mac)
     primary_link = (
         f'<a href="{primary_url}" '
@@ -91,7 +92,7 @@ async def preview_page_alias():
 
 
 @router.get("/config", response_class=HTMLResponse)
-async def config_page(mac: str | None = None):
+async def config_page(mac: Optional[str] = None):
     primary_url = _build_primary_config_url(mac)
     if primary_url:
         return RedirectResponse(url=primary_url, status_code=307)

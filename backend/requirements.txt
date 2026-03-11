@@ -18,5 +18,6 @@ dashscope~=1.14.0
 cryptography~=41.0.0
 
 # Dev / Test
-pytest>=7.0
-pytest-asyncio>=0.21
+# Keep test toolchain stable across Python 3.9/3.10 in CI.
+pytest>=8.4,<9
+pytest-asyncio>=1.2,<2
