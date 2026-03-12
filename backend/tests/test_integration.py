@@ -12,6 +12,7 @@ from httpx import AsyncClient, ASGITransport
 from api.index import app
 from core.cache import content_cache
 from core.config_store import init_db
+from core.db import get_main_db
 from core.mode_registry import reset_registry
 from core.stats_store import init_stats_db
 from core.cache import init_cache_db
@@ -84,9 +85,25 @@ async def provision_device_headers(client: AsyncClient, mac: str) -> dict[str, s
 
 
 async def register_user(client: AsyncClient, username: str, password: str = "pass1234") -> dict:
+    # Register validates invite_code (optional). If provided, it must exist and be unused.
+    # We generate a unique code per user and seed it into the test DB to keep tests isolated.
+    invite_code = f"TEST_CODE_{username.upper()}"
+    db = await get_main_db()
+    await db.execute(
+        "INSERT OR IGNORE INTO invitation_codes (code, is_used, used_by_user_id) VALUES (?, 0, NULL)",
+        (invite_code,),
+    )
+    await db.commit()
     resp = await client.post(
         "/api/auth/register",
-        json={"username": username, "password": password},
+        # New register contract: must provide a valid phone or email; invite_code is optional but
+        # integration tests seed a per-user code to exercise the full flow.
+        json={
+            "username": username,  # display nickname
+            "password": password,
+            "email": f"{username}@example.com",
+            "invite_code": invite_code,
+        },
     )
     assert resp.status_code == 200
     return resp.json()
