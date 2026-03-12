@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, ArrowLeft, ArrowRight, Eye, Loader2, RefreshCw, Shuffle } from "lucide-react";
-import { localeFromPathname, t } from "@/lib/i18n";
+import { AlertCircle, Eye, Loader2, RefreshCw } from "lucide-react";
+import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
+import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
 // 模式元数据（从设备配置页面复制）
 const MODE_META: Record<string, { name: string; tip: string }> = {
@@ -14,6 +15,7 @@ const MODE_META: Record<string, { name: string; tip: string }> = {
   WORD_OF_THE_DAY: { name: "每日一词", tip: "每日精选一个英语单词，展示其拼写与释义" },
   ZEN: { name: "禅意", tip: "一个大字表达当下心境" },
   BRIEFING: { name: "简报", tip: "科技热榜 + AI 洞察简报" },
+  MY_QUOTE: { name: "自定义语录", tip: "可在预览弹窗中随机生成，或输入你自己的语录内容" },
   STOIC: { name: "斯多葛", tip: "每日一句哲学箴言" },
   POETRY: { name: "诗词", tip: "古诗词与简短注解" },
   ARTWALL: { name: "画廊", tip: "根据时令生成黑白艺术画" },
@@ -39,6 +41,11 @@ const MODE_META_EN: Record<string, { name: string; tip: string }> = {
   DAILY: { name: "Everyday", tip: "A daily digest: quotes, book picks, and fun facts" },
   WEATHER: { name: "Weather", tip: "Current weather and forecast dashboard" },
   WORD_OF_THE_DAY: { name: "Word of the Day", tip: "One English word with a short explanation" },
+  MY_QUOTE: { name: "Custom Quote", tip: "Supports custom input or random generation" },
+  MY_ADAPTIVE: { name: "Adaptive Photo", tip: "Upload a local photo and auto-fit it to the 4.2\" e-ink screen" },
+  ADAPTIVE_PHOTO: { name: "Adaptive Photo", tip: "Auto-fit photo mode for the e-ink screen" },
+  PHOTO: { name: "Photo", tip: "Photo mode" },
+  MY_PHOTO: { name: "Custom Photo", tip: "Your own photo mode (JSON-defined)" },
   ZEN: { name: "Zen", tip: "A single character to reflect your mood" },
   BRIEFING: { name: "Briefing", tip: "Tech trends + AI insights briefing" },
   STOIC: { name: "Stoic", tip: "A daily stoic quote" },
@@ -62,9 +69,7 @@ const MODE_META_EN: Record<string, { name: string; tip: string }> = {
 };
 
 const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
-const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m));
-
-type RotateStrategy = "cycle" | "random";
+const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m) && m !== "MY_QUOTE");
 
 interface ServerModeItem {
   mode_id: string;
@@ -88,9 +93,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 function ModeSection({
   title,
   modes,
-  selected,
-  current,
-  onToggle,
+  currentMode,
   onPreview,
   collapsible,
   customMeta,
@@ -98,9 +101,7 @@ function ModeSection({
 }: {
   title: string;
   modes: string[];
-  selected: Set<string>;
-  current: string;
-  onToggle: (m: string) => void;
+  currentMode: string;
   onPreview: (m: string) => void;
   collapsible?: boolean;
   customMeta?: Record<string, { name: string; tip: string }>;
@@ -130,39 +131,28 @@ function ModeSection({
               customMeta?.[m] ||
               MODE_META[m] ||
               { name: m, tip: "" };
-            const isSelected = selected.has(m);
-            const isCurrent = current === m;
+            const isCurrent = currentMode === m;
             return (
               <div key={m} className="rounded-sm border border-ink/10 bg-white overflow-hidden">
                 <button
-                  onClick={() => onToggle(m)}
-                  className={`w-full px-3 py-2 text-left transition-colors ${
+                  onClick={() => onPreview(m)}
+                  className={`w-full px-3 py-2 text-left transition-colors min-h-[64px] flex flex-col justify-center ${
                     isCurrent ? "bg-ink text-white" : "hover:bg-paper-dark text-ink"
                   }`}
                   title={meta.tip}
                 >
                   <div className="text-sm font-semibold">{meta.name}</div>
-                  <div className={`text-[11px] mt-0.5 ${isCurrent ? "text-white/80" : "text-ink-light"}`}>
-                    {isSelected
-                      ? t(localeFromPathname(`/${locale}`), "preview.mode.in_playlist", locale === "zh" ? "已加入轮播" : "In playlist")
-                      : t(localeFromPathname(`/${locale}`), "preview.mode.not_in_playlist", locale === "zh" ? "未加入轮播" : "Not in playlist")}
+                  <div className={`text-[11px] mt-0.5 line-clamp-2 ${isCurrent ? "text-white/80" : "text-ink-light"}`}>
+                    {meta.tip}
                   </div>
                 </button>
-                <div className="grid grid-cols-2 border-t border-ink/10">
+                <div className="border-t border-ink/10">
                   <button
                     onClick={() => onPreview(m)}
-                    className="px-2 py-2 text-[11px] sm:text-xs text-ink hover:bg-ink hover:text-white transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                    className="w-full h-9 px-2 text-[11px] sm:text-xs text-ink hover:bg-ink hover:text-white transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                   >
                     <Eye size={14} />
                     {t(localeFromPathname(`/${locale}`), "preview.action.preview", locale === "zh" ? "预览" : "Preview")}
-                  </button>
-                  <button
-                    onClick={() => onToggle(m)}
-                    className="px-2 py-2 text-[11px] sm:text-xs text-ink hover:bg-ink hover:text-white transition-colors whitespace-nowrap"
-                  >
-                    {isSelected
-                      ? t(localeFromPathname(`/${locale}`), "preview.action.remove", locale === "zh" ? "移出" : "Remove")
-                      : t(localeFromPathname(`/${locale}`), "preview.action.add", locale === "zh" ? "加入" : "Add")}
                   </button>
                 </div>
               </div>
@@ -175,17 +165,18 @@ function ModeSection({
 }
 
 export default function ExperiencePage() {
+  const router = useRouter();
   const pathname = usePathname();
   const locale = localeFromPathname(pathname || "/");
 
+  const [authChecked, setAuthChecked] = useState(false);
+  const [userLlmApiKey, setUserLlmApiKey] = useState<string>("");
+
   const [serverModes, setServerModes] = useState<ServerModeItem[]>([]);
   const [modesError, setModesError] = useState<string | null>(null);
-
-  const [selectedModes, setSelectedModes] = useState<Set<string>>(new Set(["DAILY", "WEATHER", "POETRY"]));
   const [previewMode, setPreviewMode] = useState("DAILY");
 
   const [city, setCity] = useState("杭州");
-  const [strategy, setStrategy] = useState<RotateStrategy>("cycle");
   const [memoText, setMemoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
 
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -196,6 +187,47 @@ export default function ExperiencePage() {
   const lastObjectUrlRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
+  const [modal, setModal] = useState<null | { type: "quote"; modeId: string }>(null);
+  const [imageUploadLoading, setImageUploadLoading] = useState(false);
+  const [quoteDraft, setQuoteDraft] = useState("");
+  const [authorDraft, setAuthorDraft] = useState("");
+
+  const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const uploadLocalImage = async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const up = await fetch("/api/uploads", { method: "POST", body: fd });
+    if (!up.ok) {
+      const err = await up.text().catch(() => "");
+      throw new Error(err || `upload failed: ${up.status}`);
+    }
+    const data = (await up.json()) as { url?: string };
+    if (!data.url) throw new Error("upload failed: missing url");
+    return data.url;
+  };
+
+  // 进入无设备体验前必须登录
+  useEffect(() => {
+    fetchCurrentUser()
+      .then((u) => {
+        if (!u) {
+          router.replace(withLocalePath(locale, "/login"));
+          return;
+        }
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        router.replace(withLocalePath(locale, "/login"));
+      });
+  }, [locale, router]);
+
+  // 从本机缓存读取用户 API Key（由配置页写入）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const k = localStorage.getItem("ink_user_llm_api_key") || "";
+    if (k.trim()) setUserLlmApiKey(k.trim());
+  }, []);
   // 邀请码弹窗状态
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -208,21 +240,14 @@ export default function ExperiencePage() {
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
   };
 
-  const selectedModeList = useMemo(() => Array.from(selectedModes), [selectedModes]);
-
   const customModes = useMemo(
-    () => serverModes.filter((m) => m.source === "custom"),
+    () => serverModes.filter((m) => m.source === "custom" && m.mode_id !== "WORD_OF_THE_DAY"),
     [serverModes],
   );
   const customModeMeta = useMemo(
     () => Object.fromEntries(serverModes.map((m) => [m.mode_id, { name: m.display_name, tip: m.description }])),
     [serverModes],
   );
-
-  const allModeIds = useMemo(() => {
-    const ids = [...CORE_MODES, ...EXTRA_MODES, ...customModes.map((m) => m.mode_id)];
-    return Array.from(new Set(ids));
-  }, [customModes]);
 
   const previewModeName =
     (locale === "en" ? MODE_META_EN[previewMode]?.name : MODE_META[previewMode]?.name) ||
@@ -234,30 +259,10 @@ export default function ExperiencePage() {
     customModeMeta[previewMode]?.tip ||
     "";
 
-  const toggleMode = (modeId: string) => {
-    setSelectedModes((prev) => {
-      const next = new Set(prev);
-      if (next.has(modeId)) next.delete(modeId);
-      else next.add(modeId);
-      return next;
-    });
-  };
-
-  const pickNextMode = (dir: 1 | -1) => {
-    const list = selectedModeList.length ? selectedModeList : CORE_MODES;
-    const idx = Math.max(0, list.indexOf(previewMode));
-    return list[(idx + dir + list.length) % list.length] || previewMode;
-  };
-  const pickRandomMode = () => {
-    const list = selectedModeList.length ? selectedModeList : CORE_MODES;
-    const filtered = list.filter((m) => m !== previewMode);
-    const pool = filtered.length ? filtered : list;
-    return pool[Math.floor(Math.random() * pool.length)] || previewMode;
-  };
-
-  const handlePreview = async (modeId?: string) => {
+  const handlePreview = async (modeId?: string, override?: Record<string, unknown>) => {
     const targetMode = modeId || previewMode;
     if (!targetMode) return;
+    if (!authChecked) return;
 
     setPreviewLoading(true);
     setPreviewError(null);
@@ -266,8 +271,13 @@ export default function ExperiencePage() {
       params.set("persona", targetMode);
       if (city.trim()) params.set("city_override", city.trim());
       if (targetMode === "MEMO") params.set("memo_text", memoText);
+      if (override && Object.keys(override).length > 0) {
+        params.set("mode_override", JSON.stringify(override));
+      }
 
-      const res = await fetch(`/api/preview?${params.toString()}`);
+      const res = await fetch(`/api/preview?${params.toString()}`, {
+        headers: authHeaders(userLlmApiKey ? { "x-inksight-llm-api-key": userLlmApiKey } : undefined),
+      });
       if (res.status === 402) {
         // 额度耗尽，显示邀请码输入弹窗
         const data = await res.json().catch(() => ({}));
@@ -334,27 +344,27 @@ export default function ExperiencePage() {
   };
 
   const applyModeAndPreview = async (modeId: string) => {
+    // Custom flows
+    if (modeId === "MY_ADAPTIVE") {
+      setPreviewMode(modeId);
+      adaptiveFileInputRef.current?.click();
+      return;
+    }
+    if (modeId === "MY_QUOTE") {
+      setPreviewMode(modeId);
+      setQuoteDraft("");
+      setAuthorDraft("");
+      setModal({ type: "quote", modeId });
+      return;
+    }
+
     setPreviewMode(modeId);
     await handlePreview(modeId);
   };
 
-  const handleRotate = async (action: "prev" | "next" | "smart") => {
-    const next =
-      action === "prev"
-        ? pickNextMode(-1)
-        : action === "next"
-          ? pickNextMode(1)
-          : strategy === "random"
-            ? pickRandomMode()
-            : pickNextMode(1);
-    await applyModeAndPreview(next);
-  };
-
   const reset = () => {
     setCity("杭州");
-    setStrategy("cycle");
     setMemoText(t(locale, "preview.memo.default", "写点什么吧…"));
-    setSelectedModes(new Set(["DAILY", "WEATHER", "POETRY"]));
     setPreviewMode("DAILY");
     setPreviewError(null);
     showToast(t(locale, "preview.toast.reset", "Reset to defaults"), "info");
@@ -362,7 +372,8 @@ export default function ExperiencePage() {
 
   useEffect(() => {
     setModesError(null);
-    fetch("/api/modes")
+    if (!authChecked) return;
+    fetch("/api/modes", { headers: authHeaders() })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -375,12 +386,13 @@ export default function ExperiencePage() {
         setModesError(t(locale, "preview.error.modes_unreachable", "Cannot load modes. Make sure backend is running."));
         setServerModes([]);
       });
-  }, []);
+  }, [authChecked, locale]);
 
   useEffect(() => {
+    if (!authChecked) return;
     handlePreview().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authChecked]);
 
   useEffect(() => {
     return () => {
@@ -390,111 +402,42 @@ export default function ExperiencePage() {
   }, []);
 
   useEffect(() => {
-    if (selectedModes.size === 0) return;
-    if (!selectedModes.has(previewMode)) {
-      const first = Array.from(selectedModes)[0];
-      if (first) setPreviewMode(first);
-    }
-  }, [selectedModes, previewMode]);
+    // no-op: playlist removed
+  }, [previewMode]);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
+      {/* Hidden file picker for MY_ADAPTIVE (local upload only) */}
+      <input
+        ref={adaptiveFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0] || null;
+          e.currentTarget.value = "";
+          if (!f) return;
+          setImageUploadLoading(true);
+          try {
+            const url = await uploadLocalImage(f);
+            await handlePreview("MY_ADAPTIVE", { image_url: url });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : t(locale, "preview.modal.image.need_file", "Please choose a local image");
+            showToast(msg, "error");
+          } finally {
+            setImageUploadLoading(false);
+          }
+        }}
+      />
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-serif text-3xl font-bold text-ink mb-1">{t(locale, "preview.title", "No-device Demo")}</h1>
           <p className="text-ink-light text-sm">{t(locale, "preview.subtitle", "Try modes and preview without a device.")}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={reset}>{t(locale, "preview.action.reset", "Reset")}</Button>
-          <Button onClick={() => handlePreview()} disabled={previewLoading}>
-            {previewLoading ? <Loader2 size={16} className="animate-spin mr-2" /> : <RefreshCw size={16} className="mr-2" />}
-            {t(locale, "preview.action.refresh", "Refresh")}
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-6 items-start">
         <div className="space-y-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Eye size={18} /> {t(locale, "preview.panel.console", "Console")}
-                </span>
-                <span className="text-xs text-ink-light">
-                  {t(locale, "preview.summary.currentLabel", "Current:")} {previewModeName} · {t(locale, "preview.summary.playlistLabel", "Playlist:")}{" "}
-                  {selectedModes.size}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              {previewModeTip ? <div className="text-xs text-ink-light">{previewModeTip}</div> : null}
-
-              <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" onClick={() => handleRotate("prev")} disabled={previewLoading}>
-                  <ArrowLeft size={16} className="mr-1" />
-                  {t(locale, "preview.action.prev", "Prev")}
-                </Button>
-                <Button variant="outline" onClick={() => handleRotate("next")} disabled={previewLoading}>
-                  {t(locale, "preview.action.next", "Next")}
-                  <ArrowRight size={16} className="ml-1" />
-                </Button>
-                <Button variant="outline" onClick={() => handleRotate("smart")} disabled={previewLoading}>
-                  <Shuffle size={16} className="mr-1" />
-                  {strategy === "random" ? t(locale, "preview.strategy.random", "Random") : t(locale, "preview.strategy.cycle", "Cycle")}
-                </Button>
-              </div>
-
-              <Field label={t(locale, "preview.field.strategy", "Rotation")}>
-                <select
-                  value={strategy}
-                  onChange={(e) => setStrategy(e.target.value as RotateStrategy)}
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                >
-                  <option value="cycle">{t(locale, "preview.strategy.cycle", "Cycle")}</option>
-                  <option value="random">{t(locale, "preview.strategy.random", "Random")}</option>
-                </select>
-              </Field>
-
-              <Field label={t(locale, "preview.field.city", "City")} hint={t(locale, "preview.hint.city", "Affects Weather etc.")}>
-                <div className="flex gap-2">
-                  <input
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder={t(locale, "preview.city.placeholder", "e.g. Shenzhen, Beijing, Shanghai")}
-                    className="flex-1 rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                  />
-                  <Button variant="outline" onClick={() => handlePreview()} disabled={previewLoading}>
-                    {t(locale, "preview.action.apply", "Apply")}
-                  </Button>
-                </div>
-              </Field>
-
-              {previewMode === "MEMO" ? (
-                <Field label={t(locale, "preview.field.memo", "Memo")} hint={t(locale, "preview.hint.memo", "Only for MEMO mode")}>
-                  <textarea
-                    value={memoText}
-                    onChange={(e) => setMemoText(e.target.value)}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm min-h-24"
-                  />
-                  <div className="pt-2">
-                    <Button onClick={() => handlePreview("MEMO")} disabled={previewLoading} className="w-full">
-                      {previewLoading ? <Loader2 size={16} className="animate-spin mr-2" /> : <Eye size={16} className="mr-2" />}
-                      {t(locale, "preview.action.update_memo", "Update memo preview")}
-                    </Button>
-                  </div>
-                </Field>
-              ) : null}
-
-              {previewError ? (
-                <div className="p-3 rounded-sm border border-red-200 bg-red-50 text-red-800 text-sm">
-                  <AlertCircle size={16} className="inline mr-2" />
-                  {previewError}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>{t(locale, "preview.panel.modes", "Modes")}</CardTitle>
@@ -507,33 +450,10 @@ export default function ExperiencePage() {
                 </div>
               ) : null}
 
-              <div className="flex gap-2 mb-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedModes(new Set(allModeIds));
-                    showToast(t(locale, "preview.toast.select_all", "Selected all modes"), "success");
-                  }}
-                >
-                  {t(locale, "preview.action.select_all", "Select all")}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedModes(new Set());
-                    showToast(t(locale, "preview.toast.clear", "Cleared playlist"), "info");
-                  }}
-                >
-                  {t(locale, "preview.action.clear", "Clear")}
-                </Button>
-              </div>
-
               <ModeSection
                 title={t(locale, "preview.section.core", "Core modes")}
                 modes={CORE_MODES}
-                selected={selectedModes}
-                current={previewMode}
-                onToggle={toggleMode}
+                currentMode={previewMode}
                 onPreview={applyModeAndPreview}
                 collapsible
                 locale={locale}
@@ -542,9 +462,7 @@ export default function ExperiencePage() {
               <ModeSection
                 title={t(locale, "preview.section.more", "More modes")}
                 modes={EXTRA_MODES}
-                selected={selectedModes}
-                current={previewMode}
-                onToggle={toggleMode}
+                currentMode={previewMode}
                 onPreview={applyModeAndPreview}
                 collapsible
                 locale={locale}
@@ -554,9 +472,7 @@ export default function ExperiencePage() {
                 <ModeSection
                   title={t(locale, "preview.section.custom", "Custom modes")}
                   modes={customModes.map((m) => m.mode_id)}
-                  selected={selectedModes}
-                  current={previewMode}
-                  onToggle={toggleMode}
+                  currentMode={previewMode}
                   onPreview={applyModeAndPreview}
                   collapsible
                   customMeta={customModeMeta}
@@ -623,6 +539,62 @@ export default function ExperiencePage() {
         </div>
       ) : null}
 
+      {modal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setModal(null)} />
+          <div className="relative w-[min(520px,calc(100vw-32px))] rounded-sm border border-ink/15 bg-white shadow-xl">
+            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
+              <div className="text-sm font-semibold text-ink">
+                {t(locale, "preview.modal.quote.title", "Custom Quote")}
+              </div>
+              <button className="text-ink-light hover:text-ink" onClick={() => setModal(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              <div className="text-xs text-ink-light">
+                {t(locale, "preview.modal.quote.hint", "Generate a deep quote randomly, or paste your own text.")}
+              </div>
+              <textarea
+                value={quoteDraft}
+                onChange={(e) => setQuoteDraft(e.target.value)}
+                placeholder={t(locale, "preview.modal.quote.placeholder", "Type your quote...")}
+                className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm min-h-28 bg-white"
+              />
+              <input
+                value={authorDraft}
+                onChange={(e) => setAuthorDraft(e.target.value)}
+                placeholder={t(locale, "preview.modal.quote.author_placeholder", "Author (optional)")}
+                className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                <Button
+                  onClick={async () => {
+                    // random generate via LLM (no override)
+                    await handlePreview(modal.modeId);
+                    setModal(null);
+                  }}
+                  disabled={previewLoading}
+                >
+                  {t(locale, "preview.modal.quote.random", locale === "zh" ? "随机生成" : "Random generate")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    const q = quoteDraft.trim();
+                    const a = authorDraft.trim();
+                    await handlePreview(modal.modeId, q ? { quote: q, author: a } : {});
+                    setModal(null);
+                  }}
+                  disabled={previewLoading}
+                >
+                  {t(locale, "preview.modal.quote.use_input", locale === "zh" ? "使用我的输入" : "Use my input")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* 邀请码输入弹窗 */}
       {showInviteModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

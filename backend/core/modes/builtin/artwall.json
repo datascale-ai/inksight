@@ -9,33 +9,33 @@
     "provider": "text2image",
     "fallback": {
       "artwork_title": "墨韵天成",
-      "image_url": "",
+      "image_url": "http://127.0.0.1:8080/webconfig/assets/art/moyun.png",
       "description": "今日艺术作品"
     },
     "fallback_pool": [
       {
         "artwork_title": "墨韵天成",
-        "image_url": "",
+        "image_url": "http://127.0.0.1:8080/webconfig/assets/art/moyun.png",
         "description": "今日艺术作品"
       },
       {
         "artwork_title": "山居秋暝",
-        "image_url": "",
+        "image_url": "http://127.0.0.1:8080/webconfig/assets/art/shanjuqiuming.png",
         "description": "水墨山水意境"
       },
       {
         "artwork_title": "竹林七贤",
-        "image_url": "",
+        "image_url": "http://127.0.0.1:8080/webconfig/assets/art/zhulinqixian.png",
         "description": "古典人物版画"
       },
       {
         "artwork_title": "禅意莲花",
-        "image_url": "",
+        "image_url": "http://127.0.0.1:8080/webconfig/assets/art/chanyilianhua.png",
         "description": "极简禅宗美学"
       },
       {
         "artwork_title": "云卷云舒",
-        "image_url": "",
+        "image_url": "http://127.0.0.1:8080/webconfig/assets/art/yunjuanyunshu.png",
         "description": "黑白云海写意"
       }
     ]

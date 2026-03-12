@@ -5,14 +5,19 @@
 import os
 import sys
 
+import pytest
+from unittest.mock import AsyncMock, patch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.errors import LLMKeyMissingError
 from core.json_content import (
     _parse_llm_output,
     _parse_text_split,
     _parse_json_output,
     _parse_llm_json_output,
     _apply_post_process,
+    generate_json_mode_content,
 )
 
 
@@ -197,6 +202,31 @@ def test_apply_post_process_skips_non_string():
     cfg = {"post_process": {"items": "first_char"}}
     result = _apply_post_process({"items": [1, 2, 3]}, cfg)
     assert result["items"] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_llm_key_missing_returns_fallback():
+    """当 LLM API key 缺失时，应返回 fallback 内容而非抛出异常"""
+    mode_def = {
+        "mode_id": "STOIC",
+        "content": {
+            "type": "llm_json",
+            "prompt_template": "test {context}",
+            "output_schema": {"quote": {"default": "fallback quote"}, "author": {"default": "fallback author"}},
+            "fallback": {"quote": "fallback quote", "author": "fallback author"},
+        },
+        "layout": {"body": []},
+    }
+    with patch("core.json_content._call_llm", new_callable=AsyncMock, side_effect=LLMKeyMissingError("Missing API key")):
+        result = await generate_json_mode_content(
+            mode_def,
+            date_str="2025-03-12",
+            weather_str="晴 15°C",
+        )
+    assert "quote" in result
+    assert "author" in result
+    assert result["quote"] == "fallback quote"
+    assert result["author"] == "fallback author"
 
 
 if __name__ == "__main__":

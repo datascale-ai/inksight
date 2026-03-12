@@ -15,6 +15,7 @@ import httpx
 
 from .config import DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL, DEFAULT_IMAGE_PROVIDER, DEFAULT_IMAGE_MODEL
 from .content import _build_context_str, _build_style_instructions, _call_llm, _clean_json_response
+from .errors import LLMKeyMissingError
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,21 @@ async def generate_json_mode_content(
     content_cfg = mode_def.get("content", {})
     ctype = content_cfg.get("type", "static")
     fallback = _get_fallback(content_cfg)
+    mode_id = str(mode_def.get("mode_id") or "").upper()
+
+    # Preview-only overrides: backend/api/index.py may inject per-mode overrides into
+    # config["mode_overrides"][MODE_ID]. We allow these overrides to fill/replace
+    # generated content fields (e.g. custom quote text, image_url for photo modes).
+    override = {}
+    try:
+        cfg = config or {}
+        mo = cfg.get("mode_overrides", {})
+        if isinstance(mo, dict) and mode_id:
+            candidate = mo.get(mode_id, {})
+            if isinstance(candidate, dict):
+                override = candidate
+    except Exception:
+        override = {}
 
     common_args = dict(
         date_str=date_str,
@@ -140,24 +156,62 @@ async def generate_json_mode_content(
         image_api_key=image_api_key,
     )
 
+    # If override explicitly provides content fields, short-circuit LLM for llm_json.
+    if ctype == "llm_json" and isinstance(override, dict) and override:
+        quote = override.get("quote")
+        author = override.get("author")
+        if isinstance(quote, str) and quote.strip():
+            result = dict(fallback)
+            result["quote"] = quote.strip()
+            if isinstance(author, str) and author.strip():
+                result["author"] = author.strip()
+            result = await _prefetch_images(result, mode_def)
+            return result
+
     if ctype == "static":
         content = dict(content_cfg.get("static_data", fallback))
+        if isinstance(override, dict) and override:
+            # Merge overrides into static content (preview-only).
+            for k, v in override.items():
+                if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
+                    continue
+                content[k] = v
         content = await _prefetch_images(content, mode_def)
         return content
     if ctype == "computed":
         content = await _generate_computed_content(mode_def, content_cfg, fallback, **common_args)
+        if isinstance(override, dict) and override:
+            for k, v in override.items():
+                if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
+                    continue
+                content[k] = v
         content = await _prefetch_images(content, mode_def)
         return content
     if ctype == "external_data":
         content = await _generate_external_data_content(mode_def, content_cfg, fallback, **common_args)
+        if isinstance(override, dict) and override:
+            for k, v in override.items():
+                if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
+                    continue
+                content[k] = v
         content = await _prefetch_images(content, mode_def)
         return content
     if ctype == "image_gen":
         content = await _generate_image_gen_content(mode_def, content_cfg, fallback, **common_args)
+        if isinstance(override, dict) and override:
+            for k, v in override.items():
+                if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
+                    continue
+                content[k] = v
         content = await _prefetch_images(content, mode_def)
         return content
     if ctype == "composite":
         content = await _generate_composite_content(mode_def, content_cfg, fallback, **common_args)
+        if isinstance(override, dict) and override:
+            for k, v in override.items():
+                if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
+                    continue
+                content[k] = v
         content = await _prefetch_images(content, mode_def)
         return content
 
@@ -203,8 +257,7 @@ async def generate_json_mode_content(
         llm_ok = False
         try:
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
-            llm_ok = True
-        except (httpx.HTTPError, OSError, TypeError, ValueError) as e:
+        except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
             fb = dict(fallback)
             # Mark LLM status for downstream billing/observability.
@@ -413,23 +466,30 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
         prompt_hint = str(content_cfg.get("prompt_hint", "") or "")
         prompt_template = str(content_cfg.get("prompt_template", "") or "")
         fallback_title = str(fallback.get("artwork_title", "") or "")
-        result = await generate_artwall_content(
-            date_str=kwargs.get("date_str", ""),
-            weather_str=kwargs.get("weather_str", ""),
-            festival=kwargs.get("festival", ""),
-            image_provider=kwargs.get("image_provider") or DEFAULT_IMAGE_PROVIDER,
-            image_model=kwargs.get("image_model") or DEFAULT_IMAGE_MODEL,
-            mode_display_name=mode_display_name,
-            mode_description=mode_description,
-            prompt_hint=prompt_hint,
-            prompt_template=prompt_template,
-            fallback_title=fallback_title,
-            image_api_key=kwargs.get("image_api_key") or "",
-        )
-        if mode_id != "ARTWALL":
-            result["artwork_title"] = ""
-            result["description"] = ""
-        return result
+        try:
+            result = await generate_artwall_content(
+                date_str=kwargs.get("date_str", ""),
+                weather_str=kwargs.get("weather_str", ""),
+                festival=kwargs.get("festival", ""),
+                image_provider=kwargs.get("image_provider") or DEFAULT_IMAGE_PROVIDER,
+                image_model=kwargs.get("image_model") or DEFAULT_IMAGE_MODEL,
+                mode_display_name=mode_display_name,
+                mode_description=mode_description,
+                prompt_hint=prompt_hint,
+                prompt_template=prompt_template,
+                fallback_title=fallback_title,
+                image_api_key=kwargs.get("image_api_key") or "",
+            )
+            # 仅当真正拿到图像地址时才使用生成结果；否则回退到 JSON 中的 fallback/fallback_pool
+            if mode_id != "ARTWALL":
+                result["artwork_title"] = ""
+                result["description"] = ""
+            if result.get("image_url"):
+                return result
+        except Exception as e:
+            logger.warning(f"[JSONContent] image_gen failed for {mode_id}: {e}", exc_info=True)
+        # 方式 A：生成失败或无 URL 时，直接使用 JSON 中的 fallback（含每个作品自己的 image_url）
+        return dict(fallback)
     return dict(fallback)
 
 
@@ -445,7 +505,7 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             part = await generate_json_mode_content(step_mode_def, **kwargs)
             if isinstance(part, dict):
                 result.update(part)
-        except (httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
+        except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
             logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}", exc_info=True)
             # Continue with next step instead of failing entirely
             continue
