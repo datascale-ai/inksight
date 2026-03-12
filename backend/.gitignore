@@ -19,6 +19,7 @@ test_*_output.png
 
 # Font files (download via scripts/setup_fonts.py)
 fonts/*.ttf
+fonts/*.pcf
 
 # macOS
 .DS_Store
