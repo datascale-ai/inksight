@@ -21,6 +21,14 @@ MESSAGES = {
         "zh": "需要管理员认证",
         "en": "Admin authorization required",
     },
+    "auth.root_required": {
+        "zh": "需要 Root 管理员权限",
+        "en": "Root administrator privileges required",
+    },
+    "auth.user_not_found": {
+        "zh": "用户不存在",
+        "en": "User not found",
+    },
     "auth.device_token_invalid": {
         "zh": "设备 Token 无效或缺失",
         "en": "Device token is invalid or missing",

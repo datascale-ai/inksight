@@ -253,3 +253,5 @@ prototype*.html
 API 接口文档.md
 PROJECT_STATUS.md
 CLAUDE.md
+
+backend/md/

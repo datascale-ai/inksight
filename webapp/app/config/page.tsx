@@ -558,6 +558,11 @@ function ConfigPageInner() {
   const [previewMode, setPreviewMode] = useState("");
   const [previewNoCacheOnce, setPreviewNoCacheOnce] = useState(false);
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
+  // 邀请码弹窗状态
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [redeemingInvite, setRedeemingInvite] = useState(false);
+  const [pendingPreviewMode, setPendingPreviewMode] = useState<string | null>(null);
   const [currentMode, setCurrentMode] = useState<string>("");
   const [applyToScreenLoading, setApplyToScreenLoading] = useState(false);
   const [favoritedModes, setFavoritedModes] = useState<Set<string>>(new Set());
@@ -883,6 +888,37 @@ function ConfigPageInner() {
           }
         });
 
+        stream.addEventListener("error", (event) => {
+          try {
+            const data = JSON.parse((event as MessageEvent<string>).data) as {
+              error?: string;
+              message?: string;
+              requires_invite_code?: boolean;
+            };
+            // 如果额度耗尽，显示邀请码输入弹窗
+            if (data.requires_invite_code) {
+              stream.close();
+              previewStreamRef.current = null;
+              setShowInviteModal(true);
+              setPendingPreviewMode(previewMode);
+              setPreviewStatusText("");
+              setPreviewLoading(false); // 重置加载状态
+              resolve(); // 不 reject，而是 resolve，因为这是预期的业务逻辑
+              return;
+            }
+            // 其他错误，正常 reject
+            stream.close();
+            previewStreamRef.current = null;
+            setPreviewLoading(false); // 重置加载状态
+            reject(new Error(data.message || "Preview failed"));
+          } catch {
+            stream.close();
+            previewStreamRef.current = null;
+            setPreviewLoading(false); // 重置加载状态
+            reject(new Error("Preview failed"));
+          }
+        });
+
         stream.addEventListener("result", (event) => {
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as {
@@ -890,17 +926,24 @@ function ConfigPageInner() {
               image_url?: string;
               cache_hit?: boolean;
             };
+            console.log("[PREVIEW] Result event received:", { hasImageUrl: !!data.image_url, message: data.message });
             if (!data.image_url) {
+              console.error("[PREVIEW] Missing image_url in result event");
+              setPreviewLoading(false); // 重置加载状态
               reject(new Error("Preview image missing"));
               return;
             }
+            console.log("[PREVIEW] Setting preview image:", data.image_url.substring(0, 50) + "...");
             setPreviewImg(data.image_url);
             setPreviewCacheHit(typeof data.cache_hit === "boolean" ? data.cache_hit : null);
             setPreviewStatusText(data.message || tr("完成", "Done"));
+            setPreviewLoading(false); // 重置加载状态
             stream.close();
             previewStreamRef.current = null;
             resolve();
           } catch (error) {
+            console.error("[PREVIEW] Error processing result event:", error);
+            setPreviewLoading(false); // 重置加载状态
             reject(error);
           }
         });
@@ -908,6 +951,7 @@ function ConfigPageInner() {
         stream.onerror = () => {
           stream.close();
           previewStreamRef.current = null;
+          setPreviewLoading(false); // 重置加载状态
           reject(new Error("Preview failed"));
         };
       });
@@ -916,8 +960,43 @@ function ConfigPageInner() {
       setPreviewCacheHit(null);
       setPreviewStatusText("");
     } finally {
-      if (consumeNoCacheOnce) setPreviewNoCacheOnce(false);
       setPreviewLoading(false);
+      if (consumeNoCacheOnce) setPreviewNoCacheOnce(false);
+    }
+  };
+
+  const handleRedeemInviteCode = async () => {
+    if (!inviteCode.trim()) {
+      showToast(isEn ? "Please enter invitation code" : "请输入邀请码", "error");
+      return;
+    }
+
+    setRedeemingInvite(true);
+    try {
+      const res = await fetch("/api/auth/redeem-invite-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invite_code: inviteCode.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || (isEn ? "Failed to redeem invitation code" : "邀请码兑换失败"));
+      }
+
+      showToast(data.message || (isEn ? "Invitation code redeemed successfully" : "邀请码兑换成功"), "success");
+      setShowInviteModal(false);
+      setInviteCode("");
+      // 重新尝试预览
+      if (pendingPreviewMode) {
+        await handlePreview(pendingPreviewMode, true);
+        setPendingPreviewMode(null);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (isEn ? "Failed to redeem invitation code" : "邀请码兑换失败");
+      showToast(msg, "error");
+    } finally {
+      setRedeemingInvite(false);
     }
   };
 
@@ -2076,6 +2155,65 @@ function ConfigPageInner() {
           </Button>
         </div>
       )}
+
+      {/* 邀请码输入弹窗 */}
+      {showInviteModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>{isEn ? "Enter Invitation Code" : "请输入邀请码"}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-ink-light">
+                {isEn
+                  ? "Your free quota has been exhausted. Enter an invitation code to get 5 more free LLM calls."
+                  : "您的免费额度已用完。输入邀请码可获得5次免费LLM调用额度。"}
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-ink mb-1">
+                  {isEn ? "Invitation Code" : "邀请码"}
+                </label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder={isEn ? "Enter invitation code" : "请输入邀请码"}
+                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !redeemingInvite) {
+                      handleRedeemInviteCode();
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteCode("");
+                    setPendingPreviewMode(null);
+                  }}
+                  disabled={redeemingInvite}
+                >
+                  {isEn ? "Cancel" : "取消"}
+                </Button>
+                <Button onClick={handleRedeemInviteCode} disabled={redeemingInvite || !inviteCode.trim()}>
+                  {redeemingInvite ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin mr-2" />
+                      {isEn ? "Redeeming..." : "兑换中..."}
+                    </>
+                  ) : (
+                    isEn ? "Redeem" : "兑换"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       {/* Toast */}
       {toast && (

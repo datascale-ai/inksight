@@ -200,11 +200,17 @@ async def generate_json_mode_content(
         if attempt > 0 and dedup_hint:
             prompt += dedup_hint
 
+        llm_ok = False
         try:
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
+            llm_ok = True
         except (httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
-            return dict(fallback)
+            fb = dict(fallback)
+            # Mark LLM status for downstream billing/observability.
+            fb["_llm_used"] = True
+            fb["_llm_ok"] = False
+            return fb
 
         if ctype == "llm":
             result = _parse_llm_output(text, content_cfg, fallback)
@@ -215,7 +221,10 @@ async def generate_json_mode_content(
 
         if not _validate_content_quality(result, content_cfg.get("output_schema")):
             logger.warning(f"[JSONContent] Quality check failed for {mode_id}, using fallback")
-            return _apply_post_process(dict(fallback), content_cfg)
+            fb = _apply_post_process(dict(fallback), content_cfg)
+            fb["_llm_used"] = True
+            fb["_llm_ok"] = llm_ok
+            return fb
 
         content_hash = _compute_content_hash(result)
         if content_hash not in recent_hashes:
@@ -224,6 +233,9 @@ async def generate_json_mode_content(
 
     result = _apply_post_process(result, content_cfg)
     result = await _prefetch_images(result, mode_def)
+    # Mark LLM status for downstream billing/observability.
+    result["_llm_used"] = True
+    result["_llm_ok"] = True
     return result
 
 

@@ -22,3 +22,5 @@ fonts/*.ttf
 
 # macOS
 .DS_Store
+
+md/

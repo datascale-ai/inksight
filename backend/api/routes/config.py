@@ -6,7 +6,7 @@ from fastapi import APIRouter, Cookie, Depends, Header, Request
 from fastapi.responses import JSONResponse
 
 from api.shared import ensure_web_or_device_access, logger
-from core.auth import is_admin_authorized, require_admin
+from core.auth import is_admin_authorized, require_admin, validate_mac_param
 from core.config_store import activate_config, get_active_config, get_config_history, save_config, update_device_state
 from core.schemas import ConfigRequest, ConfigSaveResponse
 
@@ -61,6 +61,14 @@ async def get_config(
     x_device_token: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
 ):
+    # FastAPI 会自动解码 URL 编码的路径参数，但需要验证 MAC 格式
+    logger.debug(f"[CONFIG GET] Received MAC: {mac} (raw)")
+    try:
+        mac = validate_mac_param(mac)
+        logger.debug(f"[CONFIG GET] Validated MAC: {mac}")
+    except Exception as e:
+        logger.warning(f"[CONFIG GET] Invalid MAC format: {mac}, error: {e}")
+        raise
     await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
     config = await get_active_config(mac)
     if not config:
@@ -77,6 +85,7 @@ async def get_config_history_route(
     x_device_token: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
 ):
+    mac = validate_mac_param(mac)
     await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
     history = await get_config_history(mac)
     for cfg in history:
@@ -91,6 +100,7 @@ async def activate_config_route(
     config_id: int,
     admin_auth: None = Depends(require_admin),
 ):
+    mac = validate_mac_param(mac)
     ok = await activate_config(mac, config_id)
     if not ok:
         return JSONResponse({"error": "config not found"}, status_code=404)

@@ -85,7 +85,111 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
+                phone TEXT UNIQUE,
+                email TEXT UNIQUE,
+                role TEXT NOT NULL DEFAULT 'user',
+                invite_code TEXT DEFAULT '',
                 created_at TEXT NOT NULL
+            )
+        """)
+        # Migration: add phone/email columns if missing.
+        # NOTE: SQLite does NOT support adding a UNIQUE column constraint via ALTER TABLE ADD COLUMN.
+        # We add the column first, then enforce uniqueness via a UNIQUE index.
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+            await db.commit()
+        except Exception:
+            pass
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            await db.commit()
+        except Exception:
+            pass
+
+        # Enforce uniqueness (NULL allowed) via indexes
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON users(phone)")
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email)")
+
+        # Migration: add role column if missing
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+            await db.commit()
+        except Exception:
+            pass
+
+        # Migration: add invite_code column if missing
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN invite_code TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+
+        # Invitation codes table 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS invitation_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                is_used INTEGER DEFAULT 0,
+                generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                used_by_user_id INTEGER,
+                FOREIGN KEY (used_by_user_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_invitation_codes_used_by ON invitation_codes(used_by_user_id)"
+        )
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_invitation_codes_code ON invitation_codes(code)"
+        )
+        
+        # Migration: 如果表已存在但缺少 id 列，需要迁移
+        try:
+            # 检查是否存在旧表结构（没有 id 列）
+            cursor = await db.execute("PRAGMA table_info(invitation_codes)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            
+            if "id" not in column_names:
+                logger.info("[MIGRATION] Migrating invitation_codes table: adding id column")
+                # 创建新表
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS invitation_codes_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        code TEXT NOT NULL UNIQUE,
+                        is_used INTEGER DEFAULT 0,
+                        generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        used_by_user_id INTEGER,
+                        FOREIGN KEY (used_by_user_id) REFERENCES users(id)
+                    )
+                """)
+                # 迁移数据
+                await db.execute("""
+                    INSERT INTO invitation_codes_new (code, is_used, generated_at, used_by_user_id)
+                    SELECT code, is_used, generated_at, used_by_user_id FROM invitation_codes
+                """)
+                # 删除旧表
+                await db.execute("DROP TABLE invitation_codes")
+                # 重命名新表
+                await db.execute("ALTER TABLE invitation_codes_new RENAME TO invitation_codes")
+                # 重新创建索引
+                await db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_invitation_codes_used_by ON invitation_codes(used_by_user_id)"
+                )
+                await db.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_invitation_codes_code ON invitation_codes(code)"
+                )
+                await db.commit()
+                logger.info("[MIGRATION] invitation_codes table migration completed")
+        except Exception as e:
+            logger.warning(f"[MIGRATION] Failed to migrate invitation_codes table: {e}", exc_info=True)
+
+        # API quotas table API额度表
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS api_quotas (
+                user_id INTEGER PRIMARY KEY,
+                total_calls_made INTEGER DEFAULT 0,
+                free_quota_remaining INTEGER DEFAULT 5,
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
         await db.execute("""
@@ -177,18 +281,41 @@ def _verify_password(password: str, stored: str) -> bool:
     return secrets.compare_digest(parts[0] + ":" + dk.hex(), stored)
 
 
-async def create_user(username: str, password: str) -> int | None:
+async def create_user(
+    username: str,
+    password: str,
+    *,
+    phone: str | None = None,
+    email: str | None = None,
+    invite_code: str = "",
+) -> int | None:
+    """创建用户基础记录。
+
+    注意：本函数**只负责 users 表插入**，不涉及邀请码占用或额度初始化。
+    在需要强一致性的注册流程中，请优先使用更高层的封装函数（例如带邀请码校验的注册逻辑）。
+    """
     pw_hash, _ = _hash_password(password)
     now = datetime.now().isoformat()
     db = await get_main_db()
     try:
         cursor = await db.execute(
-            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username.strip(), pw_hash, now),
+            """
+            INSERT INTO users (username, password_hash, phone, email, role, invite_code, created_at)
+            VALUES (?, ?, ?, ?, 'user', ?, ?)
+            """,
+            (
+                username.strip(),
+                pw_hash,
+                (phone or None),
+                (email or None),
+                invite_code or "",
+                now,
+            ),
         )
         await db.commit()
         return cursor.lastrowid
     except aiosqlite.IntegrityError:
+        # 用户名 / 手机号 / 邮箱 唯一性冲突时返回 None，由上层决定错误文案
         return None
 
 
@@ -211,6 +338,97 @@ async def authenticate_user(username: str, password: str) -> dict | None:
     if not _verify_password(password, user["password_hash"]):
         return None
     return user
+
+
+async def get_user_role(user_id: int) -> str | None:
+    """根据 user_id 获取用户的 role（权限）。
+
+    返回 'root' 或 'user'，如果用户不存在则返回 None。
+    """
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT role FROM users WHERE id = ?",
+        (user_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    return row[0] or "user"  # 默认为 'user'
+
+
+# ── API quota & invitation helpers ────────────────────────────
+
+
+async def init_user_api_quota(user_id: int, *, free_quota: int = 5) -> None:
+    """为新用户初始化 API 调用额度（幂等）。
+
+    默认 5 次免费额度，可通过 free_quota 参数调整。
+    """
+    db = await get_main_db()
+    await db.execute(
+        """
+        INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
+        VALUES (?, 0, ?)
+        """,
+        (user_id, free_quota),
+    )
+    await db.commit()
+
+
+async def get_user_api_quota(user_id: int) -> dict | None:
+    """查询用户当前额度信息。"""
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT user_id, total_calls_made, free_quota_remaining FROM api_quotas WHERE user_id = ?",
+        (user_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "user_id": row[0],
+        "total_calls_made": row[1],
+        "free_quota_remaining": row[2],
+    }
+
+
+async def consume_user_free_quota(user_id: int, *, amount: int = 1) -> bool:
+    """在额度足够时原子性扣减免费额度，并累计调用次数。
+
+    仅当 free_quota_remaining >= amount 时成功扣减并返回 True；
+    否则不修改记录并返回 False。
+    """
+    if amount <= 0:
+        return True
+
+    db = await get_main_db()
+    cursor = await db.execute(
+        """
+        UPDATE api_quotas
+        SET
+            free_quota_remaining = free_quota_remaining - ?,
+            total_calls_made     = total_calls_made + 1
+        WHERE user_id = ?
+          AND free_quota_remaining >= ?
+        """,
+        (amount, user_id, amount),
+    )
+    await db.commit()
+    return cursor.rowcount > 0
+
+
+async def get_quota_owner_for_mac(mac: str) -> int | None:
+    """根据设备 MAC 查找与其绑定的计费用户（当前策略：设备 owner）。
+
+    如果找不到 owner，则返回 None，上层可以选择降级为不计费或使用其他策略。
+    """
+    owner = await get_device_owner(mac)
+    if not owner:
+        return None
+    try:
+        return int(owner.get("user_id"))
+    except (TypeError, ValueError):
+        return None
 
 
 async def _migrate_legacy_user_devices(db) -> None:

@@ -18,7 +18,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 try:  # pragma: no cover - exercised implicitly at import time
     from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -69,9 +69,13 @@ from core.config_store import (
     get_cycle_index,
     get_device_membership,
     get_device_state,
+    get_quota_owner_for_mac,
+    get_user_api_quota,
+    get_user_role,
     init_db,
     set_cycle_index,
     update_device_state,
+    consume_user_free_quota,
 )
 from core.context import calc_battery_pct, get_date_context, get_weather
 from core.pipeline import generate_and_render, get_effective_mode_config
@@ -325,14 +329,110 @@ async def build_image(
     preview_city_override: Optional[str] = None,
     preview_mode_override: Optional[dict] = None,
     preview_memo_text: Optional[str] = None,
+    current_user_id: Optional[int] = None,
 ):
     from core.mode_registry import get_registry
 
     battery_pct = calc_battery_pct(v)
     config = await get_active_config(mac) if mac else None
     persona = await resolve_mode(mac, config, persona_override, force_next=force_next)
-    mode_info = get_registry().get_mode_info(persona)
+
+    registry = get_registry()
+    mode_info = registry.get_mode_info(persona)
     is_mode_cacheable = bool(mode_info.cacheable) if mode_info else True
+
+    # 是否为需要 LLM 的 JSON 模式（需要额度管控的类型）
+    # 需要检查顶层 content 类型，以及 composite 模式中的 steps
+    # 涉及 LLM 调用的类型：
+    # - llm: 直接调用 LLM
+    # - llm_json: 调用 LLM 并解析 JSON
+    # - image_gen: 调用 LLM 生成标题（在 generate_artwall_content 中）
+    # - external_data: 如果 provider 是 "briefing" 且配置了 summarize 或 include_insight，会调用 LLM
+    # - composite: 递归检查 steps 中是否包含上述类型
+    llm_mode_requires_quota = False
+    json_mode = registry.get_json_mode(persona)
+    if json_mode and isinstance(json_mode.definition, dict):
+        content_def = json_mode.definition.get("content", {}) or {}
+        ctype = content_def.get("type")
+        logger.debug(
+            "[QUOTA DEBUG] Checking mode %s: ctype=%s, json_mode exists=%s",
+            persona,
+            ctype,
+            json_mode is not None,
+        )
+        if ctype in ("llm", "llm_json", "image_gen"):
+            llm_mode_requires_quota = True
+            logger.debug("[QUOTA DEBUG] Mode %s requires quota (direct type: %s)", persona, ctype)
+        elif ctype == "external_data":
+            # external_data 类型中，briefing provider 会调用 LLM（如果配置了 summarize 或 include_insight）
+            provider = content_def.get("provider", "")
+            if provider == "briefing":
+                summarize = content_def.get("summarize", True)
+                include_insight = content_def.get("include_insight", True)
+                if summarize or include_insight:
+                    llm_mode_requires_quota = True
+                    logger.debug("[QUOTA DEBUG] Mode %s requires quota (external_data briefing)", persona)
+        elif ctype == "composite":
+            # 递归检查 composite 模式中的 steps 是否包含需要 LLM 的类型
+            steps = content_def.get("steps", [])
+            logger.debug("[QUOTA DEBUG] Mode %s is composite, checking %d steps", persona, len(steps) if isinstance(steps, list) else 0)
+            if isinstance(steps, list):
+                for step in steps:
+                    if isinstance(step, dict):
+                        step_type = step.get("type")
+                        logger.debug("[QUOTA DEBUG] Checking step type: %s", step_type)
+                        if step_type in ("llm", "llm_json", "image_gen"):
+                            llm_mode_requires_quota = True
+                            logger.debug("[QUOTA DEBUG] Mode %s requires quota (composite step: %s)", persona, step_type)
+                            break
+                        elif step_type == "external_data":
+                            # 检查 external_data step 是否调用 LLM
+                            step_provider = step.get("provider", "")
+                            if step_provider == "briefing":
+                                step_summarize = step.get("summarize", True)
+                                step_include_insight = step.get("include_insight", True)
+                                if step_summarize or step_include_insight:
+                                    llm_mode_requires_quota = True
+                                    logger.debug("[QUOTA DEBUG] Mode %s requires quota (composite external_data briefing)", persona)
+                                    break
+                        # 如果 step 本身也是 composite，需要递归检查（虽然当前没有这种嵌套，但为了完整性）
+                        elif step_type == "composite":
+                            nested_steps = step.get("steps", [])
+                            if isinstance(nested_steps, list):
+                                for nested_step in nested_steps:
+                                    if isinstance(nested_step, dict):
+                                        nested_type = nested_step.get("type")
+                                        if nested_type in ("llm", "llm_json", "image_gen"):
+                                            llm_mode_requires_quota = True
+                                            logger.debug("[QUOTA DEBUG] Mode %s requires quota (nested composite step: %s)", persona, nested_type)
+                                            break
+                                        elif nested_type == "external_data":
+                                            nested_provider = nested_step.get("provider", "")
+                                            if nested_provider == "briefing":
+                                                nested_summarize = nested_step.get("summarize", True)
+                                                nested_include_insight = nested_step.get("include_insight", True)
+                                                if nested_summarize or nested_include_insight:
+                                                    llm_mode_requires_quota = True
+                                                    logger.debug("[QUOTA DEBUG] Mode %s requires quota (nested composite external_data briefing)", persona)
+                                                    break
+                                if llm_mode_requires_quota:
+                                    break
+    if not llm_mode_requires_quota:
+        logger.debug("[QUOTA DEBUG] Mode %s does NOT require quota", persona)
+
+    # 当前设备对应的计费用户（策略：owner）
+    # 对于设备端：使用设备 owner 的 user_id
+    # 对于 Web 预览：使用当前登录用户的 user_id（如果提供了 current_user_id）
+    quota_user_id: int | None = None
+    if mac:
+        try:
+            quota_user_id = await get_quota_owner_for_mac(mac)
+        except Exception:
+            logger.warning("[QUOTA] Failed to resolve quota owner for %s", mac, exc_info=True)
+    elif current_user_id is not None:
+        # Web 预览场景：使用当前登录用户的 user_id
+        quota_user_id = current_user_id
+        logger.debug("[QUOTA] Using current_user_id=%s for Web preview", current_user_id)
 
     if preview_city_override or preview_mode_override or preview_memo_text:
         config = copy.deepcopy(config or {})
@@ -361,6 +461,7 @@ async def build_image(
                 config["memoText"] = memo_clean
 
     cache_hit = False
+    quota_exhausted = False
     if mac and config and is_mode_cacheable and not skip_cache:
         await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h)
         cached_img = await content_cache.get(
@@ -373,8 +474,72 @@ async def build_image(
         if cached_img:
             cache_hit = True
             img = cached_img
+            # 即使缓存命中，如果这是需要 LLM 的模式且用户额度为0，也应该检查并返回兜底图
+            # 避免用户通过缓存绕过额度限制
+            # Root 用户无需检查额度
+            if (
+                quota_user_id is not None
+                and llm_mode_requires_quota
+                and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
+            ):
+                try:
+                    # 检查用户是否为 root，root 用户无需检查额度
+                    user_role = await get_user_role(quota_user_id)
+                    if user_role == "root":
+                        logger.debug(
+                            "[QUOTA] User %s is root, skipping quota check on cache hit",
+                            quota_user_id,
+                        )
+                    else:
+                        quota = await get_user_api_quota(quota_user_id)
+                        if quota is None:
+                            logger.warning(
+                                "[QUOTA] Quota query returned None for user_id=%s (mac=%s, mode=%s) on cache hit, treating as exhausted",
+                                quota_user_id,
+                                mac,
+                                persona,
+                            )
+                            quota_exhausted = True
+                            # 对于设备端，返回兜底图；对于 Web 预览，返回 quota_exhausted 标志让接口处理
+                            if mac:
+                                img = _render_quota_exhausted_image(screen_w, screen_h)
+                                await update_device_state(
+                                    mac,
+                                    last_persona=persona,
+                                    last_refresh_at=datetime.now().isoformat(),
+                                )
+                                return img, persona, False, True, quota_exhausted
+                            # Web 预览：不返回图片，让接口返回 JSON 响应
+                            return None, persona, False, True, quota_exhausted
+                        if int(quota.get("free_quota_remaining") or 0) <= 0:
+                            quota_exhausted = True
+                            logger.info(
+                                "[QUOTA] Free quota exhausted for user_id=%s (mac=%s, mode=%s) on cache hit",
+                                quota_user_id,
+                                mac,
+                                persona,
+                            )
+                            # 对于设备端，返回兜底图；对于 Web 预览，返回 quota_exhausted 标志让接口处理
+                            if mac:
+                                img = _render_quota_exhausted_image(screen_w, screen_h)
+                                await update_device_state(
+                                    mac,
+                                    last_persona=persona,
+                                    last_refresh_at=datetime.now().isoformat(),
+                                )
+                                return img, persona, False, True, quota_exhausted
+                            # Web 预览：不返回图片，让接口返回 JSON 响应
+                            return None, persona, False, True, quota_exhausted
+                except Exception:
+                    logger.warning(
+                        "[QUOTA] Failed to check quota on cache hit for user_id=%s (mac=%s, mode=%s), allowing cache",
+                        quota_user_id,
+                        mac,
+                        persona,
+                        exc_info=True,
+                    )
         else:
-            logger.info("[CACHE MISS] %s:%s - Generating fallback content", mac, persona)
+            logger.info("[CACHE MISS] %s:%s - Generating content", mac, persona)
     else:
         if skip_cache:
             logger.info("[PREVIEW] Skip cache for %s:%s", mac, persona)
@@ -382,6 +547,116 @@ async def build_image(
 
     content_data = None
     content_fallback = False
+
+    # Cache Miss + 需要 LLM + 找到了计费用户：先检查剩余额度
+    quota_exhausted = False
+    # 添加调试日志，确认额度检查条件
+    if not cache_hit:
+        logger.info(
+            "[QUOTA DEBUG] cache_hit=%s, mac=%s, quota_user_id=%s, llm_mode_requires_quota=%s, persona=%s",
+            cache_hit,
+            mac,
+            quota_user_id,
+            llm_mode_requires_quota,
+            persona,
+        )
+    # 额度检查：需要满足以下条件之一：
+    # 1. 有 mac（设备端）：检查设备 owner 的额度
+    # 2. 有 current_user_id（Web 预览）：检查当前登录用户的额度
+    # Root 用户无需检查额度
+    if (
+        not cache_hit
+        and quota_user_id is not None
+        and llm_mode_requires_quota
+        and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
+    ):
+        try:
+            # 检查用户是否为 root，root 用户无需检查额度
+            user_role = await get_user_role(quota_user_id)
+            if user_role == "root":
+                logger.debug(
+                    "[QUOTA] User %s is root, skipping quota check",
+                    quota_user_id,
+                )
+            else:
+                quota = await get_user_api_quota(quota_user_id)
+                if quota is None:
+                    logger.warning(
+                        "[QUOTA] Quota query returned None for user_id=%s (mac=%s, mode=%s), treating as exhausted",
+                        quota_user_id,
+                        mac,
+                        persona,
+                    )
+                    quota_exhausted = True
+                    img = _render_quota_exhausted_image(screen_w, screen_h)
+                    await update_device_state(
+                        mac,
+                        last_persona=persona,
+                        last_refresh_at=datetime.now().isoformat(),
+                    )
+                    return img, persona, False, True, quota_exhausted
+                if int(quota.get("free_quota_remaining") or 0) <= 0:
+                    quota_exhausted = True
+                    logger.info(
+                        "[QUOTA] Free quota exhausted for user_id=%s (mac=%s, mode=%s)",
+                        quota_user_id,
+                        mac,
+                        persona,
+                    )
+                    # 对于设备端，仍然返回1-bit兜底图（设备无法显示弹窗）
+                    # 对于Web端，会在 preview 接口中检测并返回 JSON 响应
+                    img = _render_quota_exhausted_image(screen_w, screen_h)
+        except Exception:
+            quota = None
+            logger.warning(
+                "[QUOTA] Failed to load quota for user_id=%s (mac=%s, mode=%s)",
+                quota_user_id,
+                mac,
+                persona,
+                exc_info=True,
+            )
+            # 如果查询失败且不是 root 用户，为了安全起见，也视为额度耗尽并拦截
+            try:
+                user_role = await get_user_role(quota_user_id)
+                if user_role != "root":
+                    logger.warning(
+                        "[QUOTA] Quota query failed for user_id=%s (mac=%s, mode=%s), treating as exhausted",
+                        quota_user_id,
+                        mac,
+                        persona,
+                    )
+                    quota_exhausted = True
+                    img = _render_quota_exhausted_image(screen_w, screen_h)
+                    await update_device_state(
+                        mac,
+                        last_persona=persona,
+                        last_refresh_at=datetime.now().isoformat(),
+                    )
+                    return img, persona, False, True, quota_exhausted
+            except Exception:
+                # 如果连 role 都查不到，为了安全起见，也视为额度耗尽
+                logger.warning(
+                    "[QUOTA] Failed to check user role for user_id=%s (mac=%s, mode=%s), treating as exhausted",
+                    quota_user_id,
+                    mac,
+                    persona,
+                )
+                quota_exhausted = True
+                img = _render_quota_exhausted_image(screen_w, screen_h)
+                await update_device_state(
+                    mac,
+                    last_persona=persona,
+                    last_refresh_at=datetime.now().isoformat(),
+                )
+                return img, persona, False, True, quota_exhausted
+            # 更新设备状态，但不写入内容缓存，避免后续充值后仍命中"额度耗尽"图片
+            await update_device_state(
+                mac,
+                last_persona=persona,
+                last_refresh_at=datetime.now().isoformat(),
+            )
+            return img, persona, False, True, quota_exhausted
+
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
         city = effective_cfg.get("city", DEFAULT_CITY) if effective_cfg else None
@@ -423,7 +698,44 @@ async def build_image(
         except (OSError, ValueError, TypeError):
             logger.warning("[CONTENT] Failed to save content for %s:%s", mac, persona, exc_info=True)
 
-    return img, persona, cache_hit, content_fallback
+    # 精准扣费：仅在 Cache Miss 且确实发生了一次成功的 LLM 调用时扣减额度
+    # 支持设备端（mac）和 Web 预览（current_user_id）
+    # Root 用户无需扣费
+    if (
+        not cache_hit
+        and quota_user_id is not None
+        and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要扣费
+        and isinstance(content_data, dict)
+        and content_data.get("_llm_used") is True
+        and content_data.get("_llm_ok") is True
+    ):
+        try:
+            # 检查用户是否为 root，root 用户无需扣费
+            user_role = await get_user_role(quota_user_id)
+            if user_role == "root":
+                logger.debug(
+                    "[QUOTA] User %s is root, skipping quota deduction",
+                    quota_user_id,
+                )
+            else:
+                deducted = await consume_user_free_quota(quota_user_id, amount=1)
+                if not deducted:
+                    logger.info(
+                        "[QUOTA] Consume failed (no remaining free quota) for user_id=%s, mac=%s, mode=%s",
+                        quota_user_id,
+                        mac,
+                        persona,
+                    )
+        except Exception:
+            logger.warning(
+                "[QUOTA] Failed to consume quota for user_id=%s (mac=%s, mode=%s)",
+                quota_user_id,
+                mac,
+                persona,
+                exc_info=True,
+            )
+
+    return img, persona, cache_hit, content_fallback, quota_exhausted
 
 
 async def log_render_stats(
@@ -606,3 +918,25 @@ def normalize_pushed_preview(image_bytes: bytes, *, width: int, height: int) -> 
         if img.size != (width, height):
             img = img.resize((width, height), Image.NEAREST)
         return image_to_bmp_bytes(img)
+
+
+def _render_quota_exhausted_image(screen_w: int, screen_h: int) -> Image.Image:
+    """渲染额度耗尽提示图（1-bit），对 ESP32 固件保持兼容。
+
+    始终返回 mode=\"1\" 的黑白图像，调用方按 BMP 返回给设备（HTTP 200）。
+    """
+    img = Image.new("1", (screen_w, screen_h), 1)  # 1 = 白色背景
+    draw = ImageDraw.Draw(img)
+    message = "您的免费额度已用完，请联系管理员"
+    try:
+        font = ImageFont.load_default()
+    except Exception:  # pragma: no cover - 极端环境下回退
+        font = None
+    # Pillow 10.0.0+ 使用 textbbox 替代已废弃的 textsize
+    bbox = draw.textbbox((0, 0), message, font=font)
+    text_w = bbox[2] - bbox[0]  # right - left
+    text_h = bbox[3] - bbox[1]  # bottom - top
+    x = max(0, (screen_w - text_w) // 2)
+    y = max(0, (screen_h - text_h) // 2)
+    draw.text((x, y), message, fill=0, font=font)
+    return img

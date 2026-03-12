@@ -196,6 +196,12 @@ export default function ExperiencePage() {
   const lastObjectUrlRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
+  // 邀请码弹窗状态
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [redeemingInvite, setRedeemingInvite] = useState(false);
+  const [pendingPreviewMode, setPendingPreviewMode] = useState<string | null>(null);
+
   const showToast = (msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
@@ -262,6 +268,16 @@ export default function ExperiencePage() {
       if (targetMode === "MEMO") params.set("memo_text", memoText);
 
       const res = await fetch(`/api/preview?${params.toString()}`);
+      if (res.status === 402) {
+        // 额度耗尽，显示邀请码输入弹窗
+        const data = await res.json().catch(() => ({}));
+        if (data.requires_invite_code) {
+          setPendingPreviewMode(targetMode);
+          setShowInviteModal(true);
+          setPreviewLoading(false);
+          return;
+        }
+      }
       if (!res.ok) {
         const errText = await res.text().catch(() => "Unknown error");
         throw new Error(`${t(locale, "preview.error.preview_failed", "Preview failed")}: HTTP ${res.status} ${errText.substring(0, 120)}`);
@@ -279,6 +295,41 @@ export default function ExperiencePage() {
       showToast(msg, "error");
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const handleRedeemInviteCode = async () => {
+    if (!inviteCode.trim()) {
+      showToast(locale === "en" ? "Please enter invitation code" : "请输入邀请码", "error");
+      return;
+    }
+
+    setRedeemingInvite(true);
+    try {
+      const res = await fetch("/api/auth/redeem-invite-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invite_code: inviteCode.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || (locale === "en" ? "Failed to redeem invitation code" : "邀请码兑换失败"));
+      }
+
+      showToast(data.message || (locale === "en" ? "Invitation code redeemed successfully" : "邀请码兑换成功"), "success");
+      setShowInviteModal(false);
+      setInviteCode("");
+      // 重新尝试预览
+      if (pendingPreviewMode) {
+        await handlePreview(pendingPreviewMode);
+        setPendingPreviewMode(null);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (locale === "en" ? "Failed to redeem invitation code" : "邀请码兑换失败");
+      showToast(msg, "error");
+    } finally {
+      setRedeemingInvite(false);
     }
   };
 
@@ -569,6 +620,65 @@ export default function ExperiencePage() {
           }`}
         >
           {toast.msg}
+        </div>
+      ) : null}
+
+      {/* 邀请码输入弹窗 */}
+      {showInviteModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>{locale === "en" ? "Enter Invitation Code" : "请输入邀请码"}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-ink-light">
+                {locale === "en"
+                  ? "Your free quota has been exhausted. Enter an invitation code to get 5 more free LLM calls."
+                  : "您的免费额度已用完。输入邀请码可获得5次免费LLM调用额度。"}
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-ink mb-1">
+                  {locale === "en" ? "Invitation Code" : "邀请码"}
+                </label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder={locale === "en" ? "Enter invitation code" : "请输入邀请码"}
+                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !redeemingInvite) {
+                      handleRedeemInviteCode();
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteCode("");
+                    setPendingPreviewMode(null);
+                  }}
+                  disabled={redeemingInvite}
+                >
+                  {locale === "en" ? "Cancel" : "取消"}
+                </Button>
+                <Button onClick={handleRedeemInviteCode} disabled={redeemingInvite || !inviteCode.trim()}>
+                  {redeemingInvite ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin mr-2" />
+                      {locale === "en" ? "Redeeming..." : "兑换中..."}
+                    </>
+                  ) : (
+                    locale === "en" ? "Redeem" : "兑换"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
     </div>

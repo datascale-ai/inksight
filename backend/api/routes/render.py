@@ -116,7 +116,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted = await build_image(
             params.v,
             mac,
             params.persona,
@@ -240,6 +240,16 @@ async def preview(
     if mac:
         mac = validate_mac_param(mac)
         await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
+    
+    # 获取当前登录用户 ID（用于 Web 预览的额度检查）
+    current_user_id = None
+    if not mac:  # 只在 Web 预览时获取用户 ID
+        from core.auth import get_current_user_optional
+        current_user = await get_current_user_optional(request, ink_session)
+        if current_user:
+            current_user_id = current_user.get("user_id")
+            logger.debug("[PREVIEW] Current user_id=%s for Web preview", current_user_id)
+    
     try:
         effective_v = await resolve_preview_voltage(v, mac)
         parsed_mode_override = None
@@ -250,7 +260,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted = await build_image(
             effective_v,
             mac,
             persona,
@@ -260,7 +270,27 @@ async def preview(
             preview_city_override=(city_override.strip() if city_override else None),
             preview_mode_override=parsed_mode_override,
             preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
+            current_user_id=current_user_id,
         )
+        # 如果额度耗尽，返回 JSON 响应，让前端显示邀请码输入弹窗
+        if quota_exhausted:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=402,  # Payment Required
+                content={
+                    "error": "quota_exhausted",
+                    "message": "您的免费额度已用完，请输入邀请码获取更多额度",
+                    "requires_invite_code": True,
+                },
+            )
+        # 如果 img 为 None（不应该发生，但为了安全起见）
+        if img is None:
+            logger.error("[PREVIEW] img is None but quota_exhausted is False")
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=500,
+                content={"error": "image_generation_failed", "message": "图片生成失败"},
+            )
         png_bytes = image_to_png_bytes(img)
         logger.info("[PREVIEW] Generated PNG persona=%s size=%sx%s", resolved_persona, w, h)
         return Response(
@@ -300,6 +330,15 @@ async def preview_stream(
     if mac:
         mac = validate_mac_param(mac)
         await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
+    
+    # 获取当前登录用户 ID（用于 Web 预览的额度检查）
+    current_user_id = None
+    if not mac:  # 只在 Web 预览时获取用户 ID
+        from core.auth import get_current_user_optional
+        current_user = await get_current_user_optional(request, ink_session)
+        if current_user:
+            current_user_id = current_user.get("user_id")
+            logger.debug("[PREVIEW_STREAM] Current user_id=%s for Web preview", current_user_id)
 
     async def stream():
         try:
@@ -314,7 +353,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted = await build_image(
                 effective_v,
                 mac,
                 persona,
@@ -324,7 +363,16 @@ async def preview_stream(
                 preview_city_override=(city_override.strip() if city_override else None),
                 preview_mode_override=parsed_mode_override,
                 preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
+                current_user_id=current_user_id,
             )
+            # 如果额度耗尽，返回错误事件
+            if quota_exhausted:
+                yield _sse_event("error", {
+                    "error": "quota_exhausted",
+                    "message": "您的免费额度已用完，请输入邀请码获取更多额度",
+                    "requires_invite_code": True,
+                })
+                return
             yield _sse_event("status", {"stage": "rendering", "message": "正在渲染..."})
             png_bytes = image_to_png_bytes(img)
             data_url = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"

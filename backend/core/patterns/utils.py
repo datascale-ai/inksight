@@ -105,6 +105,11 @@ def load_font(font_key: str, size: int) -> ImageFont.ImageFont:
     """从配置加载字体"""
     font_name = FONTS.get(font_key)
     if not font_name:
+        # Fallback to CJK font if default font key not found
+        fallback_cjk = "NotoSerifSC-Regular.ttf"
+        fallback_path = os.path.join(TRUETYPE_DIR, fallback_cjk)
+        if os.path.exists(fallback_path):
+            return ImageFont.truetype(fallback_path, size)
         return ImageFont.load_default()
     if _force_bitmap:
         bitmap_font = _load_bitmap_font(font_name, size)
@@ -112,10 +117,23 @@ def load_font(font_key: str, size: int) -> ImageFont.ImageFont:
             return bitmap_font
     path = os.path.join(TRUETYPE_DIR, font_name)
     if os.path.exists(path):
-        return ImageFont.truetype(path, size)
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception as e:
+            logger.warning(f"[FONT] Failed to load {font_name}: {e}")
+            # Fallback to CJK font if loading fails
+            fallback_cjk = "NotoSerifSC-Regular.ttf"
+            fallback_path = os.path.join(TRUETYPE_DIR, fallback_cjk)
+            if os.path.exists(fallback_path):
+                return ImageFont.truetype(fallback_path, size)
     if font_key not in _font_warned:
         _font_warned.add(font_key)
         logger.warning(f"[FONT] Missing {font_name}, run: python scripts/setup_fonts.py")
+    # Final fallback: try CJK font before default
+    fallback_cjk = "NotoSerifSC-Regular.ttf"
+    fallback_path = os.path.join(TRUETYPE_DIR, fallback_cjk)
+    if os.path.exists(fallback_path):
+        return ImageFont.truetype(fallback_path, size)
     return ImageFont.load_default()
 
 

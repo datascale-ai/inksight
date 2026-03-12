@@ -417,7 +417,9 @@ def _render_list(ctx: RenderContext, block: dict) -> None:
 
     align = block.get("align", "left")
 
-    font = load_font(_pick_cjk_font(font_key), font_size)
+    # Ensure CJK font for list items (poetry lines are Chinese strings)
+    font_key_cjk = _pick_cjk_font(font_key)
+    font = load_font(font_key_cjk, font_size)
     item_height = spacing
 
     rendered_count = 0
