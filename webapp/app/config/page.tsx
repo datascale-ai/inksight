@@ -547,6 +547,8 @@ function ConfigPageInner() {
   const [memoText, setMemoText] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [imageApiKey, setImageApiKey] = useState("");
+  const [llmApiKeyModified, setLlmApiKeyModified] = useState(false);
+  const [imageApiKeyModified, setImageApiKeyModified] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -671,6 +673,9 @@ function ConfigPageInner() {
         } else if (cfg.memoText || cfg.memo_text) {
           setMemoText((cfg.memoText || cfg.memo_text) as string);
         }
+        // 重置 API key 修改标志（加载配置时重置）
+        setLlmApiKeyModified(false);
+        setImageApiKeyModified(false);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -802,8 +807,25 @@ function ConfigPageInner() {
         modeOverrides: normalizedModeOverrides,
         memoText: memoText,
       };
-      if (llmApiKey.trim()) body.llmApiKey = llmApiKey.trim();
-      if (imageApiKey.trim()) body.imageApiKey = imageApiKey.trim();
+      // 只有在用户修改了 API key 时才发送该字段
+      // 如果用户清空了 API key（从有值变为空），发送空字符串
+      // 如果用户未修改 API key，不发送该字段（后端会保留旧值）
+      const hasApiKey = Boolean(config.has_api_key);
+      const hasImageApiKey = Boolean(config.has_image_api_key);
+      const llmApiKeyTrimmed = llmApiKey.trim();
+      const imageApiKeyTrimmed = imageApiKey.trim();
+      
+      // 发送 llmApiKey 的情况（只有在用户修改了输入框时才发送）：
+      // 1. 用户新设置了 API key（之前没有，现在有值）
+      // 2. 用户修改了 API key（之前有，现在也有值）
+      // 3. 用户清空了 API key（之前有，现在为空）
+      if (llmApiKeyModified) {
+        body.llmApiKey = llmApiKeyTrimmed;
+      }
+      // 同样的逻辑应用于 imageApiKey
+      if (imageApiKeyModified) {
+        body.imageApiKey = imageApiKeyTrimmed;
+      }
       const res = await fetch("/api/config", {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
@@ -1786,9 +1808,15 @@ function ConfigPageInner() {
                 imageModel={imageModel}
                 setImageModel={setImageModel}
                 llmApiKey={llmApiKey}
-                setLlmApiKey={setLlmApiKey}
+                setLlmApiKey={(value) => {
+                  setLlmApiKey(value);
+                  setLlmApiKeyModified(true);
+                }}
                 imageApiKey={imageApiKey}
-                setImageApiKey={setImageApiKey}
+                setImageApiKey={(value) => {
+                  setImageApiKey(value);
+                  setImageApiKeyModified(true);
+                }}
                 hasApiKey={Boolean(config.has_api_key)}
                 hasImageApiKey={Boolean(config.has_image_api_key)}
                 llmModels={LLM_MODELS}
@@ -2166,9 +2194,29 @@ function ConfigPageInner() {
             <CardContent className="space-y-4">
               <p className="text-sm text-ink-light">
                 {isEn
-                  ? "Your free quota has been exhausted. Enter an invitation code to get 5 more free LLM calls."
-                  : "您的免费额度已用完。输入邀请码可获得5次免费LLM调用额度。"}
+                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 5 more free LLM calls, or configure your own API key in the AI configuration tab."
+                  : "您的免费额度已用完。您可以输入邀请码获得5次免费LLM调用额度，也可以在 AI 配置中设置自己的 API key。"}
               </p>
+              <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
+                <p className="text-xs text-ink-light mb-2">
+                  {isEn
+                    ? "💡 Tip: If you have your own API key, you can configure it in the AI Models tab to avoid quota limits."
+                    : "💡 提示：如果您有自己的 API key，可以在「AI 模型」标签页中配置，这样就不会受到额度限制了。"}
+                </p>
+                {mac && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowInviteModal(false);
+                      setActiveTab("ai");
+                    }}
+                    className="w-full text-xs"
+                  >
+                    {isEn ? "Go to AI Configuration" : "前往 AI 配置"}
+                  </Button>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">
                   {isEn ? "Invitation Code" : "邀请码"}

@@ -420,6 +420,17 @@ async def build_image(
     if not llm_mode_requires_quota:
         logger.debug("[QUOTA DEBUG] Mode %s does NOT require quota", persona)
 
+    # 检查用户是否提供了自己的 API key（如果提供了，则无需额度检查）
+    user_provided_api_key = False
+    if config:
+        encrypted_llm_key = config.get("llm_api_key", "")
+        if encrypted_llm_key:
+            from core.crypto import decrypt_api_key
+            decrypted_key = decrypt_api_key(encrypted_llm_key)
+            if decrypted_key and decrypted_key.strip():
+                user_provided_api_key = True
+                logger.debug("[QUOTA] User provided API key, skipping quota check for mac=%s", mac)
+
     # 当前设备对应的计费用户（策略：owner）
     # 对于设备端：使用设备 owner 的 user_id
     # 对于 Web 预览：使用当前登录用户的 user_id（如果提供了 current_user_id）
@@ -477,10 +488,12 @@ async def build_image(
             # 即使缓存命中，如果这是需要 LLM 的模式且用户额度为0，也应该检查并返回兜底图
             # 避免用户通过缓存绕过额度限制
             # Root 用户无需检查额度
+            # 如果用户提供了自己的 API key，也无需检查额度
             if (
                 quota_user_id is not None
                 and llm_mode_requires_quota
                 and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
+                and not user_provided_api_key  # 用户提供了自己的 API key，无需检查额度
             ):
                 try:
                     # 检查用户是否为 root，root 用户无需检查额度
@@ -564,11 +577,13 @@ async def build_image(
     # 1. 有 mac（设备端）：检查设备 owner 的额度
     # 2. 有 current_user_id（Web 预览）：检查当前登录用户的额度
     # Root 用户无需检查额度
+    # 如果用户提供了自己的 API key，也无需检查额度
     if (
         not cache_hit
         and quota_user_id is not None
         and llm_mode_requires_quota
         and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
+        and not user_provided_api_key  # 用户提供了自己的 API key，无需检查额度
     ):
         try:
             # 检查用户是否为 root，root 用户无需检查额度
@@ -701,6 +716,7 @@ async def build_image(
     # 精准扣费：仅在 Cache Miss 且确实发生了一次成功的 LLM 调用时扣减额度
     # 支持设备端（mac）和 Web 预览（current_user_id）
     # Root 用户无需扣费
+    # 如果用户提供了自己的 API key，也无需扣费
     if (
         not cache_hit
         and quota_user_id is not None
@@ -708,6 +724,7 @@ async def build_image(
         and isinstance(content_data, dict)
         and content_data.get("_llm_used") is True
         and content_data.get("_llm_ok") is True
+        and not user_provided_api_key  # 用户提供了自己的 API key，无需扣费
     ):
         try:
             # 检查用户是否为 root，root 用户无需扣费
@@ -735,7 +752,25 @@ async def build_image(
                 exc_info=True,
             )
 
-    return img, persona, cache_hit, content_fallback, quota_exhausted
+    # 检查 API key 是否无效
+    api_key_invalid = False
+    if isinstance(content_data, dict) and content_data.get("_api_key_invalid") is True:
+        api_key_invalid = True
+        logger.warning(
+            "[API_KEY] User provided API key is invalid or expired for mac=%s, mode=%s",
+            mac,
+            persona,
+        )
+        # 对于设备端，返回提示图片；对于 Web 预览，返回 api_key_invalid 标志让接口处理
+        if mac:
+            img = _render_api_key_invalid_image(screen_w, screen_h)
+            await update_device_state(
+                mac,
+                last_persona=persona,
+                last_refresh_at=datetime.now().isoformat(),
+            )
+
+    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid
 
 
 async def log_render_stats(
@@ -918,6 +953,34 @@ def normalize_pushed_preview(image_bytes: bytes, *, width: int, height: int) -> 
         if img.size != (width, height):
             img = img.resize((width, height), Image.NEAREST)
         return image_to_bmp_bytes(img)
+
+
+def _render_api_key_invalid_image(screen_w: int, screen_h: int) -> Image.Image:
+    """渲染 API key 无效提示图（1-bit），对 ESP32 固件保持兼容。
+
+    始终返回 mode=\"1\" 的黑白图像，调用方按 BMP 返回给设备（HTTP 200）。
+    """
+    img = Image.new("1", (screen_w, screen_h), 1)  # 1 = 白色背景
+    draw = ImageDraw.Draw(img)
+    message = "API key 无效或已过期，请检查设备配置"
+    try:
+        font = ImageFont.load_default()
+    except Exception:  # pragma: no cover - 极端环境下回退
+        font = None
+    try:
+        if font:
+            bbox = draw.textbbox((0, 0), message, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+        else:
+            text_w = len(message) * 6
+            text_h = 10
+        x = (screen_w - text_w) // 2
+        y = (screen_h - text_h) // 2
+        draw.text((x, y), message, fill=0, font=font)  # 0 = 黑色文字
+    except Exception:
+        logger.warning("[RENDER] Failed to render API key invalid message", exc_info=True)
+    return img
 
 
 def _render_quota_exhausted_image(screen_w: int, screen_h: int) -> Image.Image:

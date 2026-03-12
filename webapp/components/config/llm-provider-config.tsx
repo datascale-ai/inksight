@@ -84,7 +84,7 @@ export function LlmProviderConfig({
             onChange={(e) => setLlmApiKey(e.target.value)}
             placeholder={
               hasApiKey
-                ? tr("已配置，留空不修改", "Configured, leave empty to keep")
+                ? tr("已配置，留空不修改，清空输入框可删除", "Configured, leave empty to keep, clear to remove")
                 : tr(
                     "可选，设备专用 Key，留空使用服务器默认",
                     "Optional device-level key, leave empty to use server default",
@@ -127,7 +127,7 @@ export function LlmProviderConfig({
             onChange={(e) => setImageApiKey(e.target.value)}
             placeholder={
               hasImageApiKey
-                ? tr("已配置，留空不修改", "Configured, leave empty to keep")
+                ? tr("已配置，留空不修改，清空输入框可删除", "Configured, leave empty to keep, clear to remove")
                 : tr(
                     "可选，设备专用 Key，留空使用服务器默认",
                     "Optional device-level key, leave empty to use server default",

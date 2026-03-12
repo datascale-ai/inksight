@@ -12,6 +12,8 @@ from json import JSONDecodeError
 from typing import Any
 
 import httpx
+from httpx import HTTPStatusError
+from openai import OpenAIError
 
 from .config import DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL, DEFAULT_IMAGE_PROVIDER, DEFAULT_IMAGE_MODEL
 from .content import _build_context_str, _build_style_instructions, _call_llm, _clean_json_response
@@ -255,14 +257,31 @@ async def generate_json_mode_content(
             prompt += dedup_hint
 
         llm_ok = False
+        api_key_invalid = False
         try:
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
+            llm_ok = True
         except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
+            # 检查是否是 API key 无效错误（401/403）
+            if isinstance(e, HTTPStatusError):
+                status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
+                if status_code in (401, 403):
+                    api_key_invalid = True
+                    logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: HTTP {status_code}")
+            elif isinstance(e, OpenAIError):
+                # OpenAI SDK 的错误可能包含状态码信息
+                error_message = str(e).lower()
+                error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
+                if error_code in (401, 403) or "401" in error_message or "403" in error_message or "unauthorized" in error_message or "invalid" in error_message or "authentication" in error_message:
+                    api_key_invalid = True
+                    logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
             fb = dict(fallback)
             # Mark LLM status for downstream billing/observability.
             fb["_llm_used"] = True
             fb["_llm_ok"] = False
+            if api_key_invalid:
+                fb["_api_key_invalid"] = True
             return fb
 
         if ctype == "llm":

@@ -605,9 +605,16 @@ export default function ExperiencePage() {
             <CardContent className="space-y-4">
               <p className="text-sm text-ink-light">
                 {locale === "en"
-                  ? "Your free quota has been exhausted. Enter an invitation code to get 5 more free LLM calls."
-                  : "您的免费额度已用完。输入邀请码可获得5次免费LLM调用额度。"}
+                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 5 more free LLM calls, or configure your own API key in device settings."
+                  : "您的免费额度已用完。您可以输入邀请码获得5次免费LLM调用额度，也可以在设备配置中设置自己的 API key。"}
               </p>
+              <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
+                <p className="text-xs text-ink-light mb-2">
+                  {locale === "en"
+                    ? "💡 Tip: If you have your own API key, you can configure it in device settings (AI Models tab) to avoid quota limits."
+                    : "💡 提示：如果您有自己的 API key，可以在设备配置的「AI 模型」标签页中设置，这样就不会受到额度限制了。"}
+                </p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">
                   {locale === "en" ? "Invitation Code" : "邀请码"}

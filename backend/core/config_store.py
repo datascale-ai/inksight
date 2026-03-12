@@ -986,17 +986,28 @@ async def save_config(mac: str, data: dict) -> int:
         data.get("modeOverrides", {}), ensure_ascii=False
     )
     from .crypto import encrypt_api_key
-    raw_llm_key = data.get("llmApiKey", "")
-    raw_image_key = data.get("imageApiKey", "")
-    if raw_llm_key:
-        llm_api_key = encrypt_api_key(raw_llm_key)
+    # 检查字段是否存在，以区分"用户未修改"和"用户清空"
+    # 如果字段存在但值为空字符串，视为用户明确清空，设置为空字符串
+    # 如果字段不存在，保留旧值（用户未修改）
+    if "llmApiKey" in data:
+        raw_llm_key = data.get("llmApiKey", "")
+        if raw_llm_key and raw_llm_key.strip():
+            llm_api_key = encrypt_api_key(raw_llm_key)
+        else:
+            # 用户明确清空了 API key，设置为空字符串
+            llm_api_key = ""
     else:
-        prev = await get_active_config(mac)
+        # 用户未修改 API key，保留旧值
         llm_api_key = (prev.get("llm_api_key") or "") if prev else ""
-    if raw_image_key:
-        image_api_key = encrypt_api_key(raw_image_key)
+    if "imageApiKey" in data:
+        raw_image_key = data.get("imageApiKey", "")
+        if raw_image_key and raw_image_key.strip():
+            image_api_key = encrypt_api_key(raw_image_key)
+        else:
+            # 用户明确清空了 Image API key，设置为空字符串
+            image_api_key = ""
     else:
-        prev = await get_active_config(mac)
+        # 用户未修改 Image API key，保留旧值
         image_api_key = (prev.get("image_api_key") or "") if prev else ""
     cursor = await db.execute(
         """INSERT INTO configs

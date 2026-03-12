@@ -116,7 +116,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback, quota_exhausted = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid = await build_image(
             params.v,
             mac,
             params.persona,
@@ -260,7 +260,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid = await build_image(
             effective_v,
             mac,
             persona,
@@ -272,6 +272,16 @@ async def preview(
             preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
             current_user_id=current_user_id,
         )
+        # 如果 API key 无效，返回 JSON 响应，提醒用户
+        if api_key_invalid:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=400,  # Bad Request
+                content={
+                    "error": "api_key_invalid",
+                    "message": "您提供的 API key 无效或已过期，请检查设备配置中的 AI 配置",
+                },
+            )
         # 如果额度耗尽，返回 JSON 响应，让前端显示邀请码输入弹窗
         if quota_exhausted:
             from fastapi.responses import JSONResponse
@@ -353,7 +363,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid = await build_image(
                 effective_v,
                 mac,
                 persona,
@@ -365,6 +375,13 @@ async def preview_stream(
                 preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
                 current_user_id=current_user_id,
             )
+            # 如果 API key 无效，返回错误事件
+            if api_key_invalid:
+                yield _sse_event("error", {
+                    "error": "api_key_invalid",
+                    "message": "您提供的 API key 无效或已过期，请检查设备配置中的 AI 配置",
+                })
+                return
             # 如果额度耗尽，返回错误事件
             if quota_exhausted:
                 yield _sse_event("error", {
