@@ -102,10 +102,19 @@ async def custom_mode_preview(body: dict, admin_auth: None = Depends(require_adm
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
-        return StreamingResponse(iter([buf.getvalue()]), media_type="image/png")
+        
+        # 检查是否使用了默认值（使用英文避免编码问题）
+        used_fallback = content.get("_used_fallback", False)
+        status_msg = "model_generated" if not used_fallback else "fallback_used"
+        
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="image/png",
+            headers={"X-Preview-Status": status_msg}
+        )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         logger.exception("[CUSTOM_PREVIEW] Preview failed")
-        return JSONResponse({"error": str(exc)}, status_code=500)
+        return JSONResponse({"error": str(exc), "status": "生成失败"}, status_code=500)
 
 
 @router.post("/modes/custom")

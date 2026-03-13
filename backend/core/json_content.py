@@ -70,6 +70,23 @@ def _compute_content_hash(result: dict) -> str:
     return hashlib.md5(text.encode()).hexdigest()[:12]
 
 
+def _is_api_key_error(e: Exception) -> bool:
+    """Check if exception indicates API key is invalid/expired (401/403)."""
+    if isinstance(e, HTTPStatusError):
+        status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
+        return status_code in (401, 403)
+    
+    if isinstance(e, OpenAIError):
+        error_message = str(e).lower()
+        error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
+        if error_code in (401, 403):
+            return True
+        auth_keywords = ("401", "403", "unauthorized", "invalid", "authentication")
+        return any(kw in error_message for kw in auth_keywords)
+    
+    return False
+
+
 def _validate_content_quality(result: dict, schema: dict | None = None) -> bool:
     """Validate LLM output quality. Returns True if acceptable."""
     if not result:
@@ -291,6 +308,9 @@ async def generate_json_mode_content(
                     api_key_invalid = True
                     logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
             fb = dict(fallback)
+            # 标记为使用兜底内容，便于前端/统计判断
+            fb["_is_fallback"] = True
+            fb["_used_fallback"] = True
             # Mark LLM status for downstream billing/observability.
             fb["_llm_used"] = True
             fb["_llm_ok"] = False
@@ -308,6 +328,8 @@ async def generate_json_mode_content(
         if not _validate_content_quality(result, content_cfg.get("output_schema")):
             logger.warning(f"[JSONContent] Quality check failed for {mode_id}, using fallback")
             fb = _apply_post_process(dict(fallback), content_cfg)
+            fb["_is_fallback"] = True
+            fb["_used_fallback"] = True
             fb["_llm_used"] = True
             fb["_llm_ok"] = llm_ok
             return fb

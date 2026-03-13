@@ -303,12 +303,17 @@ async def preview(
             )
         png_bytes = image_to_png_bytes(img)
         logger.info("[PREVIEW] Generated PNG persona=%s size=%sx%s", resolved_persona, w, h)
+        
+        # 确定生成状态（使用英文避免编码问题）
+        status_msg = "model_generated" if not _content_fallback else "fallback_used"
+        
         return Response(
             content=png_bytes,
             media_type="image/png",
             headers={
                 "X-Cache-Hit": "1" if cache_hit else "0",
                 "X-Preview-Bypass": "1" if no_cache == 1 else "0",
+                "X-Preview-Status": status_msg,
             },
         )
     except (OSError, RuntimeError, TypeError, ValueError, UnidentifiedImageError):

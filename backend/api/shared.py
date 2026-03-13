@@ -521,9 +521,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted
+                                return img, persona, False, True, quota_exhausted, False
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted
+                            return None, persona, False, True, quota_exhausted, False
                         if int(quota.get("free_quota_remaining") or 0) <= 0:
                             quota_exhausted = True
                             logger.info(
@@ -540,9 +540,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted
+                                return img, persona, False, True, quota_exhausted, False
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted
+                            return None, persona, False, True, quota_exhausted, False
                 except Exception:
                     logger.warning(
                         "[QUOTA] Failed to check quota on cache hit for user_id=%s (mac=%s, mode=%s), allowing cache",
@@ -609,7 +609,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted
+                    return img, persona, False, True, quota_exhausted, False
                 if int(quota.get("free_quota_remaining") or 0) <= 0:
                     quota_exhausted = True
                     logger.info(
@@ -647,7 +647,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted
+                    return img, persona, False, True, quota_exhausted, False
             except Exception:
                 # 如果连 role 都查不到，为了安全起见，也视为额度耗尽
                 logger.warning(
@@ -663,14 +663,14 @@ async def build_image(
                     last_persona=persona,
                     last_refresh_at=datetime.now().isoformat(),
                 )
-                return img, persona, False, True, quota_exhausted
+                return img, persona, False, True, quota_exhausted, False
             # 更新设备状态，但不写入内容缓存，避免后续充值后仍命中"额度耗尽"图片
             await update_device_state(
                 mac,
                 last_persona=persona,
                 last_refresh_at=datetime.now().isoformat(),
             )
-            return img, persona, False, True, quota_exhausted
+            return img, persona, False, True, quota_exhausted, False
 
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
