@@ -34,7 +34,8 @@ def _mock_registry(*, json_modes=None, builtin_modes=None):
 
     mock_reg.get_builtin.side_effect = _get_builtin
 
-    def _get_json_mode(p):
+    def _get_json_mode(p, mac=None, *args, **kwargs):
+        # 测试环境下忽略 mac，仅根据模式 ID 判断是否为 JSON 模式
         if p in json_modes:
             jm = MagicMock()
             jm.definition = {"mode_id": p, "content": {"type": "llm"}, "layout": {"body": []}}

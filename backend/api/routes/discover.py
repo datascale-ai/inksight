@@ -18,6 +18,7 @@ from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
 from core.config_store import get_main_db
 from core.context import get_date_context, get_weather
 from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def, get_registry
+from core.config_store import save_custom_mode, get_custom_mode as get_user_custom_mode_from_db
 
 router = APIRouter(tags=["discover"])
 
@@ -105,6 +106,7 @@ async def publish_mode(
     name = body.get("name", "").strip()
     description = body.get("description", "").strip()
     category = body.get("category", "").strip()
+    mac = body.get("mac", "").strip().upper()
     thumbnail_base64 = body.get("thumbnail_base64")
 
     # 参数验证
@@ -114,15 +116,55 @@ async def publish_mode(
         return JSONResponse({"error": "name 不能为空"}, status_code=400)
     if not category:
         return JSONResponse({"error": "category 不能为空"}, status_code=400)
+    if not mac:
+        return JSONResponse({"error": "mac 不能为空"}, status_code=400)
 
-    # 从文件系统读取自定义模式定义
-    registry = get_registry()
-    mode = registry.get_json_mode(source_custom_mode_id)
-    if not mode or mode.info.source != "custom":
-        return JSONResponse({"error": "自定义模式不存在"}, status_code=404)
+    # 检查重名
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT id FROM shared_modes WHERE name = ? AND is_active = 1",
+        (name,),
+    )
+    existing = await cursor.fetchone()
+    if existing:
+        return JSONResponse(
+            {"error": f"模式名称 '{name}' 已存在，请使用其他名称"},
+            status_code=409  # Conflict
+        )
+
+    # 验证设备是否属于该用户
+    from core.config_store import has_active_membership
+    if not await has_active_membership(mac, user_id):
+        return JSONResponse(
+            {"error": "设备不存在或无权访问"},
+            status_code=403
+        )
+
+    # 查找模式定义（优先从数据库，回退到注册表）
+    mode_def = None
+    
+    # 首先尝试从数据库获取用户的自定义模式（按设备）
+    user_mode_data = await get_user_custom_mode_from_db(user_id, source_custom_mode_id, mac)
+    if user_mode_data:
+        mode_def = user_mode_data["definition"]
+    else:
+        # 回退到注册表（可能是文件系统或已加载的模式）
+        registry = get_registry()
+        mode = registry.get_json_mode(source_custom_mode_id, mac)
+        if not mode:
+            return JSONResponse(
+                {"error": f"自定义模式 {source_custom_mode_id} 不存在"},
+                status_code=404,
+            )
+        if mode.info.source != "custom":
+            return JSONResponse(
+                {"error": f"模式 {source_custom_mode_id} 不是自定义模式"},
+                status_code=400,
+            )
+        mode_def = mode.definition
 
     # 获取完整的模式定义 JSON
-    config_json = json.dumps(mode.definition, ensure_ascii=False)
+    config_json = json.dumps(mode_def, ensure_ascii=False)
 
     # 生成预览缩略图（必须成功）
     try:
@@ -134,7 +176,7 @@ async def publish_mode(
         weather = await get_weather()
 
         # 生成内容（对于 image_gen 类型，需要等待图片生成完成）
-        content_type = mode.definition.get("content", {}).get("type", "static")
+        content_type = mode_def.get("content", {}).get("type", "static")
         max_retries = 10  # 最多重试 10 次
         retry_interval = 2  # 每次重试间隔 2 秒
         
@@ -143,7 +185,7 @@ async def publish_mode(
             # 对于图片生成类型，需要轮询直到生成完成
             for attempt in range(max_retries):
                 content = await generate_json_mode_content(
-                    mode.definition,
+                    mode_def,
                     date_ctx=date_ctx,
                     date_str=date_ctx["date_str"],
                     weather_str=weather["weather_str"],
@@ -181,7 +223,7 @@ async def publish_mode(
         else:
             # 非图片生成类型，直接生成内容
             content = await generate_json_mode_content(
-                mode.definition,
+                mode_def,
                 date_ctx=date_ctx,
                 date_str=date_ctx["date_str"],
                 weather_str=weather["weather_str"],
@@ -191,7 +233,7 @@ async def publish_mode(
 
         # 渲染图片
         img = render_json_mode(
-            mode.definition,
+            mode_def,
             content,
             date_str=date_ctx["date_str"],
             weather_str=weather["weather_str"],
@@ -216,18 +258,32 @@ async def publish_mode(
             status_code=500
         )
 
-    # 插入到数据库
+    # 插入到数据库（再次检查重名，防止并发问题）
     db = await get_main_db()
     now = datetime.now().isoformat()
-    cursor = await db.execute(
-        """
-        INSERT INTO shared_modes 
-        (mode_id, name, description, category, author_id, config_json, thumbnail_url, is_active, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (source_custom_mode_id, name, description, category, user_id, config_json, thumbnail_url, 1, now),
-    )
-    await db.commit()
+    try:
+        cursor = await db.execute(
+            """
+            INSERT INTO shared_modes 
+            (mode_id, name, description, category, author_id, config_json, thumbnail_url, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (source_custom_mode_id, name, description, category, user_id, config_json, thumbnail_url, 1, now),
+        )
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        error_msg = str(e).lower()
+        if "unique" in error_msg or "constraint" in error_msg:
+            return JSONResponse(
+                {"error": f"模式名称 '{name}' 已存在，请使用其他名称"},
+                status_code=409  # Conflict
+            )
+        logger.error(f"[DISCOVER] Failed to insert shared mode: {e}", exc_info=True)
+        return JSONResponse(
+            {"error": "发布失败，请稍后重试"},
+            status_code=500
+        )
     shared_mode_id = cursor.lastrowid
 
     logger.info(f"[DISCOVER] User {user_id} published mode {source_custom_mode_id} as shared mode {shared_mode_id}")
@@ -237,9 +293,22 @@ async def publish_mode(
 @router.post("/discover/modes/{mode_id}/install")
 async def install_shared_mode(
     mode_id: int,
+    body: dict,
     user_id: int = Depends(require_user),
 ):
-    """安装共享模式到用户本地（需要认证）"""
+    """安装共享模式到用户本地设备（需要认证）"""
+    mac = body.get("mac", "").strip().upper()
+    if not mac:
+        return JSONResponse({"error": "mac 不能为空"}, status_code=400)
+
+    # 验证设备是否属于该用户
+    from core.config_store import has_active_membership
+    if not await has_active_membership(mac, user_id):
+        return JSONResponse(
+            {"error": "设备不存在或无权访问"},
+            status_code=403
+        )
+
     db = await get_main_db()
 
     # 查询共享模式
@@ -275,23 +344,24 @@ async def install_shared_mode(
     if not _validate_mode_def(mode_def):
         return JSONResponse({"error": "模式定义验证失败"}, status_code=400)
 
-    # 保存到文件系统
+    # 检查是否与内置模式冲突
     registry = get_registry()
     if registry.is_builtin(new_mode_id):
         return JSONResponse({"error": "模式 ID 冲突"}, status_code=409)
 
-    file_path = Path(CUSTOM_JSON_DIR) / f"{new_mode_id.lower()}.json"
-    file_path.write_text(
-        json.dumps(mode_def, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    # 保存到数据库（用户专属，指定设备）
+    success = await save_custom_mode(user_id, new_mode_id, mode_def, mac)
+    if not success:
+        return JSONResponse({"error": "保存模式失败"}, status_code=500)
 
-    # 重新加载注册表
-    registry.unregister_custom(new_mode_id)
-    loaded = registry.load_json_mode(str(file_path), source="custom")
+    # 加载到注册表以便立即使用
+    registry.unregister_custom(new_mode_id, mac)
+    loaded = registry.load_custom_mode_from_dict(new_mode_id, mode_def, source="custom", mac=mac)
     if not loaded:
-        file_path.unlink(missing_ok=True)
+        # Rollback database entry
+        from core.config_store import delete_custom_mode
+        await delete_custom_mode(user_id, new_mode_id, mac)
         return JSONResponse({"error": "模式加载失败"}, status_code=500)
 
-    logger.info(f"[DISCOVER] User {user_id} installed shared mode {mode_id} as {new_mode_id}")
+    logger.info(f"[DISCOVER] User {user_id} installed shared mode {mode_id} as {new_mode_id} on device {mac}")
     return {"ok": True, "custom_mode_id": new_mode_id}

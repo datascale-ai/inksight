@@ -192,6 +192,19 @@ async def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+        # User LLM config table 用户级别的LLM配置表
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_llm_config (
+                user_id INTEGER PRIMARY KEY,
+                provider TEXT DEFAULT 'deepseek',
+                api_key TEXT DEFAULT '',
+                base_url TEXT DEFAULT '',
+                image_provider TEXT DEFAULT 'aliyun',
+                image_api_key TEXT DEFAULT '',
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS user_devices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -256,7 +269,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS shared_modes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 mode_id VARCHAR(50) NOT NULL,
-                name VARCHAR(100) NOT NULL,
+                name VARCHAR(100) NOT NULL UNIQUE,
                 description TEXT,
                 category VARCHAR(20) NOT NULL,
                 author_id INTEGER NOT NULL,
@@ -270,6 +283,61 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_shared_modes_category ON shared_modes(category)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_shared_modes_author ON shared_modes(author_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_shared_modes_active ON shared_modes(is_active)")
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_modes_name ON shared_modes(name)")
+
+        # Custom modes table - user-specific custom modes stored in database
+        # Check if table exists and if it has the mac column
+        cursor = await db.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='custom_modes'
+        """)
+        table_exists = await cursor.fetchone()
+        
+        if table_exists:
+            # Check if mac column exists
+            cursor = await db.execute("PRAGMA table_info(custom_modes)")
+            columns = [row[1] for row in await cursor.fetchall()]
+            if "mac" not in columns:
+                # Table exists but doesn't have mac column - need to migrate
+                logger.info("[MIGRATION] custom_modes table exists without mac column. Migrating...")
+                # Check if table has any data
+                cursor = await db.execute("SELECT COUNT(*) FROM custom_modes")
+                count = (await cursor.fetchone())[0]
+                if count > 0:
+                    logger.warning(f"[MIGRATION] Found {count} existing custom_modes records. Deleting them for migration (mac field is required).")
+                    await db.execute("DELETE FROM custom_modes")
+                
+                # Drop old indexes
+                try:
+                    await db.execute("DROP INDEX IF EXISTS idx_custom_modes_user")
+                    await db.execute("DROP INDEX IF EXISTS idx_custom_modes_mode_id")
+                except Exception:
+                    pass
+                
+                # Drop and recreate table with mac column
+                await db.execute("DROP TABLE custom_modes")
+                logger.info("[MIGRATION] Recreated custom_modes table with mac column")
+        
+        # Create table with mac column (if it doesn't exist or was just dropped)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS custom_modes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mode_id VARCHAR(50) NOT NULL,
+                user_id INTEGER NOT NULL,
+                mac VARCHAR(17) NOT NULL,
+                definition_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(mode_id, user_id, mac),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        
+        # Create indexes
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_custom_modes_user ON custom_modes(user_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_custom_modes_mode_id ON custom_modes(mode_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_custom_modes_mac ON custom_modes(mac)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_custom_modes_user_mac ON custom_modes(user_id, mac)")
 
         await run_main_db_migrations(
             db,
@@ -1288,6 +1356,166 @@ async def generate_device_token(mac: str) -> str:
     return token
 
 
+# ── Custom Modes (Database) ──────────────────────────────────────
+
+
+async def get_user_custom_modes(user_id: int, mac: str | None = None) -> list[dict]:
+    """Get all custom modes for a specific user, optionally filtered by device MAC."""
+    db = await get_main_db()
+    if mac:
+        cursor = await db.execute(
+            """
+            SELECT mode_id, mac, definition_json, created_at, updated_at
+            FROM custom_modes
+            WHERE user_id = ? AND mac = ?
+            ORDER BY created_at DESC
+            """,
+            (user_id, mac.upper()),
+        )
+    else:
+        cursor = await db.execute(
+            """
+            SELECT mode_id, mac, definition_json, created_at, updated_at
+            FROM custom_modes
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            """,
+            (user_id,),
+        )
+    rows = await cursor.fetchall()
+    modes = []
+    for row in rows:
+        try:
+            definition = json.loads(row[2])
+            modes.append({
+                "mode_id": row[0],
+                "mac": row[1],
+                "definition": definition,
+                "created_at": row[3],
+                "updated_at": row[4],
+            })
+        except json.JSONDecodeError:
+            logger.error(f"[CUSTOM_MODES] Failed to parse definition for mode {row[0]}")
+    return modes
+
+
+async def get_custom_mode(user_id: int, mode_id: str, mac: str | None = None) -> dict | None:
+    """
+    Get a specific custom mode for a user *and* device.
+
+    重要：为了保证设备隔离，这里必须同时按 user_id 和 mac 过滤；
+    如果调用方没有提供 mac，则直接返回 None，而不是在所有设备中“拍脑袋选一条”。
+    """
+    if not mac:
+        logger.warning(
+            "[CUSTOM_MODES] get_custom_mode called without mac (user_id=%s, mode_id=%s) – returning None to preserve device isolation",
+            user_id,
+            mode_id,
+        )
+        return None
+
+    db = await get_main_db()
+    cursor = await db.execute(
+        """
+        SELECT mac, definition_json, created_at, updated_at
+        FROM custom_modes
+        WHERE user_id = ? AND mode_id = ? AND mac = ?
+        """,
+        (user_id, mode_id.upper(), mac.upper()),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    try:
+        definition = json.loads(row[1])
+        return {
+            "mode_id": mode_id.upper(),
+            "mac": row[0],
+            "definition": definition,
+            "created_at": row[2],
+            "updated_at": row[3],
+        }
+    except json.JSONDecodeError:
+        logger.error(f"[CUSTOM_MODES] Failed to parse definition for mode {mode_id}")
+        return None
+
+
+async def save_custom_mode(user_id: int, mode_id: str, definition: dict, mac: str) -> bool:
+    """Save or update a custom mode for a user and device."""
+    db = await get_main_db()
+    mode_id = mode_id.upper()
+    mac = mac.upper()
+    now = datetime.now().isoformat()
+    definition_json = json.dumps(definition, ensure_ascii=False)
+    
+    try:
+        await db.execute(
+            """
+            INSERT INTO custom_modes (mode_id, user_id, mac, definition_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(mode_id, user_id, mac) DO UPDATE SET
+                definition_json = ?,
+                updated_at = ?
+            """,
+            (mode_id, user_id, mac, definition_json, now, now, definition_json, now),
+        )
+        await db.commit()
+        logger.info(f"[CUSTOM_MODES] Saved custom mode {mode_id} for user {user_id} on device {mac}")
+        return True
+    except Exception as e:
+        logger.error(f"[CUSTOM_MODES] Failed to save custom mode {mode_id} for user {user_id} on device {mac}: {e}")
+        await db.rollback()
+        return False
+
+
+async def delete_custom_mode(user_id: int, mode_id: str, mac: str | None = None) -> bool:
+    """
+    Delete a custom mode for a specific user and device.
+
+    重要：不再支持“只按 user_id + mode_id 删除所有设备上的记录”，
+    避免在一台设备上删除时把同一用户其他设备上的同名模式也一并删掉。
+    调用方必须提供 mac，否则这里会直接返回 False。
+    """
+    if not mac:
+        logger.warning(
+            "[CUSTOM_MODES] delete_custom_mode called without mac (user_id=%s, mode_id=%s) – refusing to delete to preserve device isolation",
+            user_id,
+            mode_id,
+        )
+        return False
+
+    db = await get_main_db()
+    mode_id = mode_id.upper()
+    try:
+        cursor = await db.execute(
+            """
+            DELETE FROM custom_modes
+            WHERE user_id = ? AND mode_id = ? AND mac = ?
+            """,
+            (user_id, mode_id, mac.upper()),
+        )
+        await db.commit()
+        deleted = cursor.rowcount > 0
+        if deleted:
+            logger.info(
+                "[CUSTOM_MODES] Deleted custom mode %s for user %s on device %s",
+                mode_id,
+                user_id,
+                mac,
+            )
+        return deleted
+    except Exception as e:
+        logger.error(
+            "[CUSTOM_MODES] Failed to delete custom mode %s for user %s on device %s: %s",
+            mode_id,
+            user_id,
+            mac,
+            e,
+        )
+        await db.rollback()
+        return False
+
+
 async def validate_device_token(mac: str, token: str) -> bool:
     """Validate a device's auth token."""
     if not token:
@@ -1300,3 +1528,108 @@ async def validate_device_token(mac: str, token: str) -> bool:
     if not row or not row[0]:
         return False
     return row[0] == token
+
+
+# ── User LLM Config (Global user-level settings) ──────────────────────
+
+
+async def get_user_llm_config(user_id: int) -> dict | None:
+    """获取用户级别的 LLM 配置。"""
+    db = await get_main_db()
+    # 检查表结构，兼容旧版本（没有 image_provider 和 image_api_key 列）
+    cursor = await db.execute("PRAGMA table_info(user_llm_config)")
+    columns = [col[1] for col in await cursor.fetchall()]
+    has_image_config = "image_provider" in columns and "image_api_key" in columns
+    
+    if has_image_config:
+        cursor = await db.execute(
+            "SELECT provider, api_key, base_url, image_provider, image_api_key FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    else:
+        cursor = await db.execute(
+            "SELECT provider, api_key, base_url FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    from .crypto import decrypt_api_key
+    result = {
+        "provider": row[0] or "deepseek",
+        "api_key": decrypt_api_key(row[1] or "") if row[1] else "",
+        "base_url": row[2] or "",
+    }
+    if has_image_config and len(row) > 3:
+        result["image_provider"] = row[3] or "aliyun"
+        result["image_api_key"] = decrypt_api_key(row[4] or "") if row[4] else ""
+    else:
+        result["image_provider"] = "aliyun"
+        result["image_api_key"] = ""
+    return result
+
+
+async def save_user_llm_config(
+    user_id: int,
+    provider: str = "deepseek",
+    api_key: str = "",
+    base_url: str = "",
+    image_provider: str = "aliyun",
+    image_api_key: str = "",
+) -> bool:
+    """保存用户级别的 LLM 配置。"""
+    from .crypto import encrypt_api_key
+    
+    db = await get_main_db()
+    now = datetime.now().isoformat()
+    
+    encrypted_key = encrypt_api_key(api_key) if api_key else ""
+    encrypted_image_key = encrypt_api_key(image_api_key) if image_api_key else ""
+    
+    # 检查表结构，兼容旧版本
+    cursor = await db.execute("PRAGMA table_info(user_llm_config)")
+    columns = [col[1] for col in await cursor.fetchall()]
+    has_image_config = "image_provider" in columns and "image_api_key" in columns
+    
+    # 如果表没有图像配置列，先添加
+    if not has_image_config:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN image_provider TEXT DEFAULT 'aliyun'")
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN image_api_key TEXT DEFAULT ''")
+            await db.commit()
+            has_image_config = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add image columns: {e}")
+            await db.rollback()
+    
+    try:
+        if has_image_config:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, provider, api_key, base_url, image_provider, image_api_key, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       provider = excluded.provider,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       updated_at = excluded.updated_at""",
+                (user_id, provider, encrypted_key, base_url, image_provider, encrypted_image_key, now),
+            )
+        else:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, provider, api_key, base_url, updated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       provider = excluded.provider,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       updated_at = excluded.updated_at""",
+                (user_id, provider, encrypted_key, base_url, now),
+            )
+        await db.commit()
+        return True
+    except Exception as e:
+        logger.error(f"[USER_LLM_CONFIG] Failed to save config for user {user_id}: {e}")
+        await db.rollback()
+        return False

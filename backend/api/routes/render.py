@@ -241,14 +241,19 @@ async def preview(
         mac = validate_mac_param(mac)
         await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
     
-    # 获取当前登录用户 ID（用于 Web 预览的额度检查）
+    # 获取当前登录用户 ID：
+    # - 用于 Web 预览时关联 user_llm_config（个人信息里的 API Key）
+    # - 计费归属仍按 BILLING.md：设备端按 owner 计费，Web 端按登录用户计费
     current_user_id = None
-    if not mac:  # 只在 Web 预览时获取用户 ID
+    try:
         from core.auth import get_current_user_optional
+
         current_user = await get_current_user_optional(request, ink_session)
         if current_user:
             current_user_id = current_user.get("user_id")
-            logger.debug("[PREVIEW] Current user_id=%s for Web preview", current_user_id)
+            logger.debug("[PREVIEW] Current user_id=%s for preview (mac=%s)", current_user_id, mac)
+    except Exception:
+        logger.warning("[PREVIEW] Failed to resolve current user for preview", exc_info=True)
     
     try:
         effective_v = await resolve_preview_voltage(v, mac)
@@ -346,14 +351,17 @@ async def preview_stream(
         mac = validate_mac_param(mac)
         await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
     
-    # 获取当前登录用户 ID（用于 Web 预览的额度检查）
+    # 获取当前登录用户 ID：同上，用于合入 user_llm_config，而计费仍按 owner / 登录用户归属
     current_user_id = None
-    if not mac:  # 只在 Web 预览时获取用户 ID
+    try:
         from core.auth import get_current_user_optional
+
         current_user = await get_current_user_optional(request, ink_session)
         if current_user:
             current_user_id = current_user.get("user_id")
-            logger.debug("[PREVIEW_STREAM] Current user_id=%s for Web preview", current_user_id)
+            logger.debug("[PREVIEW_STREAM] Current user_id=%s for preview (mac=%s)", current_user_id, mac)
+    except Exception:
+        logger.warning("[PREVIEW_STREAM] Failed to resolve current user for preview", exc_info=True)
 
     async def stream():
         try:

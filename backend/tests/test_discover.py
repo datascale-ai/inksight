@@ -7,10 +7,12 @@ from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
 from api.index import app
-from core.config_store import get_main_db, init_db
+from core.config_store import get_main_db, init_db, upsert_device_membership
 from core.mode_registry import get_registry, CUSTOM_JSON_DIR
 from core.stats_store import init_stats_db
 from core.cache import init_cache_db
+
+TEST_MAC = "AA:BB:CC:DD:EE:01"
 
 
 @pytest.fixture
@@ -114,11 +116,22 @@ async def test_user(client: AsyncClient):
     resp = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     user_data = resp.json()
-    
+
+    # 为该用户绑定一台测试设备，保证 Discover 相关接口中的 mac 校验通过
+    membership = await upsert_device_membership(
+        TEST_MAC,
+        user_data["user_id"],
+        role="owner",
+        status="active",
+        nickname="DiscoverTestDevice",
+    )
+    assert membership["status"] == "active"
+
     return {
         "username": username,
         "token": token,
         "user_id": user_data["user_id"],
+        "mac": TEST_MAC,
         "headers": {"Authorization": f"Bearer {token}"},
     }
 
@@ -205,6 +218,7 @@ class TestDiscoverAPI:
                 "name": "测试模式",
                 "description": "测试描述",
                 "category": "效率",
+                "mac": test_user["mac"],
             },
         )
         assert resp.status_code == 200
@@ -235,6 +249,7 @@ class TestDiscoverAPI:
                     "name": f"测试模式 {i}",
                     "description": f"测试描述 {i}",
                     "category": "效率",
+                    "mac": test_user["mac"],
                 },
             )
             assert resp.status_code == 200
@@ -275,6 +290,7 @@ class TestDiscoverAPI:
                     "name": "测试模式",
                     "description": "测试描述",
                     "category": "效率",
+                    "mac": test_user["mac"],
                 },
             )
             
@@ -326,6 +342,7 @@ class TestDiscoverAPI:
                 "name": "测试模式",
                 "description": "测试描述",
                 "category": "效率",
+                "mac": test_user["mac"],
             },
         )
         assert resp.status_code == 404
@@ -421,6 +438,7 @@ class TestDiscoverAPI:
                         "name": "测试图片生成",
                         "description": "测试描述",
                         "category": "趣味",
+                        "mac": test_user["mac"],
                     },
                 )
                 
@@ -483,6 +501,7 @@ class TestDiscoverAPI:
                         "name": "测试超时",
                         "description": "测试描述",
                         "category": "趣味",
+                        "mac": test_user["mac"],
                     },
                 )
                 
@@ -518,6 +537,7 @@ class TestDiscoverAPI:
                     "name": "测试模式",
                     "description": "测试描述",
                     "category": "效率",
+                    "mac": test_user["mac"],
                 },
             )
             assert resp.status_code == 200
@@ -527,6 +547,7 @@ class TestDiscoverAPI:
             resp = await client.post(
                 f"/api/discover/modes/{shared_mode_id}/install",
                 headers=test_user["headers"],
+                json={"mac": test_user["mac"]},
             )
             
             assert resp.status_code == 200
@@ -563,6 +584,7 @@ class TestDiscoverAPI:
                     "name": "测试模式",
                     "description": "测试描述",
                     "category": "效率",
+                    "mac": test_user["mac"],
                 },
             )
             assert resp.status_code == 200
@@ -575,6 +597,7 @@ class TestDiscoverAPI:
                 resp = await clean_client.post(
                     f"/api/discover/modes/{shared_mode_id}/install",
                     headers={},  # 明确指定空的 headers
+                    json={"mac": TEST_MAC},
                 )
                 assert resp.status_code == 401, f"Expected 401 but got {resp.status_code}, response: {resp.text}"
 
@@ -584,6 +607,7 @@ class TestDiscoverAPI:
         resp = await client.post(
             "/api/discover/modes/99999/install",
             headers=test_user["headers"],
+            json={"mac": test_user["mac"]},
         )
         assert resp.status_code == 404
         data = resp.json()
@@ -610,6 +634,7 @@ class TestDiscoverAPI:
                     "name": "测试模式",
                     "description": "测试描述",
                     "category": "效率",
+                    "mac": test_user["mac"],
                 },
             )
             assert resp.status_code == 200

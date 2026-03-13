@@ -83,10 +83,13 @@ export function Navbar() {
           </a>
           {username ? (
             <div className="flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1 text-ink-light">
+              <Link
+                href={withLocalePath(locale, "/profile")}
+                className="flex items-center gap-1 text-ink-light hover:text-ink transition-colors"
+              >
                 <User size={14} />
                 {username}
-              </span>
+              </Link>
               <button onClick={handleLogout} className="text-ink-light hover:text-ink transition-colors" title={t(locale, "nav.logout")}>
                 <LogOut size={16} />
               </button>
@@ -136,10 +139,14 @@ export function Navbar() {
             </a>
             {username ? (
               <div className="flex items-center justify-between py-1">
-                <span className="flex items-center gap-1 text-sm text-ink-light">
+                <Link
+                  href={withLocalePath(locale, "/profile")}
+                  className="flex items-center gap-1 text-sm text-ink-light hover:text-ink transition-colors"
+                  onClick={() => setMobileOpen(false)}
+                >
                   <User size={14} />
                   {username}
-                </span>
+                </Link>
                 <button onClick={handleLogout} className="text-sm text-ink-light hover:text-ink">
                   {t(locale, "nav.logout")}
                 </button>

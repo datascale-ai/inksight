@@ -182,7 +182,7 @@ async def switch_mode(
     await ensure_web_or_device_access(request, mac, x_device_token, ink_session)
     mode = body.get("mode", "").upper()
     registry = get_registry()
-    if not mode or not registry.is_supported(mode):
+    if not mode or not registry.is_supported(mode, mac):
         return JSONResponse({"error": f"unsupported mode: {mode}"}, status_code=400)
     await update_device_state(mac, pending_mode=mode, pending_refresh=1)
     logger.info("[DEVICE] Pending mode switch to %s for %s", mode, mac)
@@ -203,7 +203,7 @@ async def favorite_content(
     mode = str((body or {}).get("mode", "")).strip().upper()
     if mode:
         registry = get_registry()
-        if not registry.is_supported(mode):
+        if not registry.is_supported(mode, mac):
             return JSONResponse({"error": f"unsupported mode: {mode}"}, status_code=400)
         latest = await get_latest_render_content(mac)
         if latest and latest.get("mode_id", "").upper() == mode:

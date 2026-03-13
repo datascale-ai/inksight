@@ -580,15 +580,35 @@ async def test_modes_v1_alias_returns_mode_list(client):
 
 
 @pytest.mark.asyncio
-async def test_custom_modes_end_to_end(client, tmp_path, monkeypatch):
-    monkeypatch.setenv("ADMIN_TOKEN", "admin-secret")
-    from api.routes import modes as modes_routes
+async def test_custom_modes_end_to_end(client, monkeypatch):
+    """
+    自定义模式从生成 -> 保存到数据库(按 user_id + mac) -> 获取 -> 删除 的完整流程。
 
-    custom_dir = tmp_path / "custom_modes"
-    custom_dir.mkdir()
-    monkeypatch.setattr(modes_routes, "CUSTOM_JSON_DIR", str(custom_dir))
+    注意：当前实现中自定义模式完全存储在数据库中，并且通过 (user_id, mac) 做设备隔离，
+    所以这里显式地为测试用户绑定一台设备，并在所有接口调用中传递 mac。
+    """
+
+    monkeypatch.setenv("ADMIN_TOKEN", "admin-secret")
     reset_registry()
 
+    mac = "AA:BB:CC:DD:EE:01"
+
+    # 1. 注册一个普通用户，并为其绑定一台设备（owner, active）
+    owner = await register_user(client, "custom_mode_owner")
+    user_id = owner["user_id"]
+
+    from core.config_store import upsert_device_membership
+
+    membership = await upsert_device_membership(
+        mac,
+        user_id,
+        role="owner",
+        status="active",
+        nickname="CustomModeDevice",
+    )
+    assert membership["status"] == "active"
+
+    # 2. 准备一个最小可用的自定义模式定义
     mode_def = {
         "mode_id": "E2E_CUSTOM",
         "display_name": "E2E Custom",
@@ -600,20 +620,18 @@ async def test_custom_modes_end_to_end(client, tmp_path, monkeypatch):
             "static_data": {"text": "hello custom"},
         },
         "layout": {
-            "status_bar": {"line_width": 1},
             "body": [
                 {
                     "type": "centered_text",
                     "field": "text",
-                    "font": "noto_serif_regular",
                     "font_size": 16,
                     "vertical_center": True,
                 }
             ],
-            "footer": {"label": "E2E"},
         },
     }
 
+    # 3. 预览接口仍然由 admin_token 控制，只验证能返回 PNG
     preview_resp = await client.post(
         "/api/v1/modes/custom/preview",
         json={"mode_def": mode_def, "w": 400, "h": 300},
@@ -622,6 +640,7 @@ async def test_custom_modes_end_to_end(client, tmp_path, monkeypatch):
     assert preview_resp.status_code == 200
     assert preview_resp.headers["content-type"].startswith("image/png")
 
+    # 4. 生成接口使用 admin_token + mock，验证返回的 mode_id
     with patch("core.mode_generator.generate_mode_definition", new_callable=AsyncMock, return_value=mode_def):
         generate_resp = await client.post(
             "/api/modes/generate",
@@ -631,26 +650,33 @@ async def test_custom_modes_end_to_end(client, tmp_path, monkeypatch):
     assert generate_resp.status_code == 200
     assert generate_resp.json()["mode_id"] == "E2E_CUSTOM"
 
+    # 5. 以普通用户身份创建自定义模式（必须带 mac，写入数据库）
+    create_body = dict(mode_def)
+    create_body["mac"] = mac
     create_resp = await client.post(
         "/api/modes/custom",
-        json=mode_def,
-        headers={"Authorization": "Bearer admin-secret"},
+        json=create_body,
+        # 使用 register_user 建立的会话 cookie 作为用户身份，无需 admin token
     )
     assert create_resp.status_code == 200
-    assert create_resp.json()["ok"] is True
+    body = create_resp.json()
+    assert body.get("ok") is True
+    assert body.get("mode_id") == "E2E_CUSTOM"
 
-    get_resp = await client.get("/api/modes/custom/E2E_CUSTOM")
+    # 6. 按 user_id + mac 获取自定义模式
+    get_resp = await client.get(f"/api/modes/custom/E2E_CUSTOM?mac={mac}")
     assert get_resp.status_code == 200
-    assert get_resp.json()["display_name"] == "E2E Custom"
+    get_payload = get_resp.json()
+    assert get_payload["display_name"] == "E2E Custom"
+    assert get_payload["content"]["static_data"]["text"] == "hello custom"
 
-    delete_resp = await client.delete(
-        "/api/v1/modes/custom/E2E_CUSTOM",
-        headers={"Authorization": "Bearer admin-secret"},
-    )
+    # 7. 删除该设备上的自定义模式（必须带 mac，不能影响其他设备）
+    delete_resp = await client.delete(f"/api/v1/modes/custom/E2E_CUSTOM?mac={mac}")
     assert delete_resp.status_code == 200
     assert delete_resp.json()["ok"] is True
 
-    missing_resp = await client.get("/api/modes/custom/E2E_CUSTOM")
+    # 8. 再次获取应返回 404
+    missing_resp = await client.get(f"/api/modes/custom/E2E_CUSTOM?mac={mac}")
     assert missing_resp.status_code == 404
 
     reset_registry()

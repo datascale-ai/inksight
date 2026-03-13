@@ -34,6 +34,14 @@ interface CustomMode {
   source?: string;
 }
 
+// 设备类型
+interface Device {
+  mac: string;
+  nickname: string;
+  role: string;
+  status: string;
+}
+
 export default function DiscoverPage() {
   const [selectedCategory, setSelectedCategory] = useState("全部");
   const [searchQuery, setSearchQuery] = useState("");
@@ -54,13 +62,24 @@ export default function DiscoverPage() {
   const [customModes, setCustomModes] = useState<CustomMode[]>([]);
   const [isLoadingCustomModes, setIsLoadingCustomModes] = useState(false);
   
+  // 设备列表
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  
   // 发布表单数据
   const [publishForm, setPublishForm] = useState({
     source_custom_mode_id: "",
     name: "",
     description: "",
     category: "",
+    mac: "", // 设备 MAC 地址
   });
+  
+  // 安装模式时的设备选择
+  const [installDeviceModal, setInstallDeviceModal] = useState<{
+    open: boolean;
+    modeId: number | null;
+  }>({ open: false, modeId: null });
 
   // 获取模式列表
   const fetchModes = async (category: string) => {
@@ -92,11 +111,38 @@ export default function DiscoverPage() {
     }
   };
 
-  // 获取用户自定义模式列表
-  const fetchCustomModes = async () => {
+  // 获取设备列表
+  const fetchDevices = async () => {
+    setIsLoadingDevices(true);
+    try {
+      const response = await fetch("/api/user/devices", {
+        headers: authHeaders(),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`获取设备列表失败: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setDevices(data.devices || []);
+    } catch (err) {
+      console.error("Failed to fetch devices:", err);
+      setDevices([]);
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  };
+
+  // 获取用户自定义模式列表（按设备过滤）
+  const fetchCustomModes = async (mac?: string) => {
     setIsLoadingCustomModes(true);
     try {
-      const response = await fetch("/api/modes", {
+      const params = new URLSearchParams();
+      if (mac) {
+        params.append("mac", mac);
+      }
+      
+      const response = await fetch(`/api/modes?${params.toString()}`, {
         headers: authHeaders(),
       });
       
@@ -123,20 +169,41 @@ export default function DiscoverPage() {
     fetchModes(selectedCategory);
   }, [selectedCategory]);
 
-  // 当打开发布弹窗时，获取用户自定义模式列表
+  // 当打开发布弹窗时，获取设备列表和用户自定义模式列表
   useEffect(() => {
     if (isPublishModalOpen) {
-      fetchCustomModes();
+      fetchDevices();
     }
   }, [isPublishModalOpen]);
+  
+  // 当选择设备时，获取该设备的自定义模式
+  useEffect(() => {
+    if (isPublishModalOpen && publishForm.mac) {
+      fetchCustomModes(publishForm.mac);
+    } else if (isPublishModalOpen && !publishForm.mac) {
+      setCustomModes([]);
+    }
+  }, [isPublishModalOpen, publishForm.mac]);
+
+  // 打开安装设备选择弹窗
+  const handleInstallClick = (modeId: number) => {
+    if (installingModes.has(modeId) || installedModes.has(modeId)) {
+      return;
+    }
+    setInstallDeviceModal({ open: true, modeId });
+    if (devices.length === 0) {
+      fetchDevices();
+    }
+  };
 
   // 安装模式
-  const handleInstall = async (modeId: number) => {
+  const handleInstall = async (modeId: number, mac: string) => {
     if (installingModes.has(modeId) || installedModes.has(modeId)) {
       return;
     }
 
     setInstallingModes((prev) => new Set(prev).add(modeId));
+    setInstallDeviceModal({ open: false, modeId: null });
 
     try {
       const response = await fetch(`/api/discover/modes/${modeId}/install`, {
@@ -145,6 +212,7 @@ export default function DiscoverPage() {
           "Content-Type": "application/json",
           ...authHeaders(),
         },
+        body: JSON.stringify({ mac }),
       });
 
       if (!response.ok) {
@@ -179,7 +247,10 @@ export default function DiscoverPage() {
 
   // 处理发布
   const handlePublish = async () => {
-    if (!publishForm.source_custom_mode_id || !publishForm.name || !publishForm.category) {
+    if (!publishForm.source_custom_mode_id || !publishForm.name || !publishForm.category || !publishForm.mac) {
+      setToastMessage("请填写所有必填项，包括选择设备");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
       return;
     }
 
@@ -188,6 +259,7 @@ export default function DiscoverPage() {
       name: publishForm.name,
       description: publishForm.description,
       category: publishForm.category,
+      mac: publishForm.mac,
       // 后端会自动生成预览图片，不需要传递 thumbnail_base64
     };
 
@@ -242,6 +314,7 @@ export default function DiscoverPage() {
         name: "",
         description: "",
         category: "",
+        mac: "",
       });
 
       // 刷新模式列表
@@ -411,7 +484,7 @@ export default function DiscoverPage() {
                     <div className="mt-auto pt-4 border-t border-ink/5">
                       <Button
                         variant="outline"
-                        onClick={() => handleInstall(mode.id)}
+                        onClick={() => handleInstallClick(mode.id)}
                         disabled={isInstalling || isInstalled}
                         className={`w-full transition-colors ${
                           isInstalled
@@ -457,10 +530,42 @@ export default function DiscoverPage() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* 选择设备 */}
+            <div>
+              <label className="block text-sm font-medium text-ink mb-1.5">
+                选择设备 <span className="text-red-500">*</span>
+              </label>
+              {isLoadingDevices ? (
+                <div className="w-full px-3 py-2 bg-white border border-gray-300 rounded-sm flex items-center justify-center">
+                  <Loader2 size={16} className="text-ink-light animate-spin" />
+                  <span className="ml-2 text-sm text-ink-light">加载中...</span>
+                </div>
+              ) : devices.length === 0 ? (
+                <div className="w-full px-3 py-2 bg-white border border-gray-300 rounded-sm text-ink-light text-sm">
+                  暂无设备，请先绑定设备
+                </div>
+              ) : (
+                <select
+                  value={publishForm.mac}
+                  onChange={(e) => {
+                    setPublishForm({ ...publishForm, mac: e.target.value, source_custom_mode_id: "" });
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-sm text-ink focus:outline-none focus:border-black transition-colors"
+                >
+                  <option value="">请选择设备</option>
+                  {devices.map((device) => (
+                    <option key={device.mac} value={device.mac}>
+                      {device.nickname || device.mac} ({device.mac})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
             {/* 选择模式 */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
-                选择模式
+                选择模式 <span className="text-red-500">*</span>
               </label>
               {isLoadingCustomModes ? (
                 <div className="w-full px-3 py-2 bg-white border border-gray-300 rounded-sm flex items-center justify-center">
@@ -500,7 +605,7 @@ export default function DiscoverPage() {
             {/* 展示名称 */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
-                展示名称
+                展示名称 <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -532,7 +637,7 @@ export default function DiscoverPage() {
             {/* 分类 */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
-                分类
+                分类 <span className="text-red-500">*</span>
               </label>
               <select
                 value={publishForm.category}
@@ -592,6 +697,59 @@ export default function DiscoverPage() {
                 )}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 安装设备选择弹窗 */}
+      <Dialog
+        open={installDeviceModal.open}
+        onClose={() => setInstallDeviceModal({ open: false, modeId: null })}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader onClose={() => setInstallDeviceModal({ open: false, modeId: null })}>
+            <DialogTitle>选择安装设备</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {isLoadingDevices ? (
+              <div className="w-full px-3 py-2 bg-white border border-gray-300 rounded-sm flex items-center justify-center">
+                <Loader2 size={16} className="text-ink-light animate-spin" />
+                <span className="ml-2 text-sm text-ink-light">加载中...</span>
+              </div>
+            ) : devices.length === 0 ? (
+              <div className="w-full px-3 py-2 bg-white border border-gray-300 rounded-sm text-ink-light text-sm">
+                暂无设备，请先绑定设备
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {devices.map((device) => (
+                  <button
+                    key={device.mac}
+                    onClick={() => {
+                      if (installDeviceModal.modeId !== null) {
+                        handleInstall(installDeviceModal.modeId, device.mac);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-sm text-left hover:border-black hover:shadow-[2px_2px_0_0_#000000] transition-all"
+                  >
+                    <div className="font-medium text-ink">{device.nickname || device.mac}</div>
+                    <div className="text-sm text-ink-light mt-1">{device.mac}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 底部操作按钮 */}
+          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-ink/10">
+            <Button
+              variant="outline"
+              onClick={() => setInstallDeviceModal({ open: false, modeId: null })}
+              className="bg-white text-black border border-black hover:bg-black hover:text-white transition-colors"
+            >
+              取消
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

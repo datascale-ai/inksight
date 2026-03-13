@@ -65,15 +65,27 @@ async def generate_and_render(
     cfg = get_effective_mode_config(config, persona)
 
     content = await _generate_content_for_persona(
-        persona, cfg, date_ctx, weather_str, mac=mac,
-        screen_w=screen_w, screen_h=screen_h,
+        persona,
+        cfg,
+        date_ctx,
+        weather_str,
+        mac=mac,
+        screen_w=screen_w,
+        screen_h=screen_h,
     )
 
     img = _render_for_persona(
-        persona, content,
-        date_str=date_str, weather_str=weather_str, battery_pct=battery_pct,
-        weather_code=weather_code, time_str=time_str, date_ctx=date_ctx,
-        screen_w=screen_w, screen_h=screen_h,
+        persona,
+        content,
+        date_str=date_str,
+        weather_str=weather_str,
+        battery_pct=battery_pct,
+        weather_code=weather_code,
+        time_str=time_str,
+        date_ctx=date_ctx,
+        screen_w=screen_w,
+        screen_h=screen_h,
+        mac=mac or "",
     )
     return img, content
 
@@ -93,34 +105,63 @@ async def _generate_content_for_persona(
     registry = get_registry()
     date_str = date_ctx["date_str"]
 
-    # Decrypt device API key if available
-    # 使用 None 表示用户没有配置 api_key，空字符串表示用户配置了但解密后为空或无效
-    device_api_key = None
-    device_image_api_key = None
-    encrypted_key = cfg.get("llm_api_key", "")
-    if encrypted_key:
-        from .crypto import decrypt_api_key
-        decrypted = decrypt_api_key(encrypted_key)
-        # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
-        if decrypted and decrypted.strip():
-            device_api_key = decrypted
-            logger.info(f"[Pipeline] Successfully decrypted llm_api_key (length: {len(device_api_key)})")
+    # 解析 API key 来源（用户级别优先，其次设备配置，最后环境变量）
+    # 使用 None 表示「未提供 key，将在下游从环境变量读取」；
+    # 使用空字符串 "" 表示「用户提供了但无效」，便于上游给出明确提示。
+    device_api_key: str | None = None
+    device_image_api_key: str | None = None
+
+    # 1) 用户级别的明文配置（例如 Web 预览使用个人信息页的 API key）
+    user_api_key = cfg.get("user_api_key")
+    if isinstance(user_api_key, str):
+        device_api_key = user_api_key
+        logger.info(
+            "[Pipeline] Using user_api_key override for persona=%s (mac=%s), length=%s",
+            persona,
+            mac,
+            len(user_api_key) if user_api_key else 0,
+        )
+    user_image_api_key = cfg.get("user_image_api_key")
+    if isinstance(user_image_api_key, str):
+        device_image_api_key = user_image_api_key
+        logger.info(
+            "[Pipeline] Using user_image_api_key override for persona=%s (mac=%s), length=%s",
+            persona,
+            mac,
+            len(user_image_api_key) if user_image_api_key else 0,
+        )
+
+    # 2) 设备配置中的加密 key（仅当没有用户级别覆盖时才使用）
+    if device_api_key is None:
+        encrypted_key = cfg.get("llm_api_key", "")
+        if encrypted_key:
+            from .crypto import decrypt_api_key
+            decrypted = decrypt_api_key(encrypted_key)
+            # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
+            if decrypted and decrypted.strip():
+                device_api_key = decrypted
+                logger.info(f"[Pipeline] Successfully decrypted llm_api_key (length: {len(device_api_key)})")
+            else:
+                device_api_key = ""
+                logger.warning("[Pipeline] Failed to decrypt llm_api_key or decrypted value is empty")
         else:
-            device_api_key = ""
-            logger.warning(f"[Pipeline] Failed to decrypt llm_api_key or decrypted value is empty")
-    else:
-        logger.info("[Pipeline] No llm_api_key in config, will use env var")
-    encrypted_image_key = cfg.get("image_api_key", "")
-    if encrypted_image_key:
-        from .crypto import decrypt_api_key
-        decrypted = decrypt_api_key(encrypted_image_key)
-        # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
-        if decrypted and decrypted.strip():
-            device_image_api_key = decrypted
-            logger.info(f"[Pipeline] Successfully decrypted image_api_key (length: {len(device_image_api_key)})")
-        else:
-            device_image_api_key = ""
-            logger.warning(f"[Pipeline] Failed to decrypt image_api_key or decrypted value is empty")
+            logger.info("[Pipeline] No llm_api_key in config, will use env var")
+
+    if device_image_api_key is None:
+        encrypted_image_key = cfg.get("image_api_key", "")
+        if encrypted_image_key:
+            from .crypto import decrypt_api_key
+            decrypted = decrypt_api_key(encrypted_image_key)
+            # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但解密后为空或无效
+            if decrypted and decrypted.strip():
+                device_image_api_key = decrypted
+                logger.info(
+                    "[Pipeline] Successfully decrypted image_api_key (length: %s)",
+                    len(device_image_api_key),
+                )
+            else:
+                device_image_api_key = ""
+                logger.warning("[Pipeline] Failed to decrypt image_api_key or decrypted value is empty")
 
     ctx = ContentContext(
         config=cfg,
@@ -143,7 +184,25 @@ async def _generate_content_for_persona(
     # JSON-defined mode
     if registry.is_json_mode(persona):
         from .json_content import generate_json_mode_content
-        jm = registry.get_json_mode(persona)
+        jm = registry.get_json_mode(persona, mac)
+        if not jm:
+            # Try to load from database if mode not in registry
+            # This can happen for user-specific custom modes
+            if mac:
+                from .config_store import get_device_owner, get_custom_mode as get_user_custom_mode_from_db
+                owner = await get_device_owner(mac)
+                if owner:
+                    user_id = owner.get("user_id")
+                    if user_id:
+                        # Load mode from database for the specific device
+                        mode_data = await get_user_custom_mode_from_db(user_id, persona, mac)
+                        if mode_data:
+                            # Load into registry for this request
+                            mode_mac = mode_data.get("mac")
+                            registry.load_custom_mode_from_dict(persona, mode_data["definition"], source="custom", mac=mode_mac)
+                            jm = registry.get_json_mode(persona, mac)
+        if not jm:
+            raise ValueError(f"JSON mode {persona} not found in registry")
         return await generate_json_mode_content(
             jm.definition,
             config=cfg,
@@ -188,6 +247,7 @@ def _render_for_persona(
     date_ctx: dict | None = None,
     screen_w: int = SCREEN_WIDTH,
     screen_h: int = SCREEN_HEIGHT,
+    mac: str = "",
 ) -> Image.Image:
     """Dispatch rendering to the appropriate handler."""
     from .mode_registry import get_registry
@@ -198,7 +258,8 @@ def _render_for_persona(
 
     # JSON-defined mode
     if registry.is_json_mode(persona):
-        jm = registry.get_json_mode(persona)
+        # mac 为空字符串表示 Web 预览等无设备场景，此时只根据 persona 取 JSON 模式
+        jm = registry.get_json_mode(persona, mac or None)
         # Weather 模式下不在状态栏中间重复显示简略天气（只保留日期、电量等）
         if persona.upper() == "WEATHER":
             weather_str_for_bar = ""

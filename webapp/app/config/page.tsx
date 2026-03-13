@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, Suspense, useMemo, useRef } from "rea
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DeviceInfo } from "@/components/config/device-info";
-import { LlmProviderConfig } from "@/components/config/llm-provider-config";
 import { ModeSelector } from "@/components/config/mode-selector";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
@@ -13,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Settings,
   Sliders,
-  Cpu,
   BarChart3,
   RefreshCw,
   Save,
@@ -198,7 +196,6 @@ const MODE_TEMPLATES: Record<string, { label: string; def: any }> = {
 const TABS = [
   { id: "modes", label: "模式", icon: Settings },
   { id: "preferences", label: "个性化", icon: Sliders },
-  { id: "ai", label: "AI 模型", icon: Cpu },
   { id: "stats", label: "状态", icon: BarChart3 },
 ] as const;
 
@@ -536,19 +533,11 @@ function ConfigPageInner() {
   const [contentTone, setContentTone] = useState("neutral");
   const [characterTones, setCharacterTones] = useState<string[]>([]);
   const [customPersonaTone, setCustomPersonaTone] = useState("");
-  const [llmProvider, setLlmProvider] = useState("deepseek");
-  const [llmModel, setLlmModel] = useState("deepseek-chat");
-  const [imageProvider, setImageProvider] = useState("aliyun");
-  const [imageModel, setImageModel] = useState("qwen-image-max");
   const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
   const [settingsMode, setSettingsMode] = useState<string | null>(null);
   const [settingsJsonDrafts, setSettingsJsonDrafts] = useState<Record<string, string>>({});
   const [settingsJsonErrors, setSettingsJsonErrors] = useState<Record<string, string>>({});
   const [memoText, setMemoText] = useState("");
-  const [llmApiKey, setLlmApiKey] = useState("");
-  const [imageApiKey, setImageApiKey] = useState("");
-  const [llmApiKeyModified, setLlmApiKeyModified] = useState(false);
-  const [imageApiKeyModified, setImageApiKeyModified] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -605,10 +594,16 @@ function ConfigPageInner() {
   }, [locale, mac, preferMac, prefillCode]);
 
   useEffect(() => {
-    fetch("/api/modes").then((r) => r.json()).then((d) => {
+    const params = new URLSearchParams();
+    if (mac) {
+      params.append("mac", mac);
+    }
+    fetch(`/api/modes?${params.toString()}`, {
+      headers: authHeaders(),
+    }).then((r) => r.json()).then((d) => {
       if (d.modes) setServerModes(d.modes);
     }).catch(() => {});
-  }, []);
+  }, [mac]);
 
   useEffect(() => {
     if (mac && currentUser) {
@@ -660,10 +655,6 @@ function ConfigPageInner() {
         if (cfg.language) setLanguage(normalizeLanguage(cfg.language));
         if (cfg.contentTone || cfg.content_tone) setContentTone(normalizeTone(cfg.contentTone || cfg.content_tone));
         if (cfg.characterTones || cfg.character_tones) setCharacterTones((cfg.characterTones || cfg.character_tones) as string[]);
-        if (cfg.llmProvider || cfg.llm_provider) setLlmProvider((cfg.llmProvider || cfg.llm_provider) as string);
-        if (cfg.llmModel || cfg.llm_model) setLlmModel((cfg.llmModel || cfg.llm_model) as string);
-        if (cfg.imageProvider || cfg.image_provider) setImageProvider((cfg.imageProvider || cfg.image_provider) as string);
-        if (cfg.imageModel || cfg.image_model) setImageModel((cfg.imageModel || cfg.image_model) as string);
         if (cfg.mode_overrides) setModeOverrides(cfg.mode_overrides);
         else if (cfg.modeOverrides) setModeOverrides(cfg.modeOverrides);
         const loadedOverrides = ((cfg.mode_overrides || cfg.modeOverrides || {}) as Record<string, ModeOverride>);
@@ -673,9 +664,6 @@ function ConfigPageInner() {
         } else if (cfg.memoText || cfg.memo_text) {
           setMemoText((cfg.memoText || cfg.memo_text) as string);
         }
-        // 重置 API key 修改标志（加载配置时重置）
-        setLlmApiKeyModified(false);
-        setImageApiKeyModified(false);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -800,30 +788,9 @@ function ConfigPageInner() {
         language,
         contentTone,
         characterTones: characterTones,
-        llmProvider: llmProvider,
-        llmModel: llmModel,
-        imageProvider: imageProvider,
-        imageModel: imageModel,
         modeOverrides: normalizedModeOverrides,
         memoText: memoText,
       };
-      // 只有在用户修改了 API key 时才发送该字段
-      // 如果用户清空了 API key（从有值变为空），发送空字符串
-      // 如果用户未修改 API key，不发送该字段（后端会保留旧值）
-      const llmApiKeyTrimmed = llmApiKey.trim();
-      const imageApiKeyTrimmed = imageApiKey.trim();
-      
-      // 发送 llmApiKey 的情况（只有在用户修改了输入框时才发送）：
-      // 1. 用户新设置了 API key（之前没有，现在有值）
-      // 2. 用户修改了 API key（之前有，现在也有值）
-      // 3. 用户清空了 API key（之前有，现在为空）
-      if (llmApiKeyModified) {
-        body.llmApiKey = llmApiKeyTrimmed;
-      }
-      // 同样的逻辑应用于 imageApiKey
-      if (imageApiKeyModified) {
-        body.imageApiKey = imageApiKeyTrimmed;
-      }
       const res = await fetch("/api/config", {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
@@ -1111,11 +1078,24 @@ function ConfigPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           description: customDesc, 
-          provider: llmProvider, 
-          model: llmModel,
+          provider: "deepseek", 
+          model: "deepseek-chat",
           mac: mac || undefined,
         }),
       });
+
+      // 额度不足：后端按 BILLING.md 约定返回 402
+      if (res.status === 402) {
+        const d = await res.json().catch(() => ({}));
+        showToast(
+          (d && d.error) || (isEn ? "Your free quota has been exhausted, please redeem an invitation code or configure your own API key in your profile." : "您的免费额度已用完，请输入邀请码或在个人信息中配置自己的 API key。"),
+          "error",
+        );
+        setShowInviteModal(true);
+        setCustomGenerating(false);
+        return;
+      }
+
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "生成失败");
       setCustomJson(JSON.stringify(data.mode_def, null, 2));
@@ -1141,6 +1121,19 @@ function ConfigPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode_def: def, mac: mac || undefined }),
       });
+
+      // 额度不足：返回 402
+      if (res.status === 402) {
+        const d = await res.json().catch(() => ({}));
+        showToast(
+          (d && d.error) || (isEn ? "Your free quota has been exhausted, please redeem an invitation code or configure your own API key in your profile." : "您的免费额度已用完，请输入邀请码或在个人信息中配置自己的 API key。"),
+          "error",
+        );
+        setShowInviteModal(true);
+        setCustomPreviewLoading(false);
+        return;
+      }
+
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || "预览失败");
@@ -1207,20 +1200,60 @@ function ConfigPageInner() {
 
   const handleSaveCustomMode = async () => {
     if (!customJson.trim()) return;
+    if (!mac) {
+      showToast("请先选择设备", "error");
+      return;
+    }
     try {
       const def = JSON.parse(customJson);
+      
+      // Ensure mode_id exists - generate from display_name if missing
+      if (!def.mode_id || !def.mode_id.trim()) {
+        if (customModeName.trim()) {
+          def.mode_id = customModeName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+          // Ensure it starts with a letter
+          if (!/^[A-Z]/.test(def.mode_id)) {
+            def.mode_id = "CUSTOM_" + def.mode_id;
+          }
+        } else if (def.display_name) {
+          def.mode_id = def.display_name.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+          if (!/^[A-Z]/.test(def.mode_id)) {
+            def.mode_id = "CUSTOM_" + def.mode_id;
+          }
+        } else {
+          // Generate a random mode_id if no name is available
+          def.mode_id = "CUSTOM_" + Math.random().toString(36).substring(2, 10).toUpperCase();
+        }
+      }
+      
       if (customModeName.trim()) {
         def.display_name = customModeName.trim();
       }
-      const res = await fetch("/api/modes", {
+      
+      // Add mac to the request body
+      def.mac = mac;
+      
+      const res = await fetch("/api/modes/custom", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
         body: JSON.stringify(def),
       });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `保存失败: ${res.status}`);
+      }
+      
       const data = await res.json();
       if (data.ok || data.status === "ok") {
         showToast(`模式 ${def.mode_id} 已保存`, "success");
-        fetch("/api/modes").then((r) => r.json()).then((d) => { if (d.modes) setServerModes(d.modes); }).catch(() => {});
+        // Refresh modes list with mac parameter
+        const params = new URLSearchParams();
+        params.append("mac", mac);
+        fetch(`/api/modes?${params.toString()}`, { headers: authHeaders() }).then((r) => r.json()).then((d) => { if (d.modes) setServerModes(d.modes); }).catch(() => {});
         setEditingCustomMode(false);
         setCustomJson("");
         setCustomDesc("");
@@ -1349,9 +1382,16 @@ function ConfigPageInner() {
   const handleDeleteCustomMode = async (modeId: string) => {
     const modeName = customModeMeta[modeId]?.name || modeId;
     if (!window.confirm(`确定删除自定义模式「${modeName}」吗？`)) return;
+    if (!mac) {
+      showToast("请先选择设备", "error");
+      return;
+    }
     try {
-      const res = await fetch(`/api/modes/custom/${encodeURIComponent(modeId)}`, {
+      const params = new URLSearchParams();
+      params.append("mac", mac);
+      const res = await fetch(`/api/modes/custom/${encodeURIComponent(modeId)}?${params.toString()}`, {
         method: "DELETE",
+        headers: authHeaders(),
       });
       if (!res.ok) throw new Error("delete failed");
       setServerModes((prev) => prev.filter((m) => m.mode_id !== modeId));
@@ -1411,7 +1451,6 @@ function ConfigPageInner() {
     ? [
         { id: "modes", label: "Modes", icon: Settings },
         { id: "preferences", label: "Preferences", icon: Sliders },
-        { id: "ai", label: "AI Models", icon: Cpu },
         { id: "stats", label: "Status", icon: BarChart3 },
       ] as const
     : TABS;
@@ -1798,34 +1837,6 @@ function ConfigPageInner() {
               />
             )}
 
-            {/* AI Model Tab */}
-            {activeTab === "ai" && (
-              <LlmProviderConfig
-                tr={tr}
-                llmProvider={llmProvider}
-                setLlmProvider={setLlmProvider}
-                llmModel={llmModel}
-                setLlmModel={setLlmModel}
-                imageProvider={imageProvider}
-                setImageProvider={setImageProvider}
-                imageModel={imageModel}
-                setImageModel={setImageModel}
-                llmApiKey={llmApiKey}
-                setLlmApiKey={(value) => {
-                  setLlmApiKey(value);
-                  setLlmApiKeyModified(true);
-                }}
-                imageApiKey={imageApiKey}
-                setImageApiKey={(value) => {
-                  setImageApiKey(value);
-                  setImageApiKeyModified(true);
-                }}
-                hasApiKey={Boolean(config.has_api_key)}
-                hasImageApiKey={Boolean(config.has_image_api_key)}
-                llmModels={LLM_MODELS}
-                imageModels={IMAGE_MODELS}
-              />
-            )}
 
             {/* Stats Tab */}
             {activeTab === "stats" && (
@@ -1893,11 +1904,11 @@ function ConfigPageInner() {
                 <CardContent className="space-y-4">
                   <Field label={tr("API 服务商", "API Provider")}>
                     <select
-                      value={getModeOverride(settingsMode).llm_provider || llmProvider}
+                      value={getModeOverride(settingsMode).llm_provider || "deepseek"}
                       onChange={(e) => {
                         const provider = e.target.value;
                         const defaultModel = LLM_MODELS[provider]?.[0]?.v || "";
-                        const currentModel = getModeOverride(settingsMode).llm_model || llmModel;
+                        const currentModel = getModeOverride(settingsMode).llm_model || "deepseek-chat";
                         const modelAllowed = (LLM_MODELS[provider] || []).some((m) => m.v === currentModel);
                         updateModeOverride(settingsMode, {
                           llm_provider: provider,
@@ -1913,11 +1924,11 @@ function ConfigPageInner() {
                   </Field>
                   <Field label={tr("模型", "Model")}>
                     <select
-                      value={getModeOverride(settingsMode).llm_model || llmModel}
+                      value={getModeOverride(settingsMode).llm_model || "deepseek-chat"}
                       onChange={(e) => updateModeOverride(settingsMode, { llm_model: e.target.value })}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                     >
-                      {(LLM_MODELS[getModeOverride(settingsMode).llm_provider || llmProvider] || []).map((m) => (
+                      {(LLM_MODELS[getModeOverride(settingsMode).llm_provider || "deepseek"] || []).map((m) => (
                         <option key={m.v} value={m.v}>{m.n}</option>
                       ))}
                     </select>
@@ -2197,28 +2208,27 @@ function ConfigPageInner() {
             <CardContent className="space-y-4">
               <p className="text-sm text-ink-light">
                 {isEn
-                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 5 more free LLM calls, or configure your own API key in the AI configuration tab."
-                  : "您的免费额度已用完。您可以输入邀请码获得5次免费LLM调用额度，也可以在 AI 配置中设置自己的 API key。"}
+                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 10 more free LLM calls, or configure your own API key in your profile settings."
+                  : "您的免费额度已用完。您可以输入邀请码获得10次免费LLM调用额度，也可以在个人信息中设置自己的 API key。"}
               </p>
               <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
                 <p className="text-xs text-ink-light mb-2">
                   {isEn
-                    ? "💡 Tip: If you have your own API key, you can configure it in the AI Models tab to avoid quota limits."
-                    : "💡 提示：如果您有自己的 API key，可以在「AI 模型」标签页中配置，这样就不会受到额度限制了。"}
+                    ? "💡 Tip: If you have your own API key, you can configure it in your profile to avoid quota limits."
+                    : "💡 提示：如果您有自己的 API key，可以在个人信息中配置，这样就不会受到额度限制了。"}
                 </p>
-                {mac && (
+                <Link href={withLocalePath(locale, "/profile")}>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
                       setShowInviteModal(false);
-                      setActiveTab("ai");
                     }}
                     className="w-full text-xs"
                   >
-                    {isEn ? "Go to AI Configuration" : "前往 AI 配置"}
+                    {isEn ? "Go to Profile Settings" : "前往个人信息配置"}
                   </Button>
-                )}
+                </Link>
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">

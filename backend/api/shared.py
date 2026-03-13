@@ -301,12 +301,13 @@ async def resolve_mode(
     from core.mode_registry import get_registry
 
     registry = get_registry()
+    # Always pass mac to is_supported to ensure device isolation
     if mac and not persona_override:
         pending = await consume_pending_mode(mac)
-        if pending and registry.is_supported(pending.upper()):
+        if pending and registry.is_supported(pending.upper(), mac):
             return pending.upper()
 
-    if persona_override and registry.is_supported(persona_override.upper()):
+    if persona_override and registry.is_supported(persona_override.upper(), mac):
         return persona_override.upper()
 
     if config:
@@ -338,8 +339,62 @@ async def build_image(
     persona = await resolve_mode(mac, config, persona_override, force_next=force_next)
 
     registry = get_registry()
+    
+    # Load device owner's custom modes if needed (for device rendering)
+    # Only load modes for the specific device to avoid loading modes from other devices
+    if mac and not registry.is_supported(persona, mac):
+        from core.config_store import get_device_owner
+        owner = await get_device_owner(mac)
+        if owner:
+            user_id = owner.get("user_id")
+            if user_id:
+                await registry.load_user_custom_modes(user_id, mac)
+                logger.debug(f"[BUILD_IMAGE] Loaded custom modes for device owner {user_id} (device {mac})")
+    
+    # For Web preview without mac: load all custom modes for the current user
+    # Note: This may cause conflicts if user has same mode_id on different devices
+    # but we unregister before loading, so the last loaded will take precedence
+    if not mac and current_user_id is not None and not registry.is_supported(persona):
+        await registry.load_user_custom_modes(current_user_id, None)
+        logger.debug(f"[BUILD_IMAGE] Loaded all custom modes for user {current_user_id} (Web preview without device)")
+    
     mode_info = registry.get_mode_info(persona)
     is_mode_cacheable = bool(mode_info.cacheable) if mode_info else True
+
+    # ── Web 相关请求：合入用户级别的 LLM / 图像 API 配置 ─────────────────────────────
+    # 只要存在 current_user_id（无论是否带 mac），都尝试读取用户在个人信息页中配置的 API key。
+    # 这些配置通过 user_api_key / user_image_api_key 字段下发到 pipeline，
+    # 同时也用于后续的额度豁免判断（user_provided_api_key）。
+    if current_user_id is not None:
+        try:
+            from core.config_store import get_user_llm_config
+
+            user_llm_cfg = await get_user_llm_config(current_user_id)
+        except Exception:
+            user_llm_cfg = None
+            logger.warning(
+                "[QUOTA] Failed to load user_llm_config for user_id=%s in Web preview",
+                current_user_id,
+                exc_info=True,
+            )
+        if user_llm_cfg:
+            config = dict(config or {})  # 不污染设备端 config
+            # 文本 LLM 提供商与 API key（解密后的明文）
+            provider = (user_llm_cfg.get("provider") or "").strip()
+            api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
+            if provider:
+                # 仅在 config 中未显式指定时应用用户提供的 provider，避免覆盖模式级别的特殊配置
+                config.setdefault("llm_provider", provider)
+            if api_key_plain:
+                # 使用专门的字段，避免与设备加密字段 llm_api_key 混淆
+                config["user_api_key"] = api_key_plain
+            # 图像生成的提供商与 API key
+            image_provider = (user_llm_cfg.get("image_provider") or "").strip()
+            image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
+            if image_provider:
+                config.setdefault("image_provider", image_provider)
+            if image_api_key_plain:
+                config["user_image_api_key"] = image_api_key_plain
 
     # 是否为需要 LLM 的 JSON 模式（需要额度管控的类型）
     # 需要检查顶层 content 类型，以及 composite 模式中的 steps
@@ -350,7 +405,7 @@ async def build_image(
     # - external_data: 如果 provider 是 "briefing" 且配置了 summarize 或 include_insight，会调用 LLM
     # - composite: 递归检查 steps 中是否包含上述类型
     llm_mode_requires_quota = False
-    json_mode = registry.get_json_mode(persona)
+    json_mode = registry.get_json_mode(persona, mac)
     if json_mode and isinstance(json_mode.definition, dict):
         content_def = json_mode.definition.get("content", {}) or {}
         ctype = content_def.get("type")
@@ -423,13 +478,23 @@ async def build_image(
     # 检查用户是否提供了自己的 API key（如果提供了，则无需额度检查）
     user_provided_api_key = False
     if config:
+        # 设备级别加密存储的 llm_api_key
         encrypted_llm_key = config.get("llm_api_key", "")
         if encrypted_llm_key:
             from core.crypto import decrypt_api_key
             decrypted_key = decrypt_api_key(encrypted_llm_key)
             if decrypted_key and decrypted_key.strip():
                 user_provided_api_key = True
-                logger.debug("[QUOTA] User provided API key, skipping quota check for mac=%s", mac)
+                logger.debug("[QUOTA] User provided API key via device config, skipping quota check for mac=%s", mac)
+        # Web 预览场景下，个人信息页配置的明文 user_api_key
+        override_key = config.get("user_api_key")
+        if isinstance(override_key, str) and override_key.strip():
+            user_provided_api_key = True
+            logger.debug(
+                "[QUOTA] User provided API key via profile config, skipping quota check (mac=%s, user_id=%s)",
+                mac,
+                current_user_id,
+            )
 
     # 当前设备对应的计费用户（策略：owner）
     # 对于设备端：使用设备 owner 的 user_id
@@ -521,9 +586,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted, False
+                                return img, persona, False, True, quota_exhausted
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted, False
+                            return None, persona, False, True, quota_exhausted
                         if int(quota.get("free_quota_remaining") or 0) <= 0:
                             quota_exhausted = True
                             logger.info(
@@ -540,9 +605,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted, False
+                                return img, persona, False, True, quota_exhausted
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted, False
+                            return None, persona, False, True, quota_exhausted
                 except Exception:
                     logger.warning(
                         "[QUOTA] Failed to check quota on cache hit for user_id=%s (mac=%s, mode=%s), allowing cache",
@@ -609,7 +674,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted, False
+                    return img, persona, False, True, quota_exhausted
                 if int(quota.get("free_quota_remaining") or 0) <= 0:
                     quota_exhausted = True
                     logger.info(
@@ -647,7 +712,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted, False
+                    return img, persona, False, True, quota_exhausted
             except Exception:
                 # 如果连 role 都查不到，为了安全起见，也视为额度耗尽
                 logger.warning(
@@ -663,14 +728,14 @@ async def build_image(
                     last_persona=persona,
                     last_refresh_at=datetime.now().isoformat(),
                 )
-                return img, persona, False, True, quota_exhausted, False
+                return img, persona, False, True, quota_exhausted
             # 更新设备状态，但不写入内容缓存，避免后续充值后仍命中"额度耗尽"图片
             await update_device_state(
                 mac,
                 last_persona=persona,
                 last_refresh_at=datetime.now().isoformat(),
             )
-            return img, persona, False, True, quota_exhausted, False
+            return img, persona, False, True, quota_exhausted
 
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
@@ -693,7 +758,7 @@ async def build_image(
             if content_data.get("_is_fallback") is True:
                 content_fallback = True
             else:
-                jm = get_registry().get_json_mode(persona)
+                jm = get_registry().get_json_mode(persona, mac)
                 if jm and jm.definition.get("content", {}).get("type") == "image_gen":
                     content_fallback = not bool(content_data.get("image_url"))
 
