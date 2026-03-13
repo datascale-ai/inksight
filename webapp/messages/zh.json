@@ -3,6 +3,7 @@
   "meta.description": "一款极简主义的智能电子墨水屏桌面摆件，通过 LLM 生成有温度的慢信息。支持 19 种内容模式，ESP32-C3 驱动，BOM 成本约 220 元以内。",
   "nav.home": "首页",
   "nav.docs": "文档",
+  "nav.discover": "模式广场",
   "nav.flash": "在线刷机",
   "nav.config": "设备配置",
   "nav.preview": "无设备体验",

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, Eye, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Eye, Loader2 } from "lucide-react";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
@@ -76,18 +77,6 @@ interface ServerModeItem {
   display_name: string;
   description: string;
   source: string;
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-end justify-between gap-2">
-        <label className="block text-sm font-medium text-ink mb-1.5">{label}</label>
-        {hint ? <span className="text-xs text-ink-light mb-1.5">{hint}</span> : null}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 function ModeSection({
@@ -180,6 +169,7 @@ export default function ExperiencePage() {
   const [memoText, setMemoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
 
   const [previewLoading, setPreviewLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
@@ -188,6 +178,7 @@ export default function ExperiencePage() {
   const toastTimerRef = useRef<number | null>(null);
 
   const [modal, setModal] = useState<null | { type: "quote"; modeId: string }>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [imageUploadLoading, setImageUploadLoading] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
@@ -254,6 +245,7 @@ export default function ExperiencePage() {
     customModeMeta[previewMode]?.name ||
     previewMode ||
     t(locale, "preview.unknown_mode", "Unknown");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const previewModeTip =
     (locale === "en" ? MODE_META_EN[previewMode]?.tip : MODE_META[previewMode]?.tip) ||
     customModeMeta[previewMode]?.tip ||
@@ -362,6 +354,7 @@ export default function ExperiencePage() {
     await handlePreview(modeId);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const reset = () => {
     setCity("杭州");
     setMemoText(t(locale, "preview.memo.default", "写点什么吧…"));
@@ -504,10 +497,12 @@ export default function ExperiencePage() {
                   </div>
                 ) : previewImageUrl ? (
                   <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
-                    <img
+                    <Image
                       src={previewImageUrl}
                       alt={t(locale, "preview.display.alt", "InkSight preview")}
-                      className="absolute inset-0 w-full h-full object-contain"
+                      fill
+                      className="object-contain"
+                      unoptimized
                     />
                   </div>
                 ) : (

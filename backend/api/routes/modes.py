@@ -43,6 +43,37 @@ async def custom_mode_preview(body: dict, admin_auth: None = Depends(require_adm
         mode_def = dict(mode_def, mode_id="PREVIEW")
     screen_w = body.get("w", SCREEN_WIDTH)
     screen_h = body.get("h", SCREEN_HEIGHT)
+    
+    # 获取设备配置以获取 api_key
+    device_api_key = None
+    device_image_api_key = None
+    mac = body.get("mac")
+    
+    # 如果没有 mac，尝试从请求中获取（前端可能通过其他方式传递）
+    # 或者从当前用户的默认配置获取
+    from core.config_store import get_active_config
+    config = None
+    if mac:
+        config = await get_active_config(mac)
+    else:
+        # 如果没有 mac，尝试获取第一个设备的配置（用于预览）
+        # 或者从环境变量获取（作为后备）
+        pass
+    
+    if config:
+        encrypted_key = config.get("llm_api_key", "")
+        if encrypted_key:
+            from core.crypto import decrypt_api_key
+            decrypted = decrypt_api_key(encrypted_key)
+            # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
+            device_api_key = decrypted if decrypted and decrypted.strip() else ""
+        encrypted_image_key = config.get("image_api_key", "")
+        if encrypted_image_key:
+            from core.crypto import decrypt_api_key
+            decrypted = decrypt_api_key(encrypted_image_key)
+            # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
+            device_image_api_key = decrypted if decrypted and decrypted.strip() else ""
+    
     try:
         from core.json_content import generate_json_mode_content
         from core.json_renderer import render_json_mode
@@ -56,6 +87,8 @@ async def custom_mode_preview(body: dict, admin_auth: None = Depends(require_adm
             weather_str=weather["weather_str"],
             screen_w=screen_w,
             screen_h=screen_h,
+            api_key=device_api_key,
+            image_api_key=device_image_api_key,
         )
         img = render_json_mode(
             mode_def,
@@ -139,6 +172,24 @@ async def generate_mode(body: dict, admin_auth: None = Depends(require_admin)):
     if image_base64 and len(image_base64) > 5 * 1024 * 1024:
         return JSONResponse({"error": "image too large (max 4MB)"}, status_code=400)
 
+    # 获取设备配置以获取 api_key（如果有 mac）
+    device_api_key = None
+    mac = body.get("mac")
+    if mac:
+        from core.config_store import get_active_config
+        config = await get_active_config(mac)
+        if config:
+            encrypted_key = config.get("llm_api_key", "")
+            if encrypted_key:
+                from core.crypto import decrypt_api_key
+                decrypted = decrypt_api_key(encrypted_key)
+                # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
+                if decrypted and decrypted.strip():
+                    device_api_key = decrypted
+                    logger.info(f"[MODE_GEN] Using device api_key for mac={mac} (length: {len(device_api_key)})")
+                else:
+                    logger.warning(f"[MODE_GEN] Failed to decrypt api_key for mac={mac}")
+
     from core.mode_generator import generate_mode_definition
 
     try:
@@ -147,6 +198,7 @@ async def generate_mode(body: dict, admin_auth: None = Depends(require_admin)):
             image_base64=image_base64,
             provider=body.get("provider", "deepseek"),
             model=body.get("model", "deepseek-chat"),
+            api_key=device_api_key,
         )
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)

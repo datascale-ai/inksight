@@ -152,7 +152,10 @@ def _get_client(
     api_key: str | None = None,
 ) -> tuple[AsyncOpenAI, int]:
     """Get OpenAI client for specified provider and return max_tokens"""
-    if not api_key:
+    user_provided_key = api_key is not None  # 记录用户是否提供了 api_key（即使是空字符串）
+    
+    if api_key is None:
+        # 用户没有传递 api_key，从环境变量获取
         api_key_map = {
             "deepseek": "DEEPSEEK_API_KEY",
             "aliyun": "DASHSCOPE_API_KEY",
@@ -162,9 +165,15 @@ def _get_client(
         api_key = os.getenv(env_key, "")
 
     if not api_key or api_key.startswith("sk-your-"):
-        raise LLMKeyMissingError(
-            f"Missing or invalid API key for {provider}. Please set the API key in .env file or device config."
-        )
+        # 如果用户提供了 api_key 但为空或无效，给出明确提示
+        if user_provided_key:
+            raise LLMKeyMissingError(
+                f"您配置的 API key 为空或无效（provider: {provider}）。请在设备配置页面检查并更新您的 API key。"
+            )
+        else:
+            raise LLMKeyMissingError(
+                f"Missing or invalid API key for {provider}. Please set the API key in .env file or device config."
+            )
 
     config = LLM_CONFIGS.get(provider, LLM_CONFIGS["deepseek"])
     base_url = config["base_url"]
@@ -280,6 +289,7 @@ async def generate_content(
     days_until_holiday: int = 0,
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
+    api_key: str | None = None,
 ) -> dict:
     context = _build_context_str(
         date_str,
@@ -302,7 +312,7 @@ async def generate_content(
     logger.info(f"[LLM] Calling {llm_provider}/{llm_model} for persona={persona}")
 
     try:
-        text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8)
+        text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8, api_key=api_key)
     except _LLM_RECOVERABLE_ERRORS as e:
         logger.error(f"[LLM] ✗ FAILED - {type(e).__name__}: {e}")
         return _fallback_content(persona)
@@ -490,6 +500,7 @@ async def generate_briefing_insight(
     ph_product: dict,
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
+    api_key: str | None = None,
 ) -> str:
     """使用 LLM 生成行业洞察"""
     hn_summary = "\n".join(
@@ -510,7 +521,7 @@ Hacker News Top 3:
 3. 语言简洁有力，适合晨间阅读"""
 
     try:
-        insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7)
+        insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7, api_key=api_key)
         logger.info(f"[BRIEFING] Generated insight: {insight[:50]}...")
         return insight
     except _LLM_RECOVERABLE_ERRORS as e:
@@ -523,6 +534,7 @@ async def summarize_briefing_content(
     ph_product: dict,
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
+    api_key: str | None = None,
 ) -> tuple[list[dict], dict]:
     """使用单次 LLM 调用批量总结 HN stories 和 PH tagline（原先需 3-4 次调用）"""
     try:
@@ -577,7 +589,7 @@ async def summarize_briefing_content(
 
         text = await _call_llm(
             llm_provider, llm_model, batch_prompt,
-            max_tokens=300, temperature=0.5,
+            max_tokens=300, temperature=0.5, api_key=api_key,
         )
         cleaned = _clean_json_response(text)
         data = json.loads(cleaned)
@@ -612,11 +624,13 @@ async def generate_briefing_content(
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
     summarize: bool = True,
+    api_key: str | None = None,
 ) -> dict:
     """生成 BRIEFING 模式的完整内容"""
     if ctx is not None:
         llm_provider = ctx.llm_provider
         llm_model = ctx.llm_model
+        api_key = ctx.api_key
     import asyncio as _asyncio
 
     logger.info("[BRIEFING] Starting content generation...")
@@ -635,15 +649,15 @@ async def generate_briefing_content(
     if summarize:
         (hn_stories, ph_product), insight = await _asyncio.gather(
             summarize_briefing_content(
-                hn_stories, ph_product, llm_provider, llm_model
+                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key
             ),
             generate_briefing_insight(
-                hn_stories, ph_product, llm_provider, llm_model
+                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key
             ),
         )
     else:
         insight = await generate_briefing_insight(
-            hn_stories, ph_product, llm_provider, llm_model
+            hn_stories, ph_product, llm_provider, llm_model, api_key=api_key
         )
 
     result = {
@@ -733,7 +747,8 @@ async def generate_artwall_content(
     prompt_hint: str = "",
     prompt_template: str = "",
     fallback_title: str = "",
-    image_api_key: str = "",
+    image_api_key: str | None = None,
+    api_key: str | None = None,
 ) -> dict:
     """生成 ARTWALL 模式的内容 - 使用文生图模型"""
     if ctx is not None:
@@ -768,7 +783,7 @@ async def generate_artwall_content(
 
     artwork_title = title_seed or "墨韵天成"
     try:
-        title_text = await _call_llm("deepseek", "deepseek-chat", title_prompt)
+        title_text = await _call_llm("deepseek", "deepseek-chat", title_prompt, api_key=api_key)
         artwork_title = title_text.strip('"').strip("「」") or artwork_title
         logger.info(f"[ARTWALL] Generated title: {artwork_title}")
     except _LLM_RECOVERABLE_ERRORS as e:
@@ -798,15 +813,26 @@ async def generate_artwall_content(
                 "prompt": image_prompt,
             }
 
-        api_key = image_api_key or os.getenv("DASHSCOPE_API_KEY", "")
-        if not api_key or api_key.startswith("sk-your-"):
-            logger.warning("[ARTWALL] No valid DASHSCOPE_API_KEY, using fallback")
+        # 处理 image_api_key：优先使用用户配置的，如果用户没有配置则使用环境变量
+        user_provided_image_key = image_api_key is not None  # 记录用户是否提供了 image_api_key
+        if image_api_key is None:
+            # 用户没有传递 image_api_key，从环境变量获取
+            image_api_key = os.getenv("DASHSCOPE_API_KEY", "")
+        
+        if not image_api_key or image_api_key.startswith("sk-your-"):
+            # 如果用户提供了 image_api_key 但为空或无效，给出明确提示
+            if user_provided_image_key:
+                logger.warning("[ARTWALL] 您配置的图像 API key 为空或无效，请检查设备配置")
+            else:
+                logger.warning("[ARTWALL] No valid DASHSCOPE_API_KEY, using fallback")
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
                 "description": "黑白线描作品",
                 "prompt": image_prompt,
             }
+        
+        api_key = image_api_key  # 用于后续调用
 
         if MultiModalConversation is None:
             logger.warning("[ARTWALL] dashscope not installed, using fallback")
@@ -882,11 +908,13 @@ async def generate_recipe_content(
     ctx=None,
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
+    api_key: str | None = None,
 ) -> dict:
     """生成 RECIPE 模式的内容 - 早中晚三餐方案"""
     if ctx is not None:
         llm_provider = ctx.llm_provider
         llm_model = ctx.llm_model
+        api_key = ctx.api_key
     logger.info("[RECIPE] Starting content generation...")
 
     month = datetime.datetime.now().month
@@ -933,7 +961,7 @@ async def generate_recipe_content(
 只输出 JSON，不要其他内容。"""
 
     try:
-        text = await _call_llm(llm_provider, llm_model, prompt)
+        text = await _call_llm(llm_provider, llm_model, prompt, api_key=api_key)
         cleaned = _clean_json_response(text)
         data = json.loads(cleaned)
         logger.info("[RECIPE] Generated meal plan")

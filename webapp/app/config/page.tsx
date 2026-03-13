@@ -810,8 +810,6 @@ function ConfigPageInner() {
       // 只有在用户修改了 API key 时才发送该字段
       // 如果用户清空了 API key（从有值变为空），发送空字符串
       // 如果用户未修改 API key，不发送该字段（后端会保留旧值）
-      const hasApiKey = Boolean(config.has_api_key);
-      const hasImageApiKey = Boolean(config.has_image_api_key);
       const llmApiKeyTrimmed = llmApiKey.trim();
       const imageApiKeyTrimmed = imageApiKey.trim();
       
@@ -1111,7 +1109,12 @@ function ConfigPageInner() {
       const res = await fetch("/api/modes/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: customDesc, provider: llmProvider, model: llmModel }),
+        body: JSON.stringify({ 
+          description: customDesc, 
+          provider: llmProvider, 
+          model: llmModel,
+          mac: mac || undefined,
+        }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "生成失败");
@@ -1136,7 +1139,7 @@ function ConfigPageInner() {
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode_def: def }),
+        body: JSON.stringify({ mode_def: def, mac: mac || undefined }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));

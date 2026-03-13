@@ -30,6 +30,8 @@ class ContentContext:
     language: str = "zh"
     content_tone: str = "neutral"
     character_tones: list[str] = field(default_factory=list)
+    api_key: str | None = None
+    image_api_key: str | None = None
 
 
 ContentFn = Callable[[ContentContext], Awaitable[dict]]

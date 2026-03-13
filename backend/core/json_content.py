@@ -105,8 +105,8 @@ async def generate_json_mode_content(
     mac: str = "",
     screen_w: int = 400,
     screen_h: int = 300,
-    api_key: str = "",
-    image_api_key: str = "",
+    api_key: str | None = None,
+    image_api_key: str | None = None,
 ) -> dict:
     """Generate content for a JSON-defined mode.
 
@@ -259,12 +259,26 @@ async def generate_json_mode_content(
         llm_ok = False
         api_key_invalid = False
         try:
+            # 调试日志：记录 api_key 的状态
+            if api_key is None:
+                logger.info(f"[JSONContent] api_key is None for {mode_id}, will use env var")
+            elif not api_key or not api_key.strip():
+                logger.warning(f"[JSONContent] api_key is empty for {mode_id}, this will cause LLMKeyMissingError")
+            else:
+                logger.info(f"[JSONContent] api_key provided for {mode_id} (length: {len(api_key)})")
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
             llm_ok = True
         except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
+            # 检查是否是用户配置的 API key 问题
+            if isinstance(e, LLMKeyMissingError):
+                error_message = str(e)
+                # 如果错误消息包含"您配置的"，说明是用户配置的 api_key 有问题
+                if "您配置的" in error_message or "您配置" in error_message:
+                    api_key_invalid = True
+                    logger.warning(f"[JSONContent] User configured API key is invalid or empty for {mode_id}: {e}")
             # 检查是否是 API key 无效错误（401/403）
-            if isinstance(e, HTTPStatusError):
+            elif isinstance(e, HTTPStatusError):
                 status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
                 if status_code in (401, 403):
                     api_key_invalid = True
@@ -429,11 +443,11 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
             return dict(fallback)
         if summarize:
             hn_items, ph_item = await summarize_briefing_content(
-                hn_items, ph_item, llm_provider, llm_model
+                hn_items, ph_item, llm_provider, llm_model, api_key=kwargs.get("api_key")
             )
         insight = ""
         if include_insight:
-            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model)
+            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=kwargs.get("api_key"))
         result = dict(fallback)
         ph_name = ""
         ph_tagline = ""
@@ -497,7 +511,8 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
                 prompt_hint=prompt_hint,
                 prompt_template=prompt_template,
                 fallback_title=fallback_title,
-                image_api_key=kwargs.get("image_api_key") or "",
+                image_api_key=kwargs.get("image_api_key"),
+                api_key=kwargs.get("api_key"),
             )
             # 仅当真正拿到图像地址时才使用生成结果；否则回退到 JSON 中的 fallback/fallback_pool
             if mode_id != "ARTWALL":

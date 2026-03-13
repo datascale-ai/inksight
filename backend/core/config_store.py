@@ -251,6 +251,26 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_access_requests_mac ON device_access_requests(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_access_requests_user ON device_access_requests(requester_user_id)")
 
+        # Shared modes table for Discover page
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS shared_modes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mode_id VARCHAR(50) NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                category VARCHAR(20) NOT NULL,
+                author_id INTEGER NOT NULL,
+                config_json TEXT NOT NULL,
+                thumbnail_url VARCHAR(255),
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (author_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_shared_modes_category ON shared_modes(category)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_shared_modes_author ON shared_modes(author_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_shared_modes_active ON shared_modes(is_active)")
+
         await run_main_db_migrations(
             db,
             defaults={

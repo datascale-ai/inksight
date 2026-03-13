@@ -174,9 +174,10 @@ async def _call_llm_with_messages(
     messages: list[dict],
     temperature: float = 0.3,
     max_tokens: int = 2048,
+    api_key: str | None = None,
 ) -> str:
     """Call LLM with pre-built messages (supports multimodal)."""
-    client, _ = _get_client(provider, model)
+    client, _ = _get_client(provider, model, api_key=api_key)
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
@@ -293,6 +294,7 @@ async def generate_mode_definition(
     image_base64: str | None = None,
     provider: str = "deepseek",
     model: str = "deepseek-chat",
+    api_key: str | None = None,
 ) -> dict:
     """Generate a mode JSON definition from natural language description.
 
@@ -315,6 +317,7 @@ async def generate_mode_definition(
         provider, model, messages,
         temperature=0.3,
         max_tokens=2048,
+        api_key=api_key,
     )
 
     # Clean and parse

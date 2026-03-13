@@ -94,16 +94,33 @@ async def _generate_content_for_persona(
     date_str = date_ctx["date_str"]
 
     # Decrypt device API key if available
-    device_api_key = ""
-    device_image_api_key = ""
+    # 使用 None 表示用户没有配置 api_key，空字符串表示用户配置了但解密后为空或无效
+    device_api_key = None
+    device_image_api_key = None
     encrypted_key = cfg.get("llm_api_key", "")
     if encrypted_key:
         from .crypto import decrypt_api_key
-        device_api_key = decrypt_api_key(encrypted_key)
+        decrypted = decrypt_api_key(encrypted_key)
+        # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
+        if decrypted and decrypted.strip():
+            device_api_key = decrypted
+            logger.info(f"[Pipeline] Successfully decrypted llm_api_key (length: {len(device_api_key)})")
+        else:
+            device_api_key = ""
+            logger.warning(f"[Pipeline] Failed to decrypt llm_api_key or decrypted value is empty")
+    else:
+        logger.info("[Pipeline] No llm_api_key in config, will use env var")
     encrypted_image_key = cfg.get("image_api_key", "")
     if encrypted_image_key:
         from .crypto import decrypt_api_key
-        device_image_api_key = decrypt_api_key(encrypted_image_key)
+        decrypted = decrypt_api_key(encrypted_image_key)
+        # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
+        if decrypted and decrypted.strip():
+            device_image_api_key = decrypted
+            logger.info(f"[Pipeline] Successfully decrypted image_api_key (length: {len(device_image_api_key)})")
+        else:
+            device_image_api_key = ""
+            logger.warning(f"[Pipeline] Failed to decrypt image_api_key or decrypted value is empty")
 
     ctx = ContentContext(
         config=cfg,
@@ -119,6 +136,8 @@ async def _generate_content_for_persona(
         content_tone=cfg.get("content_tone", DEFAULT_CONTENT_TONE),
         llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
         llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
+        api_key=device_api_key,
+        image_api_key=device_image_api_key,
     )
 
     # JSON-defined mode

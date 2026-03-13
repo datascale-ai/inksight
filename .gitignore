@@ -255,3 +255,7 @@ PROJECT_STATUS.md
 CLAUDE.md
 
 backend/md/
+backend/fonts/bitmap/
+backend/fonts/truetype/
+backend/scripts/generate_invite_codes.py
+backend/core/modes/custom/

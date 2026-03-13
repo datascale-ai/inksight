@@ -36,7 +36,7 @@ export function Dialog({ open, onClose, children }: DialogProps) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="fixed inset-0 bg-black/20" />
       <div className="relative z-10 w-full max-w-lg mx-4 animate-fade-in">
         {children}
       </div>
@@ -53,7 +53,7 @@ export function DialogContent({
 }) {
   return (
     <div
-      className={`rounded-sm border border-ink/10 bg-white p-6 shadow-lg ${className}`}
+      className={`rounded-sm border border-gray-300 bg-white p-6 shadow-[4px_4px_0_0_#000000] ${className}`}
     >
       {children}
     </div>
