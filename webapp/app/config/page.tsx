@@ -593,6 +593,11 @@ function ConfigPageInner() {
     return query ? `${withLocalePath(locale, "/config")}?${query}` : withLocalePath(locale, "/config");
   }, [locale, mac, preferMac, prefillCode]);
 
+  const supportedModeIds = useMemo(
+    () => new Set(serverModes.map((m) => m.mode_id.toUpperCase())),
+    [serverModes]
+  );
+
   useEffect(() => {
     const params = new URLSearchParams();
     if (mac) {

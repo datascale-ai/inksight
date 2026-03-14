@@ -24,7 +24,7 @@ from api.shared import (
     resolve_refresh_minutes_for_device_state,
 )
 from core.auth import require_device_token, validate_mac_param
-from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
+from core.config import DEFAULT_REFRESH_INTERVAL, SCREEN_HEIGHT, SCREEN_WIDTH
 from core.config_store import consume_pending_refresh, get_active_config, get_device_state, update_device_state
 from core.context import get_date_context, get_weather
 from core.pipeline import generate_and_render
@@ -39,6 +39,19 @@ def _sse_event(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _configured_refresh_minutes(config: Optional[dict]) -> int:
+    refresh_minutes_raw = config.get("refresh_interval") if config else DEFAULT_REFRESH_INTERVAL
+    try:
+        refresh_minutes = int(refresh_minutes_raw)
+    except (TypeError, ValueError):
+        refresh_minutes = DEFAULT_REFRESH_INTERVAL
+    if refresh_minutes < 10:
+        return 10
+    if refresh_minutes > 1440:
+        return 1440
+    return refresh_minutes
+
+
 @router.get("/render")
 @limiter.limit("10/minute")
 async def render(
@@ -47,9 +60,13 @@ async def render(
     x_device_token: Optional[str] = Header(default=None),
 ):
     mac = params.mac
+    cfg: Optional[dict] = None
+    configured_refresh_minutes: Optional[int] = None
     if mac:
         mac = validate_mac_param(mac)
         await require_device_token(mac, x_device_token)
+        cfg = await get_active_config(mac, log_load=False)
+        configured_refresh_minutes = _configured_refresh_minutes(cfg)
 
     start_time = time.time()
     force_next = params.next_mode == 1
@@ -78,6 +95,8 @@ async def render(
                     if params.refresh_min is not None:
                         await update_device_state(mac, expected_refresh_min=params.refresh_min)
                     headers = {"X-Preview-Push": "1"}
+                    if configured_refresh_minutes is not None:
+                        headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
                     if await consume_pending_refresh(mac):
                         headers["X-Pending-Refresh"] = "1"
                     return Response(content=bmp_bytes, media_type="image/bmp", headers=headers)
@@ -86,7 +105,6 @@ async def render(
 
         skip_cache_for_this_render = False
         if mac:
-            cfg = await get_active_config(mac)
             if cfg:
                 state = await get_device_state(mac)
                 refresh_minutes = resolve_refresh_minutes_for_device_state(cfg, state)
@@ -153,6 +171,8 @@ async def render(
                 await update_device_state(mac, expected_refresh_min=params.refresh_min)
 
         headers: dict[str, str] = {}
+        if configured_refresh_minutes is not None:
+            headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
         if mac and await consume_pending_refresh(mac):
             headers["X-Pending-Refresh"] = "1"
         if content_fallback:

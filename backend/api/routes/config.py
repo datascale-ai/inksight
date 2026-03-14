@@ -7,7 +7,14 @@ from fastapi.responses import JSONResponse
 
 from api.shared import ensure_web_or_device_access, logger
 from core.auth import is_admin_authorized, require_admin, validate_mac_param
-from core.config_store import activate_config, get_active_config, get_config_history, save_config, update_device_state
+from core.config_store import (
+    activate_config,
+    get_active_config,
+    get_config_history,
+    save_config,
+    set_pending_refresh,
+    update_device_state,
+)
 from core.schemas import ConfigRequest, ConfigSaveResponse
 
 router = APIRouter(tags=["config"])
@@ -42,6 +49,7 @@ async def post_config(
     )
     config_id = await save_config(mac, data)
     await update_device_state(mac, runtime_mode="interval")
+    await set_pending_refresh(mac, True)
 
     saved_config = await get_active_config(mac)
     if saved_config:

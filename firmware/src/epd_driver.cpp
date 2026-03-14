@@ -247,6 +247,29 @@ void epdSleep() {
   #include <gdey/GxEPD2_290_GDEY029T94.h>
   GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT> display(
       GxEPD2_290_GDEY029T94(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
+  static uint8_t rotated_buffer[IMG_BUF_LEN];
+
+  static bool is_black_pixel(const uint8_t* buffer, int width, int x, int y) {
+      int row_bytes = (width + 7) / 8;
+      return (buffer[y * row_bytes + x / 8] & (0x80 >> (x % 8))) == 0;
+  }
+
+  static void set_black_pixel(uint8_t* buffer, int width, int x, int y) {
+      int row_bytes = (width + 7) / 8;
+      buffer[y * row_bytes + x / 8] &= ~(0x80 >> (x % 8));
+  }
+
+  static void rotate_landscape_to_panel(const uint8_t* source) {
+      memset(rotated_buffer, 0xFF, sizeof(rotated_buffer));
+      for (int src_y = 0; src_y < H; src_y++) {
+          for (int src_x = 0; src_x < W; src_x++) {
+              if (!is_black_pixel(source, W, src_x, src_y)) continue;
+              int dst_x = src_y;
+              int dst_y = W - 1 - src_x;
+              set_black_pixel(rotated_buffer, GxEPD2_290_GDEY029T94::WIDTH, dst_x, dst_y);
+          }
+      }
+  }
 #elif defined(EPD_PANEL_583)
   #include <gdeq/GxEPD2_583_GDEQ0583T31.h>
   GxEPD2_BW<GxEPD2_583_GDEQ0583T31, GxEPD2_583_GDEQ0583T31::HEIGHT / 4> display(
@@ -269,7 +292,7 @@ void gpioInit() {
 void epdInit() {
     if (!_initialized) {
         display.init(0);
-        display.setRotation(0);
+        display.setRotation(1);
         _initialized = true;
     }
 }
@@ -280,24 +303,67 @@ void epdInitFast() {
 
 void epdDisplay(const uint8_t *image) {
     epdInit();
+#if defined(EPD_PANEL_29)
+    rotate_landscape_to_panel(image);
+    display.writeImage(
+        rotated_buffer,
+        0,
+        0,
+        GxEPD2_290_GDEY029T94::WIDTH,
+        GxEPD2_290_GDEY029T94::HEIGHT,
+        false,
+        false,
+        false
+    );
+#else
     display.writeImage(image, 0, 0, W, H, false, false, true);
+#endif
     display.refresh(false);
     display.powerOff();
 }
 
 void epdDisplayFast(const uint8_t *image) {
     epdInit();
+#if defined(EPD_PANEL_29)
+    rotate_landscape_to_panel(image);
+    display.writeImage(
+        rotated_buffer,
+        0,
+        0,
+        GxEPD2_290_GDEY029T94::WIDTH,
+        GxEPD2_290_GDEY029T94::HEIGHT,
+        false,
+        false,
+        false
+    );
+#else
     display.writeImage(image, 0, 0, W, H, false, false, true);
+#endif
     display.refresh(true);
     display.powerOff();
 }
 
 void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd) {
     epdInit();
+#if defined(EPD_PANEL_29)
+    rotate_landscape_to_panel(imgBuf);
+    display.writeImage(
+        rotated_buffer,
+        0,
+        0,
+        GxEPD2_290_GDEY029T94::WIDTH,
+        GxEPD2_290_GDEY029T94::HEIGHT,
+        false,
+        false,
+        false
+    );
+    display.refresh(true);
+#else
     int w = xEnd - xStart;
     int h = yEnd - yStart;
     display.writeImage(data, xStart, yStart, w, h, false, false, true);
     display.refresh(xStart, yStart, w, h);
+#endif
     display.powerOff();
 }
 

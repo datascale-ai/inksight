@@ -134,6 +134,17 @@ void saveUserConfig(const String &configJson) {
     cfgConfigJson = configJson;
 }
 
+void saveSleepMin(int minutes) {
+    if (minutes < 10) minutes = 10;
+    if (minutes > 1440) minutes = 1440;
+    if (cfgSleepMin == minutes) return;
+    prefs.begin("inksight", false);
+    prefs.putInt("cfg_version", CONFIG_VERSION);
+    prefs.putInt("sleep_min", minutes);
+    prefs.end();
+    cfgSleepMin = minutes;
+}
+
 // ── Device token ────────────────────────────────────────────
 
 void saveDeviceToken(const String &token) {

@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
@@ -249,6 +250,37 @@ def draw_status_bar(
     scale = screen_w / 400.0
     font_cn = load_font("noto_serif_extralight", int(FONT_SIZES["status_bar"]["cn"] * scale))
     font_en = load_font("inter_medium", int(FONT_SIZES["status_bar"]["en"] * scale))
+    period_font_size = max(9, int(FONT_SIZES["status_bar"]["cn"] * scale))
+    period_font = _load_bitmap_font("NotoSerifSC-Regular", period_font_size)
+    if period_font is None:
+        period_font = load_font("noto_serif_regular", period_font_size)
+
+    match = re.match(r"^\s*(\d{1,2})\s*:", time_str or "")
+    hour = datetime.now().hour
+    if match:
+        try:
+            parsed_hour = int(match.group(1))
+            if 0 <= parsed_hour <= 23:
+                hour = parsed_hour
+        except ValueError:
+            pass
+
+    if hour >= 23 or hour < 2:
+        period_label = "深夜"
+    elif hour < 5:
+        period_label = "凌晨"
+    elif hour < 8:
+        period_label = "早晨"
+    elif hour < 12:
+        period_label = "上午"
+    elif hour < 14:
+        period_label = "中午"
+    elif hour < 18:
+        period_label = "下午"
+    elif hour < 20:
+        period_label = "傍晚"
+    else:
+        period_label = "夜晚"
 
     # Tighter padding on small screens
     pad_pct = 0.02 if screen_h < 200 else 0.03
@@ -256,10 +288,9 @@ def draw_status_bar(
     pad_x = int(screen_w * pad_pct)
     y = pad_y
     x = pad_x
-    if time_str:
-        draw.text((x, y), time_str, fill=EINK_FG, font=font_cn)
-        bbox_time = draw.textbbox((0, 0), time_str, font=font_cn)
-        x += (bbox_time[2] - bbox_time[0]) + int(8 * scale)
+    draw.text((x, y), period_label, fill=EINK_FG, font=period_font)
+    bbox_period = draw.textbbox((0, 0), period_label, font=period_font)
+    x += (bbox_period[2] - bbox_period[0]) + int(8 * scale)
     draw.text((x, y), date_str, fill=EINK_FG, font=font_cn)
 
     wx = screen_w // 2 - int(28 * scale)

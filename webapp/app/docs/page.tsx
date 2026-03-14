@@ -157,8 +157,8 @@ export default async function DocsPage() {
 git clone https://github.com/datascale-ai/inksight.git
 cd inksight/firmware
 
-# 编译并烧录固件（默认 4.2 寸屏，其他尺寸可选 epd_29 / epd_583 / epd_75）
-pio run -e epd_42 --target upload
+# 编译并烧录固件（默认 4.2 寸屏 C3，其他尺寸可选 epd_29_c3 / epd_583_c3 / epd_75_c3）
+pio run -e epd_42_c3 --target upload
 
 # 查看串口日志（验证固件运行正常）
 pio device monitor`}</code>

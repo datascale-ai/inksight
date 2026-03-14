@@ -49,6 +49,7 @@ static DeviceContext ctx;
 
 // Content dedup — skip display refresh when content unchanged
 static uint32_t lastContentChecksum = 0;
+static int lastRenderedPeriod = -1;
 
 static uint32_t computeChecksum(const uint8_t *buf, int len) {
     uint32_t sum = 0;
@@ -182,15 +183,14 @@ void setup() {
     // Success - reset retry counter
     resetRetryCount();
 
-    Serial.println("Displaying image...");
-    smartDisplay(imgBuf);
     cacheSave(imgBuf, IMG_BUF_LEN);
     lastContentChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
+    syncNTP();
+    Serial.println("Displaying image...");
+    smartDisplay(imgBuf);
     ledFeedback("success");
     Serial.println("Display done");
-
-    syncNTP();
-    updateTimeDisplay();
+    lastRenderedPeriod = currentPeriodIndex();
     ctx.lastClockTick = millis();
 
     bool firstInstallLivePending = isFirstInstallLiveModePending();
@@ -267,8 +267,12 @@ void loop() {
         ctx.lastClockTick += 1000UL;
         timeChanged = true;
     }
-    if (timeChanged) {
-        updateTimeDisplay();
+    if (timeChanged && cfgSleepMin > 180) {
+        int currentPeriod = currentPeriodIndex();
+        if (currentPeriod != lastRenderedPeriod) {
+            updateTimeDisplay();
+            lastRenderedPeriod = currentPeriod;
+        }
     }
 
     if (!ctx.liveMode) {
@@ -333,11 +337,11 @@ static void handleFailure(const char *reason) {
         const int offlineX = W - offlineWidth - 4;
         const int offlineY = (H * 12 / 100) + 2;
         drawText("OFFLINE", offlineX, offlineY, offlineScale);
+        syncNTP();
         smartDisplay(imgBuf);
         ledFeedback("success");
-
-        syncNTP();
         updateTimeDisplay();
+        lastRenderedPeriod = currentPeriodIndex();
         ctx.lastClockTick = millis();
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
@@ -440,6 +444,7 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi) {
             cacheSave(imgBuf, IMG_BUF_LEN);
 
             uint32_t newChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
+            syncNTP();
             if (newChecksum == lastContentChecksum && !nextMode) {
                 Serial.println("Content unchanged, skipping display refresh");
                 ledFeedback("success");
@@ -451,8 +456,7 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi) {
                 Serial.println("Display done");
             }
 
-            syncNTP();
-            updateTimeDisplay();
+            lastRenderedPeriod = currentPeriodIndex();
             ctx.lastClockTick = millis();
         } else {
             ledFeedback("fail");

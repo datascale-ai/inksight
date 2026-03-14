@@ -1243,6 +1243,62 @@ async def activate_config(mac: str, config_id: int) -> bool:
     return True
 
 
+async def remove_mode_from_all_configs(mode_id: str, mac: str | None = None) -> int:
+    normalized_mode_id = str(mode_id or "").strip().upper()
+    if not normalized_mode_id:
+        return 0
+    db = await get_main_db()
+    if mac:
+        cursor = await db.execute(
+            """
+            SELECT id, modes, mode_overrides
+            FROM configs
+            WHERE mac = ? AND (modes LIKE ? OR mode_overrides LIKE ?)
+            """,
+            (mac.upper(), f"%{normalized_mode_id}%", f"%{normalized_mode_id}%"),
+        )
+    else:
+        cursor = await db.execute(
+            "SELECT id, modes, mode_overrides FROM configs WHERE modes LIKE ? OR mode_overrides LIKE ?",
+            (f"%{normalized_mode_id}%", f"%{normalized_mode_id}%"),
+        )
+    rows = await cursor.fetchall()
+    updated = 0
+    for config_id, modes_raw, overrides_raw in rows:
+        modes = [
+            m.strip().upper()
+            for m in str(modes_raw or "").split(",")
+            if m.strip() and m.strip().upper() != normalized_mode_id
+        ]
+        if not modes:
+            modes = list(DEFAULT_MODES)
+
+        try:
+            overrides = json.loads(overrides_raw) if isinstance(overrides_raw, str) else overrides_raw
+        except (json.JSONDecodeError, TypeError):
+            overrides = {}
+        if not isinstance(overrides, dict):
+            overrides = {}
+        cleaned_overrides = {
+            str(key).strip().upper(): value
+            for key, value in overrides.items()
+            if str(key).strip().upper() != normalized_mode_id
+        }
+
+        await db.execute(
+            "UPDATE configs SET modes = ?, mode_overrides = ? WHERE id = ?",
+            (
+                ",".join(modes),
+                json.dumps(cleaned_overrides, ensure_ascii=False),
+                config_id,
+            ),
+        )
+        updated += 1
+    if updated:
+        await db.commit()
+    return updated
+
+
 # ── Device state (cycle_index, pending_refresh, etc.) ──────
 
 

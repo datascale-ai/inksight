@@ -3,16 +3,29 @@
 
 #include <Arduino.h>
 
-// ── Pin mapping (ESP32-C3 -> E-Ink) ─────────────────────────
-#define PIN_EPD_MOSI   6   // SPI data (DIN)
-#define PIN_EPD_SCK    4   // SPI clock (CLK)
-#define PIN_EPD_CS     7   // Chip select
-#define PIN_EPD_DC     1   // Data/Command select
-#define PIN_EPD_RST    2   // Reset
-#define PIN_EPD_BUSY   10  // Busy signal
-#define PIN_BAT_ADC    0   // Battery voltage ADC
-#define PIN_CFG_BTN    9   // GPIO9 (BOOT button) - hold to force config portal
-#define PIN_LED        3   // Status LED (optional, connect LED+resistor to GPIO3)
+#if defined(BOARD_PROFILE_ESP32_C3)
+#define PIN_EPD_MOSI   6
+#define PIN_EPD_SCK    4
+#define PIN_EPD_CS     7
+#define PIN_EPD_DC     1
+#define PIN_EPD_RST    2
+#define PIN_EPD_BUSY   10
+#define PIN_BAT_ADC    0
+#define PIN_CFG_BTN    9
+#define PIN_LED        3
+#elif defined(BOARD_PROFILE_ESP32_WROOM32E)
+#define PIN_EPD_MOSI   14
+#define PIN_EPD_SCK    13
+#define PIN_EPD_CS     15
+#define PIN_EPD_DC     27
+#define PIN_EPD_RST    26
+#define PIN_EPD_BUSY   25
+#define PIN_BAT_ADC    35
+#define PIN_CFG_BTN    0
+#define PIN_LED        2
+#else
+#error "Unsupported board profile"
+#endif
 
 // ── Display constants ────────────────────────────────────────
 // Default for 4.2" E-Paper (400x300, 1-bit).

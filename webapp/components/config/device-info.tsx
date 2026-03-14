@@ -48,12 +48,6 @@ export function DeviceInfo({
           {tr("返回设备列表", "Back to Device List")}
         </Link>
       </p>
-      <p className="text-xs text-ink-light">
-        {tr(
-          "主配置入口位于当前 WebApp；webconfig 仅保留给诊断、预览和模式编辑。",
-          "This web app is the primary configuration surface; webconfig is reserved for diagnostics, preview, and mode authoring.",
-        )}
-      </p>
     </div>
   );
 }

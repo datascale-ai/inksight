@@ -233,37 +233,133 @@ void showError(const char *msg) {
 // Time state (shared with network module)
 extern int curHour, curMin, curSec;
 
-void updateTimeDisplay() {
-    int rgnW = (TIME_RGN_X1 - TIME_RGN_X0) / 8;
-    int rgnH = TIME_RGN_Y1 - TIME_RGN_Y0;
-    uint8_t partBuf[rgnW * rgnH];
-    memset(partBuf, 0xFF, sizeof(partBuf));
+static const uint16_t GLYPH_SHEN[16] = {
+    0x33FE, 0x1A02, 0x04D4, 0x4988, 0x2964, 0x3244, 0x1446, 0x17F8,
+    0x20D0, 0x20D0, 0x6148, 0x2246, 0x2443, 0x2840, 0x0000, 0x0000,
+};
 
-    char ts[9];
-    snprintf(ts, sizeof(ts), "%02d:%02d:%02d", curHour, curMin, curSec);
+static const uint16_t GLYPH_YE[16] = {
+    0x0200, 0x0180, 0x0086, 0x7F78, 0x0CC0, 0x08FC, 0x1104, 0x1948,
+    0x3328, 0x5290, 0x1490, 0x1060, 0x1070, 0x119C, 0x1607, 0x0000,
+};
 
-    int charW = 5;
-    int gap = 1;
-    int sx = TIME_TEXT_X - TIME_RGN_X0;
-    int sy = TIME_TEXT_Y - TIME_RGN_Y0;
-    if (sx < 0) sx = 0;
-    if (sy < 0) sy = 0;
+static const uint16_t GLYPH_LING[16] = {
+    0x4060, 0x2044, 0x1BFA, 0x0842, 0x0FFE, 0x1188, 0x1306, 0x24CA,
+    0x21FC, 0x6318, 0x2490, 0x2060, 0x21B8, 0x2E0F, 0x0000, 0x0000,
+};
 
-    for (int ci = 0; ci < 8; ci++) {
-        const uint8_t *g = getGlyph(ts[ci]);
-        int cx = sx + ci * (charW + gap);
-        for (int col = 0; col < 5; col++) {
-            for (int row = 0; row < 7; row++) {
-                if (g[col] & (1 << row)) {
-                    int px = cx + col;
-                    int py = sy + row;
-                    if (px >= 0 && px < rgnW * 8 && py >= 0 && py < rgnH)
-                        partBuf[py * rgnW + px / 8] &= ~(0x80 >> (px % 8));
-                }
-            }
+static const uint16_t GLYPH_CHEN[16] = {
+    0x1FFC, 0x1008, 0x1FF8, 0x1008, 0x1FF8, 0x3FFE, 0x2000, 0x2FF8,
+    0x2004, 0x3FFA, 0x248C, 0x2450, 0x27B8, 0x4C0E, 0x0000, 0x0000,
+};
+
+static const uint16_t GLYPH_ZAO[16] = {
+    0x1008, 0x1FFC, 0x1008, 0x1FF8, 0x1008, 0x1008, 0x1FF8, 0x1188,
+    0x0184, 0x7FFE, 0x0180, 0x0180, 0x0180, 0x0180, 0x0000, 0x0000,
+};
+
+static const uint16_t GLYPH_SHANG[16] = {
+    0x0180, 0x0100, 0x0100, 0x0100, 0x0100, 0x01FC, 0x0100, 0x0100,
+    0x0100, 0x0100, 0x0100, 0x0100, 0x7FFE, 0x0000, 0x0000, 0x0000,
+};
+
+static const uint16_t GLYPH_WU[16] = {
+    0x0800, 0x0C00, 0x0808, 0x1FFC, 0x1180, 0x2180, 0x4180, 0x0184,
+    0x7FFE, 0x0180, 0x0180, 0x0180, 0x0180, 0x0180, 0x0180, 0x0000,
+};
+
+static const uint16_t GLYPH_ZHONG[16] = {
+    0x0180, 0x0100, 0x2104, 0x3FFE, 0x2104, 0x2104, 0x2104, 0x3FFC,
+    0x2104, 0x2100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0000, 0x0000,
+};
+
+static const uint16_t GLYPH_XIA[16] = {
+    0x0006, 0x7FFE, 0x0100, 0x0100, 0x0180, 0x0160, 0x0130, 0x0108,
+    0x0104, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0000, 0x0000,
+};
+
+static const uint16_t GLYPH_BANG[16] = {
+    0x0C40, 0x1EF6, 0x1108, 0x1090, 0x37BE, 0x3443, 0x5824, 0x97FE,
+    0x1080, 0x10FC, 0x1088, 0x1108, 0x1208, 0x1478, 0x0000, 0x0000,
+};
+
+static const uint16_t GLYPH_WAN[16] = {
+    0x00C0, 0x7CF8, 0x4910, 0x4A24, 0x4BFE, 0x7D24, 0x4924, 0x49EC,
+    0x4934, 0x4850, 0x7850, 0x4892, 0x0312, 0x0C1F, 0x0000, 0x0000,
+};
+
+int currentPeriodIndex() {
+    if (curHour >= 23 || curHour < 2) return 0;
+    if (curHour < 5) return 1;
+    if (curHour < 8) return 2;
+    if (curHour < 12) return 3;
+    if (curHour < 14) return 4;
+    if (curHour < 18) return 5;
+    if (curHour < 20) return 6;
+    return 7;
+}
+
+static void periodGlyphs(int period, const uint16_t **left, const uint16_t **right) {
+    switch (period) {
+        case 0: *left = GLYPH_SHEN;  *right = GLYPH_YE;    return;
+        case 1: *left = GLYPH_LING;  *right = GLYPH_CHEN;  return;
+        case 2: *left = GLYPH_ZAO;   *right = GLYPH_CHEN;  return;
+        case 3: *left = GLYPH_SHANG; *right = GLYPH_WU;    return;
+        case 4: *left = GLYPH_ZHONG; *right = GLYPH_WU;    return;
+        case 5: *left = GLYPH_XIA;   *right = GLYPH_WU;    return;
+        case 6: *left = GLYPH_BANG;  *right = GLYPH_WAN;   return;
+        default: *left = GLYPH_YE;   *right = GLYPH_WAN;   return;
+    }
+}
+
+static void drawGlyph16(uint8_t *buffer, int width, int height, int x, int y, const uint16_t *glyph) {
+    int rowBytes = (width + 7) / 8;
+    for (int row = 0; row < 16; row++) {
+        int py = y + row;
+        if (py < 0 || py >= height) continue;
+        uint16_t bits = glyph[row];
+        for (int col = 0; col < 16; col++) {
+            if ((bits & (1 << (15 - col))) == 0) continue;
+            int px = x + col;
+            if (px < 0 || px >= width) continue;
+            buffer[py * rowBytes + px / 8] &= ~(0x80 >> (px % 8));
         }
     }
+}
 
+static void drawPeriodLabel(
+    uint8_t *buffer,
+    int bufferWidth,
+    int bufferHeight,
+    int regionX,
+    int regionY,
+    int regionWidth,
+    int regionHeight
+) {
+    const uint16_t *left = nullptr;
+    const uint16_t *right = nullptr;
+    periodGlyphs(currentPeriodIndex(), &left, &right);
+
+    const int glyphW = 16;
+    const int glyphH = 16;
+    const int gap = 2;
+    int startX = regionX + (regionWidth - (glyphW * 2 + gap)) / 2;
+    int startY = regionY + (regionHeight - glyphH) / 2;
+    if (startX < 0) startX = 0;
+    if (startY < 0) startY = 0;
+
+    drawGlyph16(buffer, bufferWidth, bufferHeight, startX, startY, left);
+    drawGlyph16(buffer, bufferWidth, bufferHeight, startX + glyphW + gap, startY, right);
+}
+
+void updateTimeDisplay() {
+    int rgnPixelW = TIME_RGN_X1 - TIME_RGN_X0;
+    int rgnW = rgnPixelW / 8;
+    int rgnH = TIME_RGN_Y1 - TIME_RGN_Y0;
+    drawPeriodLabel(imgBuf, W, H, TIME_RGN_X0, TIME_RGN_Y0, rgnPixelW, rgnH);
+    uint8_t partBuf[rgnW * rgnH];
+    memset(partBuf, 0xFF, sizeof(partBuf));
+    drawPeriodLabel(partBuf, rgnPixelW, rgnH, 0, 0, rgnPixelW, rgnH);
     epdPartialDisplay(partBuf, TIME_RGN_X0, TIME_RGN_Y0, TIME_RGN_X1, TIME_RGN_Y1);
 }
 
