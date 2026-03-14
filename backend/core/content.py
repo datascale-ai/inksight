@@ -526,7 +526,7 @@ Hacker News Top 3:
         return insight
     except _LLM_RECOVERABLE_ERRORS as e:
         logger.error(f"[BRIEFING] Failed to generate insight: {e}")
-        return "今日科技圈依然精彩，开发者们在不断探索新的可能性。"
+        return None  # 返回 None 表示失败
 
 
 async def summarize_briefing_content(
@@ -616,7 +616,7 @@ async def summarize_briefing_content(
 
     except _LLM_RECOVERABLE_ERRORS + (json.JSONDecodeError, TypeError) as e:
         logger.error(f"[BRIEFING] Batch summarize failed, returning originals: {e}")
-        return stories, ph_product
+        return None, None  
 
 
 async def generate_briefing_content(

@@ -116,7 +116,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
             params.v,
             mac,
             params.persona,
@@ -265,7 +265,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
             effective_v,
             mac,
             persona,
@@ -310,7 +310,7 @@ async def preview(
         logger.info("[PREVIEW] Generated PNG persona=%s size=%sx%s", resolved_persona, w, h)
         
         # 确定生成状态（使用英文避免编码问题）
-        status_msg = "model_generated" if not _content_fallback else "fallback_used"
+        status_msg = "no_llm_required" if not llm_mode_requires_quota else ("model_generated" if not _content_fallback else "fallback_used")
         
         return Response(
             content=png_bytes,
@@ -319,6 +319,7 @@ async def preview(
                 "X-Cache-Hit": "1" if cache_hit else "0",
                 "X-Preview-Bypass": "1" if no_cache == 1 else "0",
                 "X-Preview-Status": status_msg,
+                "X-Llm-Required": "1" if llm_mode_requires_quota else "0",
             },
         )
     except (OSError, RuntimeError, TypeError, ValueError, UnidentifiedImageError):
@@ -376,7 +377,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
                 effective_v,
                 mac,
                 persona,

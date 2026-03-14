@@ -6,7 +6,7 @@ const backendBase =
 
 function imageHeadersFromUpstream(res: Response, contentType: string): HeadersInit {
   const headers: Record<string, string> = { "content-type": contentType };
-  const passthrough = ["x-cache-hit", "x-preview-bypass", "x-pending-refresh", "x-preview-status"];
+  const passthrough = ["x-cache-hit", "x-preview-bypass", "x-pending-refresh", "x-preview-status", "x-llm-required"];
   for (const key of passthrough) {
     const value = res.headers.get(key);
     if (value !== null) headers[key] = value;

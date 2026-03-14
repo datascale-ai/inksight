@@ -89,8 +89,8 @@ async def auth_register(body: dict, response: Response):
                 (user_id, invite_code),
             )
 
-        # 4) 初始化 API 调用额度（有邀请码给10次，无邀请码给0次）
-        initial_quota = 10 if invite_code else 0
+        # 4) 初始化 API 调用额度（有邀请码给50次，无邀请码给0次）
+        initial_quota = 50 if invite_code else 0
         await db.execute(
             """
             INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
@@ -193,7 +193,7 @@ async def auth_redeem_invite_code(body: dict, user_id: int = Depends(require_use
         await db.execute(
             """
             UPDATE api_quotas
-            SET free_quota_remaining = free_quota_remaining + 10
+            SET free_quota_remaining = free_quota_remaining + 50
             WHERE user_id = ?
             """,
             (user_id,),

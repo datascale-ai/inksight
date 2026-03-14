@@ -755,7 +755,16 @@ async def build_image(
             mac=mac or "",
         )
         if isinstance(content_data, dict):
+            logger.debug(
+                "[BUILD_IMAGE] content_data keys: %s, _is_fallback=%s, _used_fallback=%s, _llm_ok=%s",
+                list(content_data.keys()),
+                content_data.get("_is_fallback"),
+                content_data.get("_used_fallback"),
+                content_data.get("_llm_ok"),
+            )
             if content_data.get("_is_fallback") is True:
+                content_fallback = True
+            elif content_data.get("_used_fallback") is True:
                 content_fallback = True
             else:
                 jm = get_registry().get_json_mode(persona, mac)
@@ -835,7 +844,7 @@ async def build_image(
                 last_refresh_at=datetime.now().isoformat(),
             )
 
-    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid
+    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota
 
 
 async def log_render_stats(

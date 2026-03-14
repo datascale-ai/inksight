@@ -85,7 +85,7 @@ class TestUserRegistration:
         # 5. 验证用户获得了 10 次免费额度
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == 10
+        assert quota["free_quota_remaining"] == 50
         assert quota["total_calls_made"] == 0
 
     @pytest.mark.asyncio
@@ -249,7 +249,7 @@ class TestInviteCodeRedemption:
         # 4. 验证兑换成功
         assert result["ok"] is True
         assert "邀请码兑换成功" in result["message"]
-        assert result["free_quota_remaining"] == 10
+        assert result["free_quota_remaining"] == 50
         
         # 5. 验证邀请码已被标记为使用
         cursor = await db.execute(
@@ -262,7 +262,7 @@ class TestInviteCodeRedemption:
         
         # 6. 验证用户额度已增加
         quota = await get_user_api_quota(user_id)
-        assert quota["free_quota_remaining"] == 10
+        assert quota["free_quota_remaining"] == 50
 
     @pytest.mark.asyncio
     async def test_redeem_invalid_invite_code(self):
@@ -341,10 +341,10 @@ class TestQuotaManagement:
         await init_db()
         user_id = await create_user("quotauser2", "testpass", email="quota@example.com")
         
-        await init_user_api_quota(user_id, free_quota=10)
+        await init_user_api_quota(user_id, free_quota=50)
         
         quota = await get_user_api_quota(user_id)
-        assert quota["free_quota_remaining"] == 10
+        assert quota["free_quota_remaining"] == 50
 
     @pytest.mark.asyncio
     async def test_get_user_api_quota_nonexistent(self):

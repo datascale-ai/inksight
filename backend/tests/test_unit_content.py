@@ -261,8 +261,9 @@ class TestBriefingSummaries:
         with patch("core.content._call_llm", new_callable=AsyncMock, return_value="not-json"):
             summarized_stories, summarized_ph = await summarize_briefing_content(stories, ph)
 
-        assert summarized_stories == stories
-        assert summarized_ph == ph
+        # 当 JSON 解析失败时，应该返回 None, None 表示失败
+        assert summarized_stories is None
+        assert summarized_ph is None
 
 
 class TestRecipeAndArtwallFallbacks:

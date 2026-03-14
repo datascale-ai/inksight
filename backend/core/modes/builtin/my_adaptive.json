@@ -1,0 +1,35 @@
+{
+  "mode_id": "MY_ADAPTIVE",
+  "display_name": "自适应照片",
+  "description": "上传本地照片，自适应墨水屏显示",
+  "icon": "image",
+  "cacheable": false,
+  "content": {
+    "type": "static",
+    "static_data": {
+      "image_url": ""
+    },
+    "fallback": {
+      "image_url": ""
+    }
+  },
+  "layout": {
+    "status_bar": {
+      "line_width": 0
+    },
+    "body": [
+      {
+        "type": "image",
+        "field": "image_url",
+        "width": 400,
+        "height": 270,
+        "x": 0,
+        "y": 0,
+        "margin_bottom": 0
+      }
+    ],
+    "footer": {
+      "line_width": 0
+    }
+  }
+}
