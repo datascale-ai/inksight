@@ -154,17 +154,15 @@ async def get_user_profile(user_id: int = Depends(require_user)):
 async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_user)):
     """保存用户级别的 LLM 配置。"""
     provider = (body.get("provider") or "deepseek").strip()
+    model = (body.get("model") or "").strip()
     api_key = (body.get("api_key") or "").strip()
     base_url = (body.get("base_url") or "").strip()
     image_provider = (body.get("image_provider") or "aliyun").strip()
     image_model = (body.get("image_model") or "").strip()
     image_api_key = (body.get("image_api_key") or "").strip()
     
-<<<<<<< Updated upstream
-    ok = await save_user_llm_config(user_id, provider, api_key, base_url, image_provider, image_api_key)
-=======
     ok = await save_user_llm_config(user_id, provider, model, api_key, base_url, image_provider, image_model, image_api_key)
->>>>>>> Stashed changes
+    ok = await save_user_llm_config(user_id, provider, model, api_key, base_url, image_provider, image_api_key)
     if not ok:
         return JSONResponse({"error": "保存配置失败"}, status_code=500)
     

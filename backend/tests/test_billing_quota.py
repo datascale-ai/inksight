@@ -9,6 +9,7 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from core.config_store import (
     init_db,
@@ -37,60 +38,11 @@ async def use_memory_db(tmp_path):
 
 
 class TestUserRegistration:
-    """测试用户注册功能（包含邀请码机制）"""
-
-    @pytest.mark.asyncio
-    async def test_register_with_valid_invite_code(self):
-        """测试使用有效邀请码注册"""
-        await init_db()
-        db = await get_main_db()
-        
-        # 1. 先创建一个邀请码
-        await db.execute(
-            """
-            INSERT INTO invitation_codes (code, is_used, generated_at)
-            VALUES (?, 0, datetime('now'))
-            """,
-            ("TEST123",),
-        )
-        await db.commit()
-        
-        # 2. 模拟注册请求
-        from api.routes.auth import auth_register
-        from fastapi import Response
-        
-        body = {
-            "username": "testuser",
-            "password": "testpass123",
-            "phone": "13800138000",
-            "invite_code": "TEST123",
-        }
-        response = Response()
-        result = await auth_register(body, response)
-        
-        # 3. 验证注册成功
-        assert result["ok"] is True
-        assert result["username"] == "testuser"
-        user_id = result["user_id"]
-        
-        # 4. 验证邀请码已被标记为使用
-        cursor = await db.execute(
-            "SELECT is_used, used_by_user_id FROM invitation_codes WHERE code = ?",
-            ("TEST123",),
-        )
-        row = await cursor.fetchone()
-        assert row[0] == 1  # is_used
-        assert row[1] == user_id  # used_by_user_id
-        
-        # 5. 验证用户获得了 50 次免费额度
-        quota = await get_user_api_quota(user_id)
-        assert quota is not None
-        assert quota["free_quota_remaining"] == 50
-        assert quota["total_calls_made"] == 0
+    """测试用户注册功能（前端已移除邀请码输入，仅测试无邀请码场景）"""
 
     @pytest.mark.asyncio
     async def test_register_without_invite_code(self):
-        """测试不使用邀请码注册（额度为 0）"""
+        """测试不使用邀请码注册（初始额度为 50）"""
         await init_db()
         
         from api.routes.auth import auth_register
@@ -107,66 +59,11 @@ class TestUserRegistration:
         assert result["ok"] is True
         user_id = result["user_id"]
         
-        # 验证用户额度为 0
+        # 验证用户额度为 50
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == 0
+        assert quota["free_quota_remaining"] == 50
         assert quota["total_calls_made"] == 0
-
-    @pytest.mark.asyncio
-    async def test_register_with_invalid_invite_code(self):
-        """测试使用无效邀请码注册"""
-        await init_db()
-        
-        from api.routes.auth import auth_register
-        from fastapi import Response
-        from fastapi.responses import JSONResponse
-        
-        body = {
-            "username": "testuser3",
-            "password": "testpass123",
-            "phone": "13900139000",
-            "invite_code": "INVALID123",
-        }
-        response = Response()
-        result = await auth_register(body, response)
-        
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
-        assert "邀请码无效" in result.body.decode()
-
-    @pytest.mark.asyncio
-    async def test_register_with_used_invite_code(self):
-        """测试使用已使用的邀请码注册"""
-        await init_db()
-        db = await get_main_db()
-        
-        # 创建并标记邀请码为已使用
-        await db.execute(
-            """
-            INSERT INTO invitation_codes (code, is_used, used_by_user_id, generated_at)
-            VALUES (?, 1, 999, datetime('now'))
-            """,
-            ("USED123",),
-        )
-        await db.commit()
-        
-        from api.routes.auth import auth_register
-        from fastapi import Response
-        from fastapi.responses import JSONResponse
-        
-        body = {
-            "username": "testuser4",
-            "password": "testpass123",
-            "phone": "13700137000",
-            "invite_code": "USED123",
-        }
-        response = Response()
-        result = await auth_register(body, response)
-        
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 409
-        assert "邀请码已被使用" in result.body.decode()
 
     @pytest.mark.asyncio
     async def test_register_phone_email_validation(self):
@@ -525,8 +422,6 @@ class TestQuotaExhaustionHandling:
         # 这个测试应该通过 API 路由测试来完成
         # 见 test_integration.py 或专门的 API 测试文件
         pass
-<<<<<<< Updated upstream
-=======
 
 
 class TestLlmPrecheckBehavior:
@@ -558,16 +453,8 @@ class TestLlmPrecheckBehavior:
 
         # 确保使用平台 Key（即没有用户级 API key）
         async def fake_get_user_llm_config(_user_id: int):
-            # 模拟用户级配置中只设置了文本 provider（无自定义文本/图像 model），与生产逻辑保持字段一致
-            return {
-                "provider": "deepseek",
-                "model": "",
-                "api_key": "",
-                "base_url": "",
-                "image_provider": "aliyun",
-                "image_api_key": "",
-                "image_model": "qwen-image-plus",
-            }
+            # 模拟用户级配置中只设置了 provider（无自定义 model），与生产逻辑保持字段一致
+            return {"provider": "deepseek", "model": "", "api_key": "", "base_url": ""}
 
         # 配额为 0
         async def fake_get_quota(user_id_param: int):
@@ -629,16 +516,8 @@ class TestLlmPrecheckBehavior:
 
         # 使用平台 Key（无用户级 key）
         async def fake_get_user_llm_config(_user_id: int):
-            # 同步 user_llm_config 结构，显式包含文本 model 与图像配置字段
-            return {
-                "provider": "deepseek",
-                "model": "deepseek-chat",
-                "api_key": "",
-                "base_url": "",
-                "image_provider": "aliyun",
-                "image_api_key": "",
-                "image_model": "qwen-image-plus",
-            }
+            # 同步 user_llm_config 结构，显式包含 model 字段
+            return {"provider": "deepseek", "model": "deepseek-chat", "api_key": "", "base_url": ""}
 
         async def fake_get_quota(user_id_param: int):
             assert user_id_param == user_id
@@ -675,5 +554,7 @@ class TestLlmPrecheckBehavior:
         assert resp.status_code == 402
         assert "您的免费额度已用完" in resp.body.decode("utf-8")
         # 关键断言：模式生成的 LLM 调用函数没有被触发
+
         assert called["generate_mode"] is False
->>>>>>> Stashed changes
+
+        assert called["generate_mode"] is False

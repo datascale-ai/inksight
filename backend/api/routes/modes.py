@@ -3,13 +3,14 @@ from __future__ import annotations
 import io
 import json as jsonlib
 from pathlib import Path
+import os
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai import OpenAIError
 
 from api.shared import logger
 from core.auth import require_admin, require_user, optional_user
-from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
+from core.config import SCREEN_HEIGHT, SCREEN_WIDTH, get_default_llm_model_for_provider
 from core.config_store import remove_mode_from_all_configs
 from core.context import get_date_context, get_weather
 from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def, get_registry
@@ -25,6 +26,12 @@ from core.config_store import (
 )
 
 router = APIRouter(tags=["modes"])
+
+
+def _billing_enabled() -> bool:
+    """全局计费开关：INKSIGHT_BILLING_ENABLED=0 时关闭额度检查与扣费。"""
+    value = os.getenv("INKSIGHT_BILLING_ENABLED", "1").strip().lower()
+    return value not in ("0", "false", "no", "off")
 
 
 @router.get("/modes")
@@ -136,6 +143,8 @@ async def custom_mode_preview(
     # 解析 API key：优先使用用户级别配置，其次使用设备配置中的加密 key
     user_api_key = None
     user_image_api_key = None
+    user_llm_provider = None
+    user_llm_model = None
     if user_id is not None:
         try:
             from core.config_store import get_user_llm_config
@@ -147,28 +156,12 @@ async def custom_mode_preview(
         if user_cfg:
             user_api_key = (user_cfg.get("api_key") or "").strip() or None
             user_image_api_key = (user_cfg.get("image_api_key") or "").strip() or None
+            user_llm_provider = (user_cfg.get("provider") or "").strip() or None
+            user_llm_model = (user_cfg.get("model") or "").strip() or None
 
+    # 注意：不再从设备配置读取 API key，只使用用户级别的配置（user_llm_config 表）
     device_api_key = None
     device_image_api_key = None
-    mac = body.get("mac")
-
-    from core.config_store import get_active_config
-
-    if mac:
-        config = await get_active_config(mac)
-        if config:
-            encrypted_key = config.get("llm_api_key", "")
-            if encrypted_key:
-                from core.crypto import decrypt_api_key
-
-                decrypted = decrypt_api_key(encrypted_key)
-                device_api_key = (decrypted or "").strip() or ""
-            encrypted_image_key = config.get("image_api_key", "")
-            if encrypted_image_key:
-                from core.crypto import decrypt_api_key
-
-                decrypted = decrypt_api_key(encrypted_image_key)
-                device_image_api_key = (decrypted or "").strip() or ""
 
     try:
         from core.json_content import generate_json_mode_content
@@ -179,11 +172,6 @@ async def custom_mode_preview(
         quota_user_id: int | None = None
         if user_id is not None:
             quota_user_id = user_id
-        elif mac:
-            try:
-                quota_user_id = await get_quota_owner_for_mac(mac)
-            except Exception:
-                quota_user_id = None
 
         # 是否使用用户自带 API Key（profile / 设备配置），为 True 时不扣费不拦截额度
         # effective_api_key 为 None 表示将会走环境变量中的“平台 Key”，此时需要按照免费额度计费
@@ -191,8 +179,48 @@ async def custom_mode_preview(
         effective_image_api_key = user_image_api_key if user_image_api_key is not None else device_image_api_key
         using_user_key = effective_api_key is not None
 
+        # 解析当前自定义模式是否“需要 LLM”（与 shared.build_image 中的判定保持一致）
+        llm_mode_requires_quota = False
+        try:
+            content_def = (mode_def.get("content") or {}) if isinstance(mode_def, dict) else {}
+            ctype = content_def.get("type")
+            if ctype in ("llm", "llm_json", "image_gen"):
+                llm_mode_requires_quota = True
+            elif ctype == "external_data":
+                provider = content_def.get("provider", "")
+                if provider == "briefing":
+                    summarize = content_def.get("summarize", True)
+                    include_insight = content_def.get("include_insight", True)
+                    if summarize or include_insight:
+                        llm_mode_requires_quota = True
+            elif ctype == "composite":
+                steps = content_def.get("steps", [])
+                if isinstance(steps, list):
+                    for step in steps:
+                        if not isinstance(step, dict):
+                            continue
+                        step_type = step.get("type")
+                        if step_type in ("llm", "llm_json", "image_gen"):
+                            llm_mode_requires_quota = True
+                            break
+                        if step_type == "external_data":
+                            step_provider = step.get("provider", "")
+                            if step_provider == "briefing":
+                                step_summarize = step.get("summarize", True)
+                                step_include_insight = step.get("include_insight", True)
+                                if step_summarize or step_include_insight:
+                                    llm_mode_requires_quota = True
+                                    break
+        except Exception:
+            logger.warning("[CUSTOM_PREVIEW] Failed to detect llm requirements for custom mode", exc_info=True)
+
         # 额度不足拦截：只有在使用平台 Key 且存在 quota_user_id 时才检查
-        if quota_user_id is not None and not using_user_key:
+        if (
+            _billing_enabled()
+            and quota_user_id is not None
+            and not using_user_key
+            and llm_mode_requires_quota
+        ):
             try:
                 user_role = await get_user_role(quota_user_id)
             except Exception:
@@ -215,9 +243,30 @@ async def custom_mode_preview(
             weather_str=weather["weather_str"],
             screen_w=screen_w,
             screen_h=screen_h,
+            # 自定义模式预览中的 LLM 调用也优先使用用户配置的 provider + API key
+            llm_provider=user_llm_provider,
+            llm_model=user_llm_model,
             api_key=effective_api_key,
             image_api_key=effective_image_api_key,
         )
+
+        # 额度扣减：仅在使用平台 Key、模式需要 LLM 且本次确实成功调用 LLM 时扣费，root 用户豁免
+        if (
+            _billing_enabled()
+            and quota_user_id is not None
+            and not using_user_key
+            and llm_mode_requires_quota
+            and isinstance(content, dict)
+            and content.get("_llm_used") is True
+            and content.get("_llm_ok") is True
+        ):
+            try:
+                user_role = await get_user_role(quota_user_id)
+            except Exception:
+                user_role = None
+            if user_role != "root":
+                await consume_user_free_quota(quota_user_id, amount=1)
+
         if response_type == "json":
             return {
                 "ok": True,
@@ -233,15 +282,6 @@ async def custom_mode_preview(
             screen_w=screen_w,
             screen_h=screen_h,
         )
-
-        # 额度扣减：仅在使用平台 Key 时扣费，且 root 用户豁免
-        if quota_user_id is not None and not using_user_key:
-            try:
-                user_role = await get_user_role(quota_user_id)
-            except Exception:
-                user_role = None
-            if user_role != "root":
-                await consume_user_free_quota(quota_user_id, amount=1)
 
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -398,8 +438,10 @@ async def generate_mode(
     if image_base64 and len(image_base64) > 5 * 1024 * 1024:
         return JSONResponse({"error": "image too large (max 4MB)"}, status_code=400)
 
-    # 解析 API key：优先使用用户级别配置，其次使用设备配置中的加密 key
+    # 解析 API key & provider：优先使用用户级别配置，其次使用 body 中的显式指定
     user_api_key = None
+    user_llm_provider = None
+    user_llm_model = None
     if user_id is not None:
         try:
             from core.config_store import get_user_llm_config
@@ -410,36 +452,21 @@ async def generate_mode(
             logger.warning("[MODE_GEN] Failed to load user_llm_config for user_id=%s", user_id, exc_info=True)
         if user_cfg:
             user_api_key = (user_cfg.get("api_key") or "").strip() or None
+            user_llm_provider = (user_cfg.get("provider") or "").strip() or None
+            # 这里不再根据 provider 推默认模型，而是尊重用户在 profile 中配置的 model；
+            # 如果用户没有配置 model，则在后面通过 base_model 统一回退到默认。
+            user_llm_model = (user_cfg.get("model") or "").strip() or None
 
-    device_api_key = None
-    mac = body.get("mac")
-    if mac:
-        from core.config_store import get_active_config
-
-        config = await get_active_config(mac)
-        if config:
-            encrypted_key = config.get("llm_api_key", "")
-            if encrypted_key:
-                from core.crypto import decrypt_api_key
-
-                decrypted = decrypt_api_key(encrypted_key)
-                # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
-                device_api_key = (decrypted or "").strip() or ""
-
-    effective_api_key = user_api_key if user_api_key is not None else device_api_key
+    # 注意：不再从设备配置读取 API key，只使用用户级别的配置（user_llm_config 表）
+    effective_api_key = user_api_key
     using_user_key = effective_api_key is not None
 
     # ── 额度检查（AI 生成模式同样按照 BILLING.md 计费） ──────────────────────────
     quota_user_id: int | None = None
     if user_id is not None:
         quota_user_id = user_id
-    elif mac:
-        try:
-            quota_user_id = await get_quota_owner_for_mac(mac)
-        except Exception:
-            quota_user_id = None
 
-    if quota_user_id is not None and not using_user_key:
+    if _billing_enabled() and quota_user_id is not None and not using_user_key:
         try:
             user_role = await get_user_role(quota_user_id)
         except Exception:
@@ -456,15 +483,42 @@ async def generate_mode(
     from core.mode_generator import generate_mode_definition
 
     try:
+        # 生成模式定义时，LLM provider/model **必须用户优先**：
+        # 1. 优先使用用户级配置（profile 中的 provider / model）
+        # 2. 其次 body 中显式指定的 provider / model
+        # 3. 最后根据最终 provider 选择默认模型
+        provider_from_body = (body.get("provider") or "").strip() or None
+        model_from_body = (body.get("model") or "").strip() or None
+
+        # provider：用户配置 > body > 默认 "deepseek"
+        effective_provider = user_llm_provider or provider_from_body or "deepseek"
+
+        # model：用户配置 > body > 根据最终 provider 选择默认模型
+        base_model = get_default_llm_model_for_provider(effective_provider)
+        effective_model = user_llm_model or model_from_body or base_model
+
+        # 临时调试日志：查看实际使用的 provider/model 以及 user_cfg
+        logger.info(
+            "[GENERATE_MODE_DEBUG] user_id=%s user_cfg=%s body_provider=%s body_model=%s "
+            "effective_provider=%s effective_model=%s using_user_key=%s",
+            user_id,
+            user_cfg,
+            provider_from_body,
+            model_from_body,
+            effective_provider,
+            effective_model,
+            using_user_key,
+        )
+
         result = await generate_mode_definition(
             description=description,
             image_base64=image_base64,
-            provider=body.get("provider", "deepseek"),
-            model=body.get("model", "deepseek-chat"),
+            provider=effective_provider,
+            model=effective_model,
             api_key=effective_api_key,
         )
         # 成功后扣费（仅平台 Key，root 用户豁免）
-        if quota_user_id is not None and not using_user_key:
+        if _billing_enabled() and quota_user_id is not None and not using_user_key:
             try:
                 user_role = await get_user_role(quota_user_id)
             except Exception:

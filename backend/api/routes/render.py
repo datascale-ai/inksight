@@ -310,7 +310,7 @@ async def preview(
                 status_code=400,  # Bad Request
                 content={
                     "error": "api_key_invalid",
-                    "message": "您提供的 API key 无效或已过期，请检查设备配置中的 AI 配置",
+                    "message": "您提供的 API key 无效或已过期，请检查个人信息或服务器中的 API key 配置",
                 },
             )
         # 如果额度耗尽，返回 JSON 响应，让前端显示邀请码输入弹窗
@@ -421,7 +421,7 @@ async def preview_stream(
             if api_key_invalid:
                 yield _sse_event("error", {
                     "error": "api_key_invalid",
-                    "message": "您提供的 API key 无效或已过期，请检查设备配置中的 AI 配置",
+                    "message": "您提供的 API key 无效或已过期，请检查个人信息或服务器中的 API key 配置",
                 })
                 return
             # 如果额度耗尽，返回错误事件

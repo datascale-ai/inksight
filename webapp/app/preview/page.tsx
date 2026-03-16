@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, Eye, Loader2 } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Sparkles, LayoutGrid } from "lucide-react";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
@@ -71,6 +71,43 @@ const MODE_META_EN: Record<string, { name: string; tip: string }> = {
 
 const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
 const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m) && m !== "MY_QUOTE");
+
+// 自定义模式模板（与配置页使用的模板保持一致的最小子集）
+type ModeTemplateDef = {
+  mode_id: string;
+  display_name: string;
+  cacheable?: boolean;
+  content?: Record<string, unknown>;
+  layout?: Record<string, unknown>;
+};
+
+const MODE_TEMPLATES: Record<string, { label: string; def: ModeTemplateDef }> = {
+  STOIC: {
+    label: "Stoic Quote (JSON)",
+    def: {
+      mode_id: "STOIC_CUSTOM",
+      display_name: "Stoic Quote",
+      cacheable: true,
+      content: {
+        type: "llm_json",
+        prompt_template:
+          "生成一条斯多葛风格的简短语录（不超过50字），并给出作者和一句话解释，返回 JSON。",
+        output_schema: {
+          quote: { type: "string", default: "阻碍行动的障碍，本身就是行动的路。" },
+          author: { type: "string", default: "马可·奥勒留" },
+          explanation: { type: "string", default: "面对阻碍时，转而把它当作前进的道路本身。" },
+        },
+      },
+      layout: {
+        body: [
+          { type: "text", field: "quote", variant: "large" },
+          { type: "text", field: "author", variant: "small" },
+          { type: "text", field: "explanation", variant: "small" },
+        ],
+      },
+    },
+  },
+};
 
 interface ServerModeItem {
   mode_id: string;
@@ -172,6 +209,9 @@ export default function ExperiencePage() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+
+  // 当前预览对应的大模型调用状态提示（无 / 成功 / 失败使用兜底等）
+  const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
 
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const lastObjectUrlRef = useRef<string | null>(null);
@@ -309,8 +349,7 @@ export default function ExperiencePage() {
       }
     }
 
-    // 普通模式预览时，清除自定义模式标题和状态
-    setCustomPreviewTitle(null);
+    // 普通模式预览时，清除上次 LLM 状态提示
     setPreviewLlmStatus(null);
 
     setPreviewLoading(true);
@@ -502,9 +541,6 @@ export default function ExperiencePage() {
         (typeof def.display_name === "string" && def.display_name.trim()) ||
         (typeof def.mode_id === "string" && def.mode_id.trim()) ||
         "";
-      const finalName = nameFromInput || nameFromDef;
-      setCustomPreviewTitle(finalName || null);
-
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -695,14 +731,21 @@ export default function ExperiencePage() {
                     </div>
                   </div>
                 ) : previewImageUrl ? (
-                  <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
-                    <Image
-                      src={previewImageUrl}
-                      alt={t(locale, "preview.display.alt", "InkSight preview")}
-                      fill
-                      className="object-contain"
-                      unoptimized
-                    />
+                  <div className="flex flex-col items-center gap-2 w-full">
+                    <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
+                      <Image
+                        src={previewImageUrl}
+                        alt={t(locale, "preview.display.alt", "InkSight preview")}
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+                    {previewLlmStatus ? (
+                      <p className="text-[11px] text-ink-light text-center px-4">
+                        {previewLlmStatus}
+                      </p>
+                    ) : null}
                   </div>
                 ) : previewMode === null ? (
                   <div className="flex items-center justify-center w-full">
