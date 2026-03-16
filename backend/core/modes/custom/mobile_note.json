@@ -1,0 +1,30 @@
+{
+  "mode_id": "MOBILE_NOTE",
+  "display_name": "Mobile Note",
+  "icon": "star",
+  "cacheable": true,
+  "description": "created from mobile editor",
+  "content": {
+    "type": "static",
+    "static_data": {
+      "text": "Write with calm intent."
+    }
+  },
+  "layout": {
+    "status_bar": {
+      "line_width": 1
+    },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "text",
+        "font": "noto_serif_regular",
+        "font_size": 18,
+        "vertical_center": true
+      }
+    ],
+    "footer": {
+      "label": "MOBILE"
+    }
+  }
+}

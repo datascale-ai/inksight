@@ -263,6 +263,35 @@ async def init_db():
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_access_requests_mac ON device_access_requests(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_device_access_requests_user ON device_access_requests(requester_user_id)")
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                user_id INTEGER PRIMARY KEY,
+                push_enabled INTEGER DEFAULT 0,
+                push_time TEXT DEFAULT '08:00',
+                push_modes TEXT DEFAULT '[]',
+                widget_mode TEXT DEFAULT 'STOIC',
+                locale TEXT DEFAULT 'zh',
+                timezone TEXT DEFAULT 'Asia/Shanghai',
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS push_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                push_token TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                push_time TEXT DEFAULT '08:00',
+                timezone TEXT DEFAULT 'Asia/Shanghai',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, push_token),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_push_tokens_token ON push_tokens(push_token)")
 
         # Shared modes table for Discover page
         await db.execute("""
@@ -417,6 +446,135 @@ async def get_user_by_username(username: str) -> dict | None:
     if not row:
         return None
     return {"id": row[0], "username": row[1], "password_hash": row[2], "created_at": row[3]}
+
+
+def _parse_json_blob(value: str | None, fallback):
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+    except (json.JSONDecodeError, TypeError):
+        parsed = fallback
+    return parsed if isinstance(parsed, type(fallback)) else fallback
+
+
+def _default_user_preferences(user_id: int) -> dict:
+    return {
+        "user_id": user_id,
+        "push_enabled": False,
+        "push_time": "08:00",
+        "push_modes": [],
+        "widget_mode": "STOIC",
+        "locale": "zh",
+        "timezone": "Asia/Shanghai",
+        "updated_at": "",
+    }
+
+
+async def get_user_preferences(user_id: int) -> dict:
+    db = await get_main_db()
+    cursor = await db.execute(
+        """SELECT user_id, push_enabled, push_time, push_modes, widget_mode, locale, timezone, updated_at
+           FROM user_preferences WHERE user_id = ? LIMIT 1""",
+        (user_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return _default_user_preferences(user_id)
+    return {
+        "user_id": row[0],
+        "push_enabled": bool(row[1]),
+        "push_time": row[2] or "08:00",
+        "push_modes": _parse_json_blob(row[3], []),
+        "widget_mode": (row[4] or "STOIC").upper(),
+        "locale": row[5] or "zh",
+        "timezone": row[6] or "Asia/Shanghai",
+        "updated_at": row[7] or "",
+    }
+
+
+async def save_user_preferences(user_id: int, data: dict) -> dict:
+    current = await get_user_preferences(user_id)
+    now = datetime.now().isoformat()
+    push_enabled = bool(data.get("push_enabled", current["push_enabled"]))
+    push_time = str(data.get("push_time", current["push_time"]) or current["push_time"]).strip()[:5] or "08:00"
+    push_modes = data.get("push_modes", current["push_modes"])
+    if not isinstance(push_modes, list):
+        push_modes = current["push_modes"]
+    push_modes = [str(mode).strip().upper() for mode in push_modes if str(mode).strip()]
+    widget_mode = str(data.get("widget_mode", current["widget_mode"]) or current["widget_mode"]).strip().upper() or "STOIC"
+    locale = str(data.get("locale", current["locale"]) or current["locale"]).strip().lower() or "zh"
+    timezone = str(data.get("timezone", current["timezone"]) or current["timezone"]).strip() or "Asia/Shanghai"
+
+    db = await get_main_db()
+    await db.execute(
+        """
+        INSERT INTO user_preferences
+            (user_id, push_enabled, push_time, push_modes, widget_mode, locale, timezone, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            push_enabled = excluded.push_enabled,
+            push_time = excluded.push_time,
+            push_modes = excluded.push_modes,
+            widget_mode = excluded.widget_mode,
+            locale = excluded.locale,
+            timezone = excluded.timezone,
+            updated_at = excluded.updated_at
+        """,
+        (
+            user_id,
+            int(push_enabled),
+            push_time,
+            json.dumps(push_modes, ensure_ascii=False),
+            widget_mode,
+            locale,
+            timezone,
+            now,
+        ),
+    )
+    await db.commit()
+    return await get_user_preferences(user_id)
+
+
+async def register_push_token(
+    user_id: int,
+    push_token: str,
+    platform: str,
+    timezone: str,
+    push_time: str = "08:00",
+) -> dict:
+    now = datetime.now().isoformat()
+    db = await get_main_db()
+    await db.execute(
+        """
+        INSERT INTO push_tokens
+            (user_id, push_token, platform, push_time, timezone, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, push_token) DO UPDATE SET
+            platform = excluded.platform,
+            push_time = excluded.push_time,
+            timezone = excluded.timezone,
+            updated_at = excluded.updated_at
+        """,
+        (user_id, push_token, platform, push_time, timezone, now, now),
+    )
+    await db.commit()
+    return {
+        "user_id": user_id,
+        "push_token": push_token,
+        "platform": platform,
+        "push_time": push_time,
+        "timezone": timezone,
+        "updated_at": now,
+    }
+
+
+async def unregister_push_token(user_id: int, push_token: str) -> int:
+    db = await get_main_db()
+    cursor = await db.execute(
+        "DELETE FROM push_tokens WHERE user_id = ? AND push_token = ?",
+        (user_id, push_token),
+    )
+    await db.commit()
+    return cursor.rowcount
 
 
 async def authenticate_user(username: str, password: str) -> dict | None:

@@ -13,6 +13,15 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+# Experiment switches (controlled via environment variables)
+DISABLE_CACHE = os.environ.get("INKSIGHT_DISABLE_CACHE", "").strip().lower() in ("1", "true", "yes")
+DISABLE_BATCH_REGEN = os.environ.get("INKSIGHT_DISABLE_BATCH_REGEN", "").strip().lower() in ("1", "true", "yes")
+
+if DISABLE_CACHE:
+    logger.warning("[EXP] Cache is DISABLED via INKSIGHT_DISABLE_CACHE")
+if DISABLE_BATCH_REGEN:
+    logger.warning("[EXP] Batch regeneration is DISABLED via INKSIGHT_DISABLE_BATCH_REGEN")
+
 from .db import get_cache_db
 
 _CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "cache.db")
@@ -98,6 +107,8 @@ class ContentCache:
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> Optional[Image.Image]:
         """Get cached image if available and not expired"""
+        if DISABLE_CACHE:
+            return None
         async with self._lock:
             key = self._get_cache_key(mac, persona, screen_w, screen_h)
             if key in self._cache:
@@ -126,6 +137,8 @@ class ContentCache:
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ):
         """Store image in cache"""
+        if DISABLE_CACHE:
+            return
         async with self._lock:
             key = self._get_cache_key(mac, persona, screen_w, screen_h)
             img_copy = img.copy()
@@ -142,6 +155,8 @@ class ContentCache:
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> bool:
         """Check if all modes are cached, if not, regenerate all modes"""
+        if DISABLE_CACHE or DISABLE_BATCH_REGEN:
+            return False
         cacheable = get_cacheable_modes()
         modes = [m.upper() for m in config.get("modes", DEFAULT_MODES) if m.upper() in cacheable]
 

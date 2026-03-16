@@ -14,6 +14,7 @@ export function Navbar() {
   const otherLocale = locale === "en" ? "zh" : "en";
   const navLinks = [
     { href: "/", label: t(locale, "nav.home") },
+    { href: "/mobile", label: t(locale, "nav.mobile") },
     { href: "/docs", label: t(locale, "nav.docs") },
     { href: "/discover", label: t(locale, "nav.discover") },
     { href: "/flash", label: t(locale, "nav.flash") },

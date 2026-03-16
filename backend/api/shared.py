@@ -864,9 +864,10 @@ async def log_render_stats(
     voltage: float = 3.3,
     rssi: Optional[int] = None,
     status: str = "success",
+    is_fallback: bool = False,
 ):
     try:
-        await log_render(mac, persona, cache_hit, elapsed_ms, status)
+        await log_render(mac, persona, cache_hit, elapsed_ms, status, is_fallback=is_fallback)
         await log_heartbeat(mac, voltage, rssi)
     except (OSError, ValueError, TypeError):
         logger.warning("[STATS] Failed to log render stats for %s", mac, exc_info=True)

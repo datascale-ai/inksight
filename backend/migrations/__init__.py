@@ -44,6 +44,45 @@ async def run_main_db_migrations(db, *, defaults: dict[str, str]) -> None:
         (13, "device_state.expected_refresh_min", lambda: _add_column_if_missing(db, "device_state", "expected_refresh_min", "expected_refresh_min INTEGER DEFAULT 0")),
         (14, "device_state.last_reconnect_regen_at", lambda: _add_column_if_missing(db, "device_state", "last_reconnect_regen_at", "last_reconnect_regen_at TEXT DEFAULT ''")),
         (15, "device_claim_tokens.pair_code", lambda: _add_column_if_missing(db, "device_claim_tokens", "pair_code", "pair_code TEXT DEFAULT ''")),
+        (
+            16,
+            "user_preferences.create",
+            lambda: db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    user_id INTEGER PRIMARY KEY,
+                    push_enabled INTEGER DEFAULT 0,
+                    push_time TEXT DEFAULT '08:00',
+                    push_modes TEXT DEFAULT '[]',
+                    widget_mode TEXT DEFAULT 'STOIC',
+                    locale TEXT DEFAULT 'zh',
+                    timezone TEXT DEFAULT 'Asia/Shanghai',
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+                """
+            ),
+        ),
+        (
+            17,
+            "push_tokens.create",
+            lambda: db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS push_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    push_token TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    push_time TEXT DEFAULT '08:00',
+                    timezone TEXT DEFAULT 'Asia/Shanghai',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(user_id, push_token),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+                """
+            ),
+        ),
     ]
 
     now = datetime.now().isoformat()

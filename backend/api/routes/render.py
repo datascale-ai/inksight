@@ -166,11 +166,15 @@ async def render(
                 elapsed_ms,
                 voltage=params.v,
                 rssi=params.rssi,
+                is_fallback=content_fallback,
             )
             if params.refresh_min is not None:
                 await update_device_state(mac, expected_refresh_min=params.refresh_min)
 
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {
+            "X-Render-Time-Ms": str(elapsed_ms),
+            "X-Cache-Hit": "1" if cache_hit else "0",
+        }
         if configured_refresh_minutes is not None:
             headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
         if mac and await consume_pending_refresh(mac):

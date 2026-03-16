@@ -31,6 +31,7 @@ async def init_stats_db():
                 render_time_ms INTEGER DEFAULT 0,
                 llm_tokens INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'success',
+                is_fallback INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             )
         """)
@@ -71,6 +72,11 @@ async def init_stats_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_content_history_mac ON content_history(mac)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_content_history_hash ON content_history(mac, mode_id, content_hash)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_habit_mac ON habit_records(mac)")
+        # Migration: add is_fallback column if missing (for existing databases)
+        try:
+            await db.execute("ALTER TABLE render_logs ADD COLUMN is_fallback INTEGER DEFAULT 0")
+        except aiosqlite.OperationalError:
+            pass  # column already exists
         await db.commit()
 
 
@@ -80,13 +86,14 @@ async def log_render(
     cache_hit: bool,
     render_time_ms: int,
     status: str = "success",
+    is_fallback: bool = False,
 ):
     now = datetime.now().isoformat()
     db = await get_main_db()
     await db.execute(
-        """INSERT INTO render_logs (mac, persona, cache_hit, render_time_ms, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (mac, persona, int(cache_hit), render_time_ms, status, now),
+        """INSERT INTO render_logs (mac, persona, cache_hit, render_time_ms, status, is_fallback, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (mac, persona, int(cache_hit), render_time_ms, status, int(is_fallback), now),
     )
     await db.commit()
 

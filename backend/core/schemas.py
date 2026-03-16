@@ -224,3 +224,63 @@ class OkResponse(BaseModel):
 
 class ConfigSaveResponse(OkResponse):
     config_id: int
+
+
+class UserPreferencesRequest(BaseModel):
+    push_enabled: bool = Field(default=False)
+    push_time: str = Field(default="08:00", min_length=4, max_length=5)
+    push_modes: list[str] = Field(default_factory=list, max_length=10)
+    widget_mode: str = Field(default="STOIC", max_length=40)
+    locale: str = Field(default="zh", max_length=8)
+    timezone: str = Field(default="Asia/Shanghai", max_length=64)
+
+    @field_validator("push_time")
+    @classmethod
+    def validate_push_time(cls, v: str) -> str:
+        if not re.match(r"^\d{2}:\d{2}$", v):
+            raise ValueError("push_time 必须为 HH:MM 格式")
+        return v
+
+    @field_validator("push_modes")
+    @classmethod
+    def validate_push_modes(cls, v: list[str]) -> list[str]:
+        supported = get_supported_modes()
+        cleaned: list[str] = []
+        for mode in v:
+            mid = str(mode).strip().upper()
+            if not mid:
+                continue
+            if mid not in supported:
+                raise ValueError(f"不支持的模式: {mode}")
+            cleaned.append(mid)
+        return cleaned
+
+    @field_validator("widget_mode")
+    @classmethod
+    def validate_widget_mode(cls, v: str) -> str:
+        mode = str(v).strip().upper()
+        if mode not in get_supported_modes():
+            raise ValueError(f"不支持的 widget_mode: {mode}")
+        return mode
+
+
+class PushRegistrationRequest(BaseModel):
+    push_token: str = Field(..., min_length=8, max_length=512)
+    platform: str = Field(..., min_length=2, max_length=16)
+    timezone: str = Field(default="Asia/Shanghai", max_length=64)
+    push_time: str = Field(default="08:00", min_length=4, max_length=5)
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        platform = str(v).strip().lower()
+        if platform not in {"ios", "android", "expo"}:
+            raise ValueError("platform 必须为 ios / android / expo")
+        return platform
+
+    @field_validator("push_time")
+    @classmethod
+    def validate_push_registration_time(cls, v: str) -> str:
+        if not re.match(r"^\d{2}:\d{2}$", v):
+            raise ValueError("push_time 必须为 HH:MM 格式")
+        return v

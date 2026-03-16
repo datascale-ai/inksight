@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import json as jsonlib
-
+from pathlib import Path
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai import OpenAIError
@@ -112,6 +112,14 @@ async def list_modes(
     return {"modes": modes}
 
 
+def _preview_payload(content: dict) -> dict:
+    for key in ("quote", "text", "body", "summary", "question", "challenge", "interpretation"):
+        value = content.get(key)
+        if isinstance(value, str) and value.strip():
+            return {"preview_text": value.strip()[:200], "content": content}
+    return {"preview_text": "", "content": content}
+
+
 @router.post("/modes/custom/preview")
 async def custom_mode_preview(
     body: dict,
@@ -123,7 +131,8 @@ async def custom_mode_preview(
         mode_def = dict(mode_def, mode_id="PREVIEW")
     screen_w = body.get("w", SCREEN_WIDTH)
     screen_h = body.get("h", SCREEN_HEIGHT)
-    
+    response_type = str(body.get("responseType", body.get("response_type", "image"))).strip().lower()
+
     # 解析 API key：优先使用用户级别配置，其次使用设备配置中的加密 key
     user_api_key = None
     user_image_api_key = None
@@ -209,6 +218,12 @@ async def custom_mode_preview(
             api_key=effective_api_key,
             image_api_key=effective_image_api_key,
         )
+        if response_type == "json":
+            return {
+                "ok": True,
+                "mode_id": mode_def.get("mode_id", "PREVIEW"),
+                **_preview_payload(content),
+            }
         img = render_json_mode(
             mode_def,
             content,
@@ -248,23 +263,17 @@ async def custom_mode_preview(
 
 @router.post("/modes/custom")
 async def create_custom_mode(body: dict, user_id: int = Depends(require_user)):
-    """Create a custom mode for the current user and device (stored in database)."""
+    """Create a custom mode.
+
+    - With `mac`: persist to DB with user+device isolation.
+    - Without `mac`: fallback to legacy file-based custom mode (mobile editor compatibility).
+    """
     mode_id = body.get("mode_id", "").upper()
     mac = body.get("mac", "").strip().upper()
     if not mode_id:
         return JSONResponse({"error": "mode_id is required"}, status_code=400)
-    if not mac:
-        return JSONResponse({"error": "mac is required"}, status_code=400)
     if not _validate_mode_def(body):
         return JSONResponse({"error": "Invalid mode definition"}, status_code=400)
-
-    # Validate device ownership
-    from core.config_store import has_active_membership
-    if not await has_active_membership(mac, user_id):
-        return JSONResponse(
-            {"error": "设备不存在或无权访问"},
-            status_code=403
-        )
 
     body["mode_id"] = mode_id
     registry = get_registry()
@@ -272,6 +281,26 @@ async def create_custom_mode(body: dict, user_id: int = Depends(require_user)):
         return JSONResponse(
             {"error": f"Cannot override builtin mode: {mode_id}"},
             status_code=409,
+        )
+
+    # Legacy path: no mac means file-based custom mode.
+    if not mac:
+        file_path = Path(CUSTOM_JSON_DIR) / f"{mode_id.lower()}.json"
+        file_path.write_text(jsonlib.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+        registry.unregister_custom(mode_id)
+        loaded = registry.load_json_mode(str(file_path), source="custom")
+        if not loaded:
+            file_path.unlink(missing_ok=True)
+            return JSONResponse({"error": "Failed to load mode definition"}, status_code=400)
+        logger.info("[MODES] Created legacy custom mode %s for user %s", mode_id, user_id)
+        return {"ok": True, "mode_id": mode_id}
+
+    # Validate device ownership for DB path
+    from core.config_store import has_active_membership
+    if not await has_active_membership(mac, user_id):
+        return JSONResponse(
+            {"error": "设备不存在或无权访问"},
+            status_code=403
         )
 
     # Save to database (with device)
@@ -303,8 +332,13 @@ async def get_custom_mode_endpoint(
     - 必须同时提供 mac；
     - 不再从全局注册表或本地文件中回退加载“同名模式”。
     """
+    # Legacy path: no mac -> file-based custom mode.
     if not mac:
-        return JSONResponse({"error": "mac is required"}, status_code=400)
+        registry = get_registry()
+        mode = registry.get_json_mode(mode_id.upper())
+        if not mode or mode.info.source != "custom":
+            return JSONResponse({"error": "Custom mode not found"}, status_code=404)
+        return mode.definition
 
     mode_data = await get_custom_mode(user_id, mode_id, mac)
     if not mode_data:
@@ -321,12 +355,30 @@ async def delete_custom_mode_endpoint(
     """Delete a custom mode for the current user, optionally filtered by device."""
     normalized = mode_id.upper()
     
-    # Delete from database (optionally filtered by device)
+    registry = get_registry()
+
+    # Legacy path: no mac -> file-based custom mode.
+    if not mac:
+        mode = registry.get_json_mode(normalized)
+        if not mode or mode.info.source != "custom":
+            return JSONResponse({"error": "Custom mode not found"}, status_code=404)
+        registry.unregister_custom(normalized)
+        if mode.file_path:
+            Path(mode.file_path).unlink(missing_ok=True)
+        cleaned_configs = await remove_mode_from_all_configs(normalized, None)
+        logger.info(
+            "[MODES] Deleted legacy custom mode %s for user %s, cleaned_configs=%s",
+            normalized,
+            user_id,
+            cleaned_configs,
+        )
+        return {"ok": True, "mode_id": normalized, "cleaned_configs": cleaned_configs}
+
+    # DB path
     deleted = await delete_custom_mode(user_id, normalized, mac)
     if not deleted:
         return JSONResponse({"error": "Custom mode not found"}, status_code=404)
 
-    registry = get_registry()
     registry.unregister_custom(normalized, mac)
     cleaned_configs = await remove_mode_from_all_configs(normalized, mac)
     logger.info(
