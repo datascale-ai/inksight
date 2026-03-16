@@ -5,7 +5,14 @@ Uses an in-memory DB by patching DB_PATH.
 import pytest
 from unittest.mock import patch
 
-from core.config_store import init_db, save_config, get_active_config, get_config_history, activate_config
+from core.config_store import (
+    init_db,
+    save_config,
+    get_active_config,
+    get_config_history,
+    activate_config,
+    remove_mode_from_all_configs,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -242,3 +249,28 @@ class TestConfigStore:
         encrypted_key = config.get("llm_api_key", "")
         assert decrypt_api_key(encrypted_key) == "sk-new-key-67890"
         assert decrypt_api_key(encrypted_key) != "sk-old-key-12345"
+
+    async def test_remove_mode_from_all_configs_cleans_modes_and_overrides(self):
+        await init_db()
+        mac = "22:33:44:55:66:77"
+        await save_config(
+            mac,
+            {
+                "modes": ["STOIC", "CUSTOM_DELETED"],
+                "refreshStrategy": "random",
+                "modeOverrides": {
+                    "CUSTOM_DELETED": {"city": "上海"},
+                    "STOIC": {"city": "杭州"},
+                },
+            },
+        )
+
+        updated = await remove_mode_from_all_configs("custom_deleted")
+        assert updated >= 1
+
+        config = await get_active_config(mac)
+        assert config is not None
+        assert "CUSTOM_DELETED" not in config["modes"]
+        assert "STOIC" in config["modes"]
+        assert "CUSTOM_DELETED" not in config["mode_overrides"]
+        assert config["mode_overrides"]["STOIC"]["city"] == "杭州"

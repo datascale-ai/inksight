@@ -211,7 +211,7 @@ function LoginForm() {
                   placeholder={
                     locale === "en"
                       ? "Optional: Enter invitation code to get 5 free LLM calls"
-                      : "可选：填写邀请码可获得5次免费LLM调用额度"
+                      : "可选：填写邀请码可获得50次免费LLM调用额度"
                   }
                   className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
                 />

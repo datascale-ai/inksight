@@ -18,7 +18,8 @@ void showError(const char *msg);
 // Show diagnostic screen with up to 4 lines
 void showDiagnostic(const char *line1, const char *line2, const char *line3, const char *line4);
 
-// Update time display via partial refresh (HH:MM:SS)
+int currentPeriodIndex();
+
 void updateTimeDisplay();
 
 // Smart display: uses no-flash partial refresh normally, full refresh every N cycles

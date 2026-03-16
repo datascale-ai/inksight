@@ -25,6 +25,7 @@ void saveServerUrl(const String &url);
 
 // Save user config JSON to NVS (also extracts refreshInterval)
 void saveUserConfig(const String &configJson);
+void saveSleepMin(int minutes);
 
 // Retry counter management
 int  getRetryCount();

@@ -198,6 +198,18 @@ async def test_config_save_and_load(client):
     assert "STOIC" in data["modes"]
     assert "ZEN" in data["modes"]
 
+    with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
+        render_resp = await client.get("/api/render", params={
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "persona": "STOIC",
+            "v": "3.85",
+            "refresh_min": "60",
+            "w": "400",
+            "h": "300",
+        }, headers=headers)
+    assert render_resp.status_code == 200
+    assert render_resp.headers["x-refresh-minutes"] == "30"
+
 
 @pytest.mark.asyncio
 async def test_config_history_and_activate_flow(client, monkeypatch):

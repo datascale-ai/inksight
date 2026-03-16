@@ -331,6 +331,7 @@ async def build_image(
     preview_mode_override: Optional[dict] = None,
     preview_memo_text: Optional[str] = None,
     current_user_id: Optional[int] = None,
+    user_api_key: Optional[str] = None,
 ):
     from core.mode_registry import get_registry
 
@@ -366,35 +367,42 @@ async def build_image(
     # 这些配置通过 user_api_key / user_image_api_key 字段下发到 pipeline，
     # 同时也用于后续的额度豁免判断（user_provided_api_key）。
     if current_user_id is not None:
-        try:
-            from core.config_store import get_user_llm_config
+        config = dict(config or {})  # 不污染设备端 config
+        
+        # 如果前端传递了 API key（来自 x-inksight-llm-api-key 头），优先使用
+        if user_api_key and user_api_key.strip():
+            config["user_api_key"] = user_api_key.strip()
+            logger.debug("[BUILD_IMAGE] Using user_api_key from request header for user_id=%s", current_user_id)
+        else:
+            # 否则从数据库读取用户配置的 API key
+            try:
+                from core.config_store import get_user_llm_config
 
-            user_llm_cfg = await get_user_llm_config(current_user_id)
-        except Exception:
-            user_llm_cfg = None
-            logger.warning(
-                "[QUOTA] Failed to load user_llm_config for user_id=%s in Web preview",
-                current_user_id,
-                exc_info=True,
-            )
-        if user_llm_cfg:
-            config = dict(config or {})  # 不污染设备端 config
-            # 文本 LLM 提供商与 API key（解密后的明文）
-            provider = (user_llm_cfg.get("provider") or "").strip()
-            api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
-            if provider:
-                # 仅在 config 中未显式指定时应用用户提供的 provider，避免覆盖模式级别的特殊配置
-                config.setdefault("llm_provider", provider)
-            if api_key_plain:
-                # 使用专门的字段，避免与设备加密字段 llm_api_key 混淆
-                config["user_api_key"] = api_key_plain
-            # 图像生成的提供商与 API key
-            image_provider = (user_llm_cfg.get("image_provider") or "").strip()
-            image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
-            if image_provider:
-                config.setdefault("image_provider", image_provider)
-            if image_api_key_plain:
-                config["user_image_api_key"] = image_api_key_plain
+                user_llm_cfg = await get_user_llm_config(current_user_id)
+            except Exception:
+                user_llm_cfg = None
+                logger.warning(
+                    "[QUOTA] Failed to load user_llm_config for user_id=%s in Web preview",
+                    current_user_id,
+                    exc_info=True,
+                )
+            if user_llm_cfg:
+                # 文本 LLM 提供商与 API key（解密后的明文）
+                provider = (user_llm_cfg.get("provider") or "").strip()
+                api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
+                if provider:
+                    # 仅在 config 中未显式指定时应用用户提供的 provider，避免覆盖模式级别的特殊配置
+                    config.setdefault("llm_provider", provider)
+                if api_key_plain:
+                    # 使用专门的字段，避免与设备加密字段 llm_api_key 混淆
+                    config["user_api_key"] = api_key_plain
+                # 图像生成的提供商与 API key
+                image_provider = (user_llm_cfg.get("image_provider") or "").strip()
+                image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
+                if image_provider:
+                    config.setdefault("image_provider", image_provider)
+                if image_api_key_plain:
+                    config["user_image_api_key"] = image_api_key_plain
 
     # 是否为需要 LLM 的 JSON 模式（需要额度管控的类型）
     # 需要检查顶层 content 类型，以及 composite 模式中的 steps
@@ -586,9 +594,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted
+                                return img, persona, False, True, quota_exhausted, False, False
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted
+                            return None, persona, False, True, quota_exhausted, False, False
                         if int(quota.get("free_quota_remaining") or 0) <= 0:
                             quota_exhausted = True
                             logger.info(
@@ -605,9 +613,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted
+                                return img, persona, False, True, quota_exhausted, False, False
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted
+                            return None, persona, False, True, quota_exhausted, False, False
                 except Exception:
                     logger.warning(
                         "[QUOTA] Failed to check quota on cache hit for user_id=%s (mac=%s, mode=%s), allowing cache",
@@ -674,7 +682,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted
+                    return img, persona, False, True, quota_exhausted, False, False
                 if int(quota.get("free_quota_remaining") or 0) <= 0:
                     quota_exhausted = True
                     logger.info(
@@ -712,7 +720,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted
+                    return img, persona, False, True, quota_exhausted, False, False
             except Exception:
                 # 如果连 role 都查不到，为了安全起见，也视为额度耗尽
                 logger.warning(
@@ -728,14 +736,14 @@ async def build_image(
                     last_persona=persona,
                     last_refresh_at=datetime.now().isoformat(),
                 )
-                return img, persona, False, True, quota_exhausted
+                return img, persona, False, True, quota_exhausted, False, False
             # 更新设备状态，但不写入内容缓存，避免后续充值后仍命中"额度耗尽"图片
             await update_device_state(
                 mac,
                 last_persona=persona,
                 last_refresh_at=datetime.now().isoformat(),
             )
-            return img, persona, False, True, quota_exhausted
+            return img, persona, False, True, quota_exhausted, False, False
 
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
@@ -755,7 +763,16 @@ async def build_image(
             mac=mac or "",
         )
         if isinstance(content_data, dict):
+            logger.debug(
+                "[BUILD_IMAGE] content_data keys: %s, _is_fallback=%s, _used_fallback=%s, _llm_ok=%s",
+                list(content_data.keys()),
+                content_data.get("_is_fallback"),
+                content_data.get("_used_fallback"),
+                content_data.get("_llm_ok"),
+            )
             if content_data.get("_is_fallback") is True:
+                content_fallback = True
+            elif content_data.get("_used_fallback") is True:
                 content_fallback = True
             else:
                 jm = get_registry().get_json_mode(persona, mac)
@@ -835,7 +852,7 @@ async def build_image(
                 last_refresh_at=datetime.now().isoformat(),
             )
 
-    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid
+    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota
 
 
 async def log_render_stats(

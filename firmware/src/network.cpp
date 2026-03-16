@@ -294,8 +294,8 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
         }
         http.setTimeout(HTTP_TIMEOUT);
         http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-        const char *headerKeys[] = {"X-Content-Fallback"};
-        http.collectHeaders(headerKeys, 1);
+        const char *headerKeys[] = {"X-Content-Fallback", "X-Refresh-Minutes"};
+        http.collectHeaders(headerKeys, 2);
 
         if (cfgDeviceToken.length() > 0) {
             http.addHeader("X-Device-Token", cfgDeviceToken);
@@ -310,6 +310,12 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
             if (*isFallback) {
                 Serial.println("[RENDER] Received fallback content");
             }
+        }
+        String refreshHeader = http.header("X-Refresh-Minutes");
+        int serverRefreshMin = refreshHeader.toInt();
+        if (serverRefreshMin >= 10 && serverRefreshMin <= 1440 && serverRefreshMin != cfgSleepMin) {
+            saveSleepMin(serverRefreshMin);
+            Serial.printf("[RENDER] Applied refresh interval: %d min\n", serverRefreshMin);
         }
 
         if (code != 200) {

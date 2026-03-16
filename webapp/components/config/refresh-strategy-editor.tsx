@@ -184,6 +184,9 @@ export function RefreshStrategyEditor({
             onChange={(e) => setRefreshMin(Number(e.target.value))}
             className="w-32 rounded-sm border border-ink/20 px-3 py-2 text-sm"
           />
+          <p className="mt-2 text-xs text-ink-light">
+            {tr("可设置范围：10-1440 分钟", "Allowed range: 10-1440 minutes")}
+          </p>
         </Field>
       </CardContent>
     </Card>

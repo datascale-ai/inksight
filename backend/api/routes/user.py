@@ -168,7 +168,7 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
 
 @router.post("/user/redeem")
 async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
-    """兑换邀请码，为当前用户增加 10 次免费 LLM 调用额度。"""
+    """兑换邀请码，为当前用户增加 50 次免费 LLM 调用额度。"""
     invite_code = (body.get("invite_code") or "").strip()
     
     if not invite_code:
@@ -203,7 +203,7 @@ async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
             (user_id, invite_code),
         )
         
-        # 3) 增加用户的免费额度（+10 次）
+        # 3) 增加用户的免费额度（+50 次）
         # 先确保 api_quotas 记录存在
         await db.execute(
             """
@@ -216,7 +216,7 @@ async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
         await db.execute(
             """
             UPDATE api_quotas
-            SET free_quota_remaining = free_quota_remaining + 10
+            SET free_quota_remaining = free_quota_remaining + 50
             WHERE user_id = ?
             """,
             (user_id,),
@@ -228,7 +228,7 @@ async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
         quota = await get_user_api_quota(user_id)
         return {
             "ok": True,
-            "message": "邀请码兑换成功，已获得 10 次免费 LLM 调用额度",
+            "message": "邀请码兑换成功，已获得 50 次免费 LLM 调用额度",
             "free_quota_remaining": quota.get("free_quota_remaining", 0) if quota else 0,
         }
     except aiosqlite.IntegrityError:

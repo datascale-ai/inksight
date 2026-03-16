@@ -122,8 +122,8 @@ async def generate_json_mode_content(
     mac: str = "",
     screen_w: int = 400,
     screen_h: int = 300,
-    api_key: str | None = None,
-    image_api_key: str | None = None,
+    api_key: str = "",
+    image_api_key: str = "",
 ) -> dict:
     """Generate content for a JSON-defined mode.
 
@@ -276,25 +276,14 @@ async def generate_json_mode_content(
         llm_ok = False
         api_key_invalid = False
         try:
-            # 调试日志：记录 api_key 的状态
-            if api_key is None:
-                logger.info(f"[JSONContent] api_key is None for {mode_id}, will use env var")
-            elif not api_key or not api_key.strip():
-                logger.warning(f"[JSONContent] api_key is empty for {mode_id}, this will cause LLMKeyMissingError")
-            else:
-                logger.info(f"[JSONContent] api_key provided for {mode_id} (length: {len(api_key)})")
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
             llm_ok = True
         except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
-            # 检查是否是用户配置的 API key 问题
+            # 检查是否是 API key 缺失或无效错误
             if isinstance(e, LLMKeyMissingError):
-                error_message = str(e)
-                # 如果错误消息包含"您配置的"，说明是用户配置的 api_key 有问题
-                if "您配置的" in error_message or "您配置" in error_message:
-                    api_key_invalid = True
-                    logger.warning(f"[JSONContent] User configured API key is invalid or empty for {mode_id}: {e}")
-            # 检查是否是 API key 无效错误（401/403）
+                api_key_invalid = True
+                logger.warning(f"[JSONContent] API key missing or invalid for {mode_id}: {e}")
             elif isinstance(e, HTTPStatusError):
                 status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
                 if status_code in (401, 403):
@@ -448,6 +437,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
     provider = content_cfg.get("provider", "")
     llm_provider = kwargs.get("llm_provider") or DEFAULT_LLM_PROVIDER
     llm_model = kwargs.get("llm_model") or DEFAULT_LLM_MODEL
+    api_key = kwargs.get("api_key")
 
     if provider == "briefing":
         hn_limit = int(content_cfg.get("hn_limit", 2))
@@ -462,14 +452,33 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
             fetch_v2ex_hot(limit=v2ex_limit),
         )
         if not hn_items and not ph_item and not v2ex_items:
-            return dict(fallback)
+            fb = dict(fallback)
+            fb["_is_fallback"] = True
+            fb["_used_fallback"] = True
+            fb["_llm_used"] = False
+            fb["_llm_ok"] = False
+            return fb
+        
+        llm_failed = False
         if summarize:
-            hn_items, ph_item = await summarize_briefing_content(
-                hn_items, ph_item, llm_provider, llm_model, api_key=kwargs.get("api_key")
+            summarized_hn, summarized_ph = await summarize_briefing_content(
+                hn_items, ph_item, llm_provider, llm_model, api_key=api_key
             )
+            # 如果返回 None，说明 summarize 失败了
+            if summarized_hn is None or summarized_ph is None:
+                llm_failed = True
+            else:
+                hn_items = summarized_hn
+                ph_item = summarized_ph
+        
         insight = ""
         if include_insight:
-            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=kwargs.get("api_key"))
+            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=api_key)
+            # 如果返回 None，说明 insight 生成失败了
+            if insight is None:
+                llm_failed = True
+                insight = ""
+        
         result = dict(fallback)
         ph_name = ""
         ph_tagline = ""
@@ -484,6 +493,17 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
             "ph_name": ph_name,
             "ph_tagline": ph_tagline,
         })
+        
+        # 标记 LLM 使用情况
+        if summarize or include_insight:
+            result["_llm_used"] = True
+            if llm_failed:
+                result["_llm_ok"] = False
+                result["_used_fallback"] = True
+                logger.warning(f"[JSONContent] BRIEFING LLM calls failed, marked as fallback")
+            else:
+                result["_llm_ok"] = True
+        
         return result
 
     if provider == "weather_forecast":
@@ -521,6 +541,7 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
         prompt_hint = str(content_cfg.get("prompt_hint", "") or "")
         prompt_template = str(content_cfg.get("prompt_template", "") or "")
         fallback_title = str(fallback.get("artwork_title", "") or "")
+        api_key = kwargs.get("api_key")
         try:
             result = await generate_artwall_content(
                 date_str=kwargs.get("date_str", ""),
@@ -533,25 +554,42 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
                 prompt_hint=prompt_hint,
                 prompt_template=prompt_template,
                 fallback_title=fallback_title,
-                image_api_key=kwargs.get("image_api_key"),
-                api_key=kwargs.get("api_key"),
+                image_api_key=kwargs.get("image_api_key") or "",
+                api_key=api_key,
             )
             # 仅当真正拿到图像地址时才使用生成结果；否则回退到 JSON 中的 fallback/fallback_pool
             if mode_id != "ARTWALL":
                 result["artwork_title"] = ""
                 result["description"] = ""
             if result.get("image_url"):
+                # 成功生成图像
+                result["_llm_used"] = True
+                result["_llm_ok"] = True
                 return result
+            else:
+                # 没有生成图像，使用 fallback
+                logger.warning(f"[JSONContent] image_gen for {mode_id} returned no image_url, using fallback")
+                fb = dict(fallback)
+                fb["_llm_used"] = True
+                fb["_llm_ok"] = False
+                fb["_used_fallback"] = True
+                return fb
         except Exception as e:
             logger.warning(f"[JSONContent] image_gen failed for {mode_id}: {e}", exc_info=True)
-        # 方式 A：生成失败或无 URL 时，直接使用 JSON 中的 fallback（含每个作品自己的 image_url）
-        return dict(fallback)
+            fb = dict(fallback)
+            fb["_llm_used"] = True
+            fb["_llm_ok"] = False
+            fb["_used_fallback"] = True
+            return fb
     return dict(fallback)
 
 
 async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallback: dict, **kwargs) -> dict:
     steps = content_cfg.get("steps", [])
     result: dict[str, Any] = {}
+    any_llm_used = False
+    any_llm_failed = False
+    
     for step in steps:
         try:
             step_mode_def = {
@@ -560,15 +598,40 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             }
             part = await generate_json_mode_content(step_mode_def, **kwargs)
             if isinstance(part, dict):
-                result.update(part)
+                # 检查这个 step 是否使用了 LLM
+                if part.get("_llm_used"):
+                    any_llm_used = True
+                    if not part.get("_llm_ok", True):
+                        any_llm_failed = True
+                # 移除内部标记，避免污染最终结果
+                part_clean = {k: v for k, v in part.items() if not k.startswith("_")}
+                result.update(part_clean)
         except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
             logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}", exc_info=True)
+            any_llm_failed = True
             # Continue with next step instead of failing entirely
             continue
+    
     if not result:
-        return dict(fallback)
+        fb = dict(fallback)
+        if any_llm_used:
+            fb["_llm_used"] = True
+            fb["_llm_ok"] = False
+            fb["_used_fallback"] = True
+        return fb
+    
     merged = dict(fallback)
     merged.update(result)
+    
+    # 设置 LLM 使用标记
+    if any_llm_used:
+        merged["_llm_used"] = True
+        if any_llm_failed:
+            merged["_llm_ok"] = False
+            merged["_used_fallback"] = True
+        else:
+            merged["_llm_ok"] = True
+    
     return merged
 
 

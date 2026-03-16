@@ -252,8 +252,8 @@ ICON_SIZES = {
 
 # ==================== 业务默认值 ====================
 DEFAULT_CITY = "杭州"
-DEFAULT_LLM_PROVIDER = "deepseek"
-DEFAULT_LLM_MODEL = "deepseek-chat"
+DEFAULT_LLM_PROVIDER = "aliyun"
+DEFAULT_LLM_MODEL = "deepseek-v3.2"
 DEFAULT_IMAGE_PROVIDER = "aliyun"
 DEFAULT_IMAGE_MODEL = "qwen-image-max"
 DEFAULT_LANGUAGE = "zh"

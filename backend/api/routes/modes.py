@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json as jsonlib
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,6 +10,7 @@ from openai import OpenAIError
 from api.shared import logger
 from core.auth import require_admin, require_user, optional_user
 from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
+from core.config_store import remove_mode_from_all_configs
 from core.context import get_date_context, get_weather
 from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def, get_registry
 from core.config_store import (
@@ -316,13 +316,18 @@ async def delete_custom_mode_endpoint(
     deleted = await delete_custom_mode(user_id, normalized, mac)
     if not deleted:
         return JSONResponse({"error": "Custom mode not found"}, status_code=404)
-    
-    # Unregister from registry
+
     registry = get_registry()
     registry.unregister_custom(normalized, mac)
-    
-    logger.info(f"[MODES] Deleted custom mode {normalized} for user {user_id}" + (f" on device {mac}" if mac else ""))
-    return {"ok": True, "mode_id": normalized}
+    cleaned_configs = await remove_mode_from_all_configs(normalized, mac)
+    logger.info(
+        "[MODES] Deleted custom mode %s for user %s on device %s, cleaned_configs=%s",
+        normalized,
+        user_id,
+        mac,
+        cleaned_configs,
+    )
+    return {"ok": True, "mode_id": normalized, "cleaned_configs": cleaned_configs}
 
 
 @router.post("/modes/generate")

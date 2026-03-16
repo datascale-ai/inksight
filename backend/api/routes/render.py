@@ -24,7 +24,7 @@ from api.shared import (
     resolve_refresh_minutes_for_device_state,
 )
 from core.auth import require_device_token, validate_mac_param
-from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
+from core.config import DEFAULT_REFRESH_INTERVAL, SCREEN_HEIGHT, SCREEN_WIDTH
 from core.config_store import consume_pending_refresh, get_active_config, get_device_state, update_device_state
 from core.context import get_date_context, get_weather
 from core.pipeline import generate_and_render
@@ -39,6 +39,19 @@ def _sse_event(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _configured_refresh_minutes(config: Optional[dict]) -> int:
+    refresh_minutes_raw = config.get("refresh_interval") if config else DEFAULT_REFRESH_INTERVAL
+    try:
+        refresh_minutes = int(refresh_minutes_raw)
+    except (TypeError, ValueError):
+        refresh_minutes = DEFAULT_REFRESH_INTERVAL
+    if refresh_minutes < 10:
+        return 10
+    if refresh_minutes > 1440:
+        return 1440
+    return refresh_minutes
+
+
 @router.get("/render")
 @limiter.limit("10/minute")
 async def render(
@@ -47,9 +60,13 @@ async def render(
     x_device_token: Optional[str] = Header(default=None),
 ):
     mac = params.mac
+    cfg: Optional[dict] = None
+    configured_refresh_minutes: Optional[int] = None
     if mac:
         mac = validate_mac_param(mac)
         await require_device_token(mac, x_device_token)
+        cfg = await get_active_config(mac, log_load=False)
+        configured_refresh_minutes = _configured_refresh_minutes(cfg)
 
     start_time = time.time()
     force_next = params.next_mode == 1
@@ -78,6 +95,8 @@ async def render(
                     if params.refresh_min is not None:
                         await update_device_state(mac, expected_refresh_min=params.refresh_min)
                     headers = {"X-Preview-Push": "1"}
+                    if configured_refresh_minutes is not None:
+                        headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
                     if await consume_pending_refresh(mac):
                         headers["X-Pending-Refresh"] = "1"
                     return Response(content=bmp_bytes, media_type="image/bmp", headers=headers)
@@ -86,7 +105,6 @@ async def render(
 
         skip_cache_for_this_render = False
         if mac:
-            cfg = await get_active_config(mac)
             if cfg:
                 state = await get_device_state(mac)
                 refresh_minutes = resolve_refresh_minutes_for_device_state(cfg, state)
@@ -116,7 +134,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
             params.v,
             mac,
             params.persona,
@@ -153,6 +171,8 @@ async def render(
                 await update_device_state(mac, expected_refresh_min=params.refresh_min)
 
         headers: dict[str, str] = {}
+        if configured_refresh_minutes is not None:
+            headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
         if mac and await consume_pending_refresh(mac):
             headers["X-Pending-Refresh"] = "1"
         if content_fallback:
@@ -235,6 +255,7 @@ async def preview(
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
     x_device_token: Optional[str] = Header(default=None),
+    x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
 ):
     if mac:
@@ -265,7 +286,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
             effective_v,
             mac,
             persona,
@@ -276,6 +297,7 @@ async def preview(
             preview_mode_override=parsed_mode_override,
             preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
             current_user_id=current_user_id,
+            user_api_key=x_inksight_llm_api_key,
         )
         # 如果 API key 无效，返回 JSON 响应，提醒用户
         if api_key_invalid:
@@ -310,7 +332,7 @@ async def preview(
         logger.info("[PREVIEW] Generated PNG persona=%s size=%sx%s", resolved_persona, w, h)
         
         # 确定生成状态（使用英文避免编码问题）
-        status_msg = "model_generated" if not _content_fallback else "fallback_used"
+        status_msg = "no_llm_required" if not llm_mode_requires_quota else ("model_generated" if not _content_fallback else "fallback_used")
         
         return Response(
             content=png_bytes,
@@ -319,6 +341,7 @@ async def preview(
                 "X-Cache-Hit": "1" if cache_hit else "0",
                 "X-Preview-Bypass": "1" if no_cache == 1 else "0",
                 "X-Preview-Status": status_msg,
+                "X-Llm-Required": "1" if llm_mode_requires_quota else "0",
             },
         )
     except (OSError, RuntimeError, TypeError, ValueError, UnidentifiedImageError):
@@ -345,6 +368,7 @@ async def preview_stream(
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
     x_device_token: Optional[str] = Header(default=None),
+    x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
 ):
     if mac:
@@ -376,7 +400,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
                 effective_v,
                 mac,
                 persona,
@@ -387,6 +411,7 @@ async def preview_stream(
                 preview_mode_override=parsed_mode_override,
                 preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
                 current_user_id=current_user_id,
+                user_api_key=x_inksight_llm_api_key,
             )
             # 如果 API key 无效，返回错误事件
             if api_key_invalid:
