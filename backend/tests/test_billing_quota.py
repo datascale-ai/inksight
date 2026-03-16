@@ -453,8 +453,16 @@ class TestLlmPrecheckBehavior:
 
         # 确保使用平台 Key（即没有用户级 API key）
         async def fake_get_user_llm_config(_user_id: int):
-            # 模拟用户级配置中只设置了 provider（无自定义 model），与生产逻辑保持字段一致
-            return {"provider": "deepseek", "model": "", "api_key": "", "base_url": ""}
+            # 模拟用户级配置中只设置了文本 provider（无自定义文本/图像 model），与生产逻辑保持字段一致
+            return {
+                "provider": "deepseek",
+                "model": "",
+                "api_key": "",
+                "base_url": "",
+                "image_provider": "aliyun",
+                "image_api_key": "",
+                "image_model": "qwen-image-plus",
+            }
 
         # 配额为 0
         async def fake_get_quota(user_id_param: int):
@@ -516,8 +524,16 @@ class TestLlmPrecheckBehavior:
 
         # 使用平台 Key（无用户级 key）
         async def fake_get_user_llm_config(_user_id: int):
-            # 同步 user_llm_config 结构，显式包含 model 字段
-            return {"provider": "deepseek", "model": "deepseek-chat", "api_key": "", "base_url": ""}
+            # 同步 user_llm_config 结构，显式包含文本 model 与图像配置字段
+            return {
+                "provider": "deepseek",
+                "model": "deepseek-chat",
+                "api_key": "",
+                "base_url": "",
+                "image_provider": "aliyun",
+                "image_api_key": "",
+                "image_model": "qwen-image-plus",
+            }
 
         async def fake_get_quota(user_id_param: int):
             assert user_id_param == user_id
