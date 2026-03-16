@@ -1,6 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from api import shared as shared_api
 from api.index import app
 from api.routes import firmware as firmware_routes
 
@@ -136,3 +137,62 @@ async def test_firmware_validate_url_unreachable(client, monkeypatch):
     resp = await client.get("/api/firmware/validate-url", params={"url": "https://example.com/fw.bin"})
     assert resp.status_code == 503
     assert resp.json()["error"] == "firmware_url_unreachable"
+
+
+def test_expand_release_assets_returns_multiple_bin_entries():
+    release = {
+        "tag_name": "v0.3",
+        "published_at": "2026-03-14T10:15:04Z",
+        "assets": [
+            {
+                "name": "epd_42_c3.bin",
+                "size": 1148832,
+                "browser_download_url": "https://example.com/epd_42_c3.bin",
+            },
+            {
+                "name": "epd_42_wroom32e.bin",
+                "size": 1140784,
+                "browser_download_url": "https://example.com/epd_42_wroom32e.bin",
+            },
+        ],
+    }
+
+    items = shared_api.expand_firmware_release_assets(release)
+
+    assert len(items) == 2
+    assert items[0]["asset_name"] == "epd_42_c3.bin"
+    assert items[0]["chip_family"] == "ESP32-C3"
+    assert items[1]["asset_name"] == "epd_42_wroom32e.bin"
+    assert items[1]["chip_family"] == "ESP32"
+
+
+def test_render_api_key_invalid_image_uses_project_font_loader(monkeypatch):
+    calls = []
+
+    def _fake_load_font(font_key: str, size: int):
+        calls.append((font_key, size))
+        from PIL import ImageFont
+
+        return ImageFont.load_default()
+
+    monkeypatch.setattr(shared_api, "load_font", _fake_load_font, raising=False)
+
+    shared_api._render_api_key_invalid_image(400, 300)
+
+    assert calls
+
+
+def test_render_quota_exhausted_image_uses_project_font_loader(monkeypatch):
+    calls = []
+
+    def _fake_load_font(font_key: str, size: int):
+        calls.append((font_key, size))
+        from PIL import ImageFont
+
+        return ImageFont.load_default()
+
+    monkeypatch.setattr(shared_api, "load_font", _fake_load_font, raising=False)
+
+    shared_api._render_quota_exhausted_image(400, 300)
+
+    assert calls

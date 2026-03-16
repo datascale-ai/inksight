@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from PIL import Image, ImageDraw, ImageFont
+from core.patterns.utils import load_font
 
 try:  # pragma: no cover - exercised implicitly at import time
     from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -906,17 +907,26 @@ def reconnect_threshold_seconds(refresh_minutes: int) -> int:
     return max(base_seconds + 30, int(base_seconds * 1.5))
 
 
-def build_firmware_manifest(version: str, download_url: str) -> dict:
+def build_firmware_manifest(version: str, download_url: str, chip_family: str = FIRMWARE_CHIP_FAMILY) -> dict:
     return {
         "name": "InkSight",
         "version": version,
         "builds": [
             {
-                "chipFamily": FIRMWARE_CHIP_FAMILY,
+                "chipFamily": chip_family,
                 "parts": [{"path": download_url, "offset": 0}],
             }
         ],
     }
+
+
+def chip_family_from_asset_name(asset_name: str) -> str:
+    name = (asset_name or "").lower()
+    if "wroom32e" in name or "_esp32" in name:
+        return "ESP32"
+    if "_c3" in name or "esp32c3" in name:
+        return "ESP32-C3"
+    return FIRMWARE_CHIP_FAMILY
 
 
 def pick_firmware_asset(assets: list[dict]) -> Optional[dict]:
@@ -930,6 +940,35 @@ def pick_firmware_asset(assets: list[dict]) -> Optional[dict]:
         return preferred[0]
     fallback = [asset for asset in assets if asset.get("name", "").endswith(".bin")]
     return fallback[0] if fallback else None
+
+
+def expand_firmware_release_assets(release: dict) -> list[dict]:
+    tag_name = release.get("tag_name", "")
+    version = tag_name.lstrip("v") if tag_name else "unknown"
+    published_at = release.get("published_at")
+    items = []
+    for asset in release.get("assets", []):
+        asset_name = asset.get("name", "")
+        if not asset_name.endswith(".bin"):
+            continue
+        download_url = asset.get("browser_download_url")
+        if not download_url:
+            continue
+        chip_family = chip_family_from_asset_name(asset_name)
+        items.append(
+            {
+                "version": version,
+                "tag": tag_name,
+                "published_at": published_at,
+                "download_url": download_url,
+                "size_bytes": asset.get("size"),
+                "chip_family": chip_family,
+                "asset_name": asset_name,
+                "manifest": build_firmware_manifest(version, download_url, chip_family),
+            }
+        )
+    preferred = [item for item in items if "inksight-firmware-" in item["asset_name"]]
+    return preferred or items
 
 
 async def load_firmware_releases(force_refresh: bool = False) -> dict:
@@ -968,26 +1007,7 @@ async def load_firmware_releases(force_refresh: bool = False) -> dict:
         for release in resp.json():
             if release.get("draft"):
                 continue
-            asset = pick_firmware_asset(release.get("assets", []))
-            if not asset:
-                continue
-            tag_name = release.get("tag_name", "")
-            version = tag_name.lstrip("v") if tag_name else "unknown"
-            download_url = asset.get("browser_download_url")
-            if not download_url:
-                continue
-            releases.append(
-                {
-                    "version": version,
-                    "tag": tag_name,
-                    "published_at": release.get("published_at"),
-                    "download_url": download_url,
-                    "size_bytes": asset.get("size"),
-                    "chip_family": FIRMWARE_CHIP_FAMILY,
-                    "asset_name": asset.get("name"),
-                    "manifest": build_firmware_manifest(version, download_url),
-                }
-            )
+            releases.extend(expand_firmware_release_assets(release))
 
         payload = {
             "source": "github_releases",
@@ -1046,7 +1066,7 @@ def _render_api_key_invalid_image(screen_w: int, screen_h: int) -> Image.Image:
     draw = ImageDraw.Draw(img)
     message = "API key 无效或已过期，请检查设备配置"
     try:
-        font = ImageFont.load_default()
+        font = load_font("noto_serif_regular", 12)
     except Exception:  # pragma: no cover - 极端环境下回退
         font = None
     try:
@@ -1074,14 +1094,20 @@ def _render_quota_exhausted_image(screen_w: int, screen_h: int) -> Image.Image:
     draw = ImageDraw.Draw(img)
     message = "您的免费额度已用完，请联系管理员"
     try:
-        font = ImageFont.load_default()
+        font = load_font("noto_serif_regular", 12)
     except Exception:  # pragma: no cover - 极端环境下回退
         font = None
-    # Pillow 10.0.0+ 使用 textbbox 替代已废弃的 textsize
-    bbox = draw.textbbox((0, 0), message, font=font)
-    text_w = bbox[2] - bbox[0]  # right - left
-    text_h = bbox[3] - bbox[1]  # bottom - top
-    x = max(0, (screen_w - text_w) // 2)
-    y = max(0, (screen_h - text_h) // 2)
-    draw.text((x, y), message, fill=0, font=font)
+    try:
+        if font:
+            bbox = draw.textbbox((0, 0), message, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+        else:
+            text_w = len(message) * 6
+            text_h = 10
+        x = max(0, (screen_w - text_w) // 2)
+        y = max(0, (screen_h - text_h) // 2)
+        draw.text((x, y), message, fill=0, font=font)
+    except Exception:
+        logger.warning("[RENDER] Failed to render quota exhausted message", exc_info=True)
     return img
