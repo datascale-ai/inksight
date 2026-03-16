@@ -23,6 +23,7 @@ interface ProfileData {
     api_key: string;
     base_url: string;
     image_provider?: string;
+    image_model?: string;
     image_api_key?: string;
   } | null;
 }
@@ -50,6 +51,7 @@ export default function ProfilePage() {
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [imageProvider, setImageProvider] = useState("aliyun");
+  const [imageModel, setImageModel] = useState("");
   const [imageApiKey, setImageApiKey] = useState("");
   const [inviteCode, setInviteCode] = useState("");
 
@@ -106,6 +108,7 @@ export default function ProfilePage() {
         setLlmApiKey(data.llm_config.api_key || "");
         setLlmBaseUrl(data.llm_config.base_url || "");
         setImageProvider(data.llm_config.image_provider || "aliyun");
+        setImageModel(data.llm_config.image_model || "");
         setImageApiKey(data.llm_config.image_api_key || "");
         setQuotaMode("custom");
       } else {
@@ -161,6 +164,23 @@ export default function ProfilePage() {
     }
   };
 
+  // 根据 provider 返回可选文本模型列表
+  const getLlmModelOptions = (provider: string): string[] => {
+    if (provider === "aliyun") {
+      return ["qwen3.5-flash", "deepseek-v3.2", "Kimi-k2.5"];
+    }
+    // 默认 DeepSeek
+    return ["deepseek-chat", "deepseek-reasoner"];
+  };
+
+  // 当切换文本 provider 时，如果当前模型不在合法列表中，则自动重置为第一个选项
+  useEffect(() => {
+    const opts = getLlmModelOptions(llmProvider);
+    if (!opts.includes(llmModel)) {
+      setLlmModel(opts[0]);
+    }
+  }, [llmProvider, llmModel]);
+
   const handleSaveLlmConfig = async () => {
     setSaving(true);
     try {
@@ -173,6 +193,7 @@ export default function ProfilePage() {
           api_key: llmApiKey.trim(),
           base_url: llmBaseUrl.trim(),
           image_provider: imageProvider,
+          image_model: imageModel.trim(),
           image_api_key: imageApiKey.trim(),
         }),
       });
@@ -349,22 +370,34 @@ export default function ProfilePage() {
                 </p>
                 </div>
                 <Field label={tr("API 服务商", "API Provider")}>
-                  <input
-                    type="text"
+                  <select
                     value={llmProvider}
                     onChange={(e) => setLlmProvider(e.target.value)}
-                    placeholder={tr("例如 deepseek、aliyun、moonshot", "e.g. deepseek, aliyun, moonshot")}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  />
+                  >
+                    <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
+                    <option value="deepseek">DeepSeek</option>
+                  </select>
                 </Field>
                 <Field label={tr("模型名称", "Model Name")}>
-                  <input
-                    type="text"
+                  <select
                     value={llmModel}
                     onChange={(e) => setLlmModel(e.target.value)}
-                    placeholder={tr("例如 deepseek-chat、qwen-max", "e.g. deepseek-chat, qwen-max")}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  />
+                  >
+                    {llmProvider === "aliyun" ? (
+                      <>
+                        <option value="qwen3.5-flash">qwen3.5-flash</option>
+                        <option value="deepseek-v3.2">deepseek-v3.2</option>
+                        <option value="Kimi-k2.5">Kimi-k2.5</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="deepseek-chat">deepseek-chat</option>
+                        <option value="deepseek-reasoner">deepseek-reasoner</option>
+                      </>
+                    )}
+                  </select>
                 </Field>
                 <Field label={tr("API Key", "API Key")}>
                   <input
@@ -391,12 +424,24 @@ export default function ProfilePage() {
                 </div>
                 
                 <Field label={tr("图像 API 服务商", "Image API Provider")}>
-                  <select
+                  <input
+                    type="text"
                     value={imageProvider}
                     onChange={(e) => setImageProvider(e.target.value)}
+                    placeholder={tr("例如 aliyun", "e.g. aliyun")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                  />
+                </Field>
+                <Field label={tr("图像模型名称", "Image Model Name")}>
+                  <select
+                    value={imageModel}
+                    onChange={(e) => setImageModel(e.target.value)}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                   >
-                    <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
+                    <option value="">{tr("请选择图像模型", "Select image model")}</option>
+                    <option value="qwen-image-plus">qwen-image-plus</option>
+                    <option value="qwen-image-2.0">qwen-image-2.0</option>
+                    <option value="qwen-image-max">qwen-image-max</option>
                   </select>
                 </Field>
                 <Field label={tr("图像 API Key", "Image API Key")}>

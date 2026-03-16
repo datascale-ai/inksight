@@ -2,6 +2,8 @@
 Integration tests for InkSight API -> render pipeline.
 Uses httpx.AsyncClient with FastAPI TestClient, mocking LLM calls.
 """
+from __future__ import annotations
+
 import io
 import json
 import pytest

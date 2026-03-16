@@ -1820,8 +1820,14 @@ async def get_user_llm_config(user_id: int) -> dict | None:
     columns = [col[1] for col in await cursor.fetchall()]
     has_image_config = "image_provider" in columns and "image_api_key" in columns
     has_model_column = "model" in columns
+    has_image_model_column = "image_model" in columns
     
-    if has_image_config and has_model_column:
+    if has_image_config and has_model_column and has_image_model_column:
+        cursor = await db.execute(
+            "SELECT provider, api_key, base_url, image_provider, image_api_key, model, image_model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_image_config and has_model_column:
         cursor = await db.execute(
             "SELECT provider, api_key, base_url, image_provider, image_api_key, model FROM user_llm_config WHERE user_id = ?",
             (user_id,),
@@ -1855,6 +1861,9 @@ async def get_user_llm_config(user_id: int) -> dict | None:
         result["image_api_key"] = ""
     if has_model_column and len(row) > idx:
         result["model"] = row[idx] or ""
+        idx += 1
+    if has_image_model_column and len(row) > idx:
+        result["image_model"] = row[idx] or ""
     return result
 
 
@@ -1865,6 +1874,7 @@ async def save_user_llm_config(
     api_key: str = "",
     base_url: str = "",
     image_provider: str = "aliyun",
+    image_model: str = "",
     image_api_key: str = "",
 ) -> bool:
     """保存用户级别的 LLM 配置。"""
@@ -1881,6 +1891,7 @@ async def save_user_llm_config(
     columns = [col[1] for col in await cursor.fetchall()]
     has_image_config = "image_provider" in columns and "image_api_key" in columns
     has_model_column = "model" in columns
+    has_image_model_column = "image_model" in columns
     
     # 如果表没有图像配置 / model 列，先添加
     if not has_image_config:
@@ -1900,9 +1911,32 @@ async def save_user_llm_config(
         except Exception as e:
             logger.warning(f"[USER_LLM_CONFIG] Failed to add model column: {e}")
             await db.rollback()
+    if not has_image_model_column:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN image_model TEXT DEFAULT ''")
+            await db.commit()
+            has_image_model_column = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add image_model column: {e}")
+            await db.rollback()
     
     try:
-        if has_image_config:
+        if has_image_config and has_image_model_column:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, provider, model, api_key, base_url, image_provider, image_api_key, image_model, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       image_model = excluded.image_model,
+                       updated_at = excluded.updated_at""",
+                (user_id, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, image_model, now),
+            )
+        elif has_image_config:
             await db.execute(
                 """INSERT INTO user_llm_config (user_id, provider, model, api_key, base_url, image_provider, image_api_key, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)

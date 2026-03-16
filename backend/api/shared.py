@@ -411,11 +411,16 @@ async def build_image(
                 if api_key_plain:
                     # 使用专门的字段，避免与设备加密字段 llm_api_key 混淆
                     config["user_api_key"] = api_key_plain
-                # 图像生成的提供商与 API key
+                # 图像生成的提供商 / 模型与 API key
                 image_provider = (user_llm_cfg.get("image_provider") or "").strip()
+                image_model = (user_llm_cfg.get("image_model") or "").strip()
                 image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
                 if image_provider:
+                    # 用户级别 image_provider 优先级最高：**无条件覆盖** 设备配置中的 image_provider
                     config["image_provider"] = image_provider
+                if image_model:
+                    # 用户级别 image_model 优先级最高：**无条件覆盖** 设备配置中的 image_model
+                    config["image_model"] = image_model
                 if image_api_key_plain:
                     config["user_image_api_key"] = image_api_key_plain
 
