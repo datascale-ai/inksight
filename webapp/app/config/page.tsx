@@ -101,6 +101,37 @@ const TONE_OPTIONS = [
 ] as const;
 const PERSONA_PRESETS = ["鲁迅", "王小波", "JARVIS", "苏格拉底", "村上春树"] as const;
 
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export async function queueImmediateRefreshIfOnline(
+  fetchImpl: FetchLike,
+  mac: string,
+  headers: Record<string, string>,
+): Promise<{ onlineNow: boolean | null; lastSeen: string | null; refreshQueued: boolean }> {
+  try {
+    const stateRes = await fetchImpl(`/api/device/${encodeURIComponent(mac)}/state`, {
+      cache: "no-store",
+      headers,
+    });
+    if (!stateRes.ok) {
+      return { onlineNow: null, lastSeen: null, refreshQueued: false };
+    }
+    const stateData = await stateRes.json();
+    const onlineNow = Boolean(stateData?.is_online);
+    const lastSeen = typeof stateData?.last_seen === "string" && stateData.last_seen ? stateData.last_seen : null;
+    if (!onlineNow) {
+      return { onlineNow, lastSeen, refreshQueued: false };
+    }
+    const refreshRes = await fetchImpl(`/api/device/${encodeURIComponent(mac)}/refresh`, {
+      method: "POST",
+      headers,
+    });
+    return { onlineNow, lastSeen, refreshQueued: refreshRes.ok };
+  } catch {
+    return { onlineNow: null, lastSeen: null, refreshQueued: false };
+  }
+}
+
 function normalizeLanguage(v: unknown): string {
   if (typeof v !== "string") return "zh";
   if (v === "zh" || v === "en" || v === "mixed") return v;
@@ -206,8 +237,6 @@ interface DeviceConfig {
   countdown_events?: { name: string; date: string }[];
   memoText?: string;
   memo_text?: string;
-  has_api_key?: boolean;
-  has_image_api_key?: boolean;
   mode_overrides?: Record<string, ModeOverride>;
   modeOverrides?: Record<string, ModeOverride>;
 }
@@ -778,18 +807,23 @@ function ConfigPageInner() {
       });
       if (!res.ok) throw new Error("Save failed");
       let onlineNow = isOnline;
-      try {
-        const stateRes = await fetch(`/api/device/${encodeURIComponent(mac)}/state`, { cache: "no-store", headers: authHeaders() });
-        if (stateRes.ok) {
-          const stateData = await stateRes.json();
-          onlineNow = Boolean(stateData?.is_online);
-          setIsOnline(onlineNow);
-          setLastSeen(typeof stateData?.last_seen === "string" && stateData.last_seen ? stateData.last_seen : null);
-        }
-      } catch {}
+      let refreshQueued = false;
+      let latestLastSeen: string | null = lastSeen;
+      const syncResult = await queueImmediateRefreshIfOnline(fetch, mac, authHeaders());
+      onlineNow = syncResult.onlineNow ?? isOnline;
+      refreshQueued = syncResult.refreshQueued;
+      latestLastSeen = syncResult.lastSeen;
+      if (syncResult.onlineNow !== null) {
+        setIsOnline(syncResult.onlineNow);
+      }
+      setLastSeen(latestLastSeen);
       showToast(
-        onlineNow ? "配置已保存" : "配置已保存，设备当前离线，将在设备上线后生效",
-        onlineNow ? "success" : "info",
+        syncResult.onlineNow === null
+          ? "配置已保存，暂时无法确认设备状态"
+          : onlineNow
+            ? (refreshQueued ? "配置已保存，已通知设备立即刷新" : "配置已保存，设备在线，但立即刷新通知失败")
+            : "配置已保存，设备当前离线，将在设备上线后生效",
+        syncResult.onlineNow === null || !refreshQueued ? "info" : "success",
       );
       setPreviewNoCacheOnce(true);
     } catch {

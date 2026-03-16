@@ -415,7 +415,7 @@ async def build_image(
                 image_provider = (user_llm_cfg.get("image_provider") or "").strip()
                 image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
                 if image_provider:
-                    config.setdefault("image_provider", image_provider)
+                    config["image_provider"] = image_provider
                 if image_api_key_plain:
                     config["user_image_api_key"] = image_api_key_plain
 
@@ -1128,4 +1128,49 @@ def _render_quota_exhausted_image(screen_w: int, screen_h: int) -> Image.Image:
         draw.text((x, y), message, fill=0, font=font)
     except Exception:
         logger.warning("[RENDER] Failed to render quota exhausted message", exc_info=True)
+    return img
+
+
+def _render_device_unbound_image(screen_w: int, screen_h: int, pair_code: str) -> Image.Image:
+    img = Image.new("1", (screen_w, screen_h), 1)
+    draw = ImageDraw.Draw(img)
+    title = "欢迎使用 InkSight"
+    pair_line = f"配对码：{pair_code}" if pair_code else "正在生成配对码..."
+    hint = "请在设备配置页输入配对码完成绑定"
+    try:
+        title_font = load_font("noto_serif_regular", 20)
+        body_font = load_font("noto_serif_regular", 14)
+    except Exception:
+        title_font = None
+        body_font = None
+    try:
+        if title_font:
+            title_bbox = draw.textbbox((0, 0), title, font=title_font)
+            title_w = title_bbox[2] - title_bbox[0]
+            title_h = title_bbox[3] - title_bbox[1]
+        else:
+            title_w = len(title) * 10
+            title_h = 18
+        if body_font:
+            pair_bbox = draw.textbbox((0, 0), pair_line, font=body_font)
+            hint_bbox = draw.textbbox((0, 0), hint, font=body_font)
+            pair_w = pair_bbox[2] - pair_bbox[0]
+            pair_h = pair_bbox[3] - pair_bbox[1]
+            hint_w = hint_bbox[2] - hint_bbox[0]
+            hint_h = hint_bbox[3] - hint_bbox[1]
+        else:
+            pair_w = len(pair_line) * 7
+            pair_h = 12
+            hint_w = len(hint) * 7
+            hint_h = 12
+        spacing = 18
+        total_h = title_h + pair_h + hint_h + spacing * 2
+        y = max(16, (screen_h - total_h) // 2)
+        draw.text((max(0, (screen_w - title_w) // 2), y), title, fill=0, font=title_font)
+        y += title_h + spacing
+        draw.text((max(0, (screen_w - pair_w) // 2), y), pair_line, fill=0, font=body_font)
+        y += pair_h + spacing
+        draw.text((max(0, (screen_w - hint_w) // 2), y), hint, fill=0, font=body_font)
+    except Exception:
+        logger.warning("[RENDER] Failed to render device unbound message", exc_info=True)
     return img

@@ -944,6 +944,36 @@ async def create_claim_token(
     }
 
 
+async def get_or_create_claim_token(
+    mac: str,
+    source: str = "portal",
+    ttl_minutes: int = 10,
+) -> dict:
+    now_iso = datetime.now().isoformat()
+    db = await get_main_db()
+    cursor = await db.execute(
+        """SELECT pair_code, expires_at
+           FROM device_claim_tokens
+           WHERE mac = ?
+             AND used_at = ''
+             AND expires_at > ?
+           ORDER BY created_at DESC
+           LIMIT 1""",
+        (mac.upper(), now_iso),
+    )
+    row = await cursor.fetchone()
+    if row:
+        return {
+            "token": "",
+            "pair_code": row[0],
+            "expires_at": row[1],
+        }
+    created = await create_claim_token(mac, source=source, ttl_minutes=ttl_minutes)
+    if created is None:
+        raise RuntimeError("failed to create claim token")
+    return created
+
+
 async def get_pending_access_request(mac: str, requester_user_id: int) -> dict | None:
     db = await get_main_db()
     cursor = await db.execute(

@@ -13,6 +13,7 @@ from PIL import Image, UnidentifiedImageError
 from api.shared import (
     _preview_push_queue,
     _preview_push_queue_lock,
+    _render_device_unbound_image,
     build_image,
     content_cache,
     ensure_web_or_device_access,
@@ -25,7 +26,14 @@ from api.shared import (
 )
 from core.auth import require_device_token, validate_mac_param
 from core.config import DEFAULT_REFRESH_INTERVAL, SCREEN_HEIGHT, SCREEN_WIDTH
-from core.config_store import consume_pending_refresh, get_active_config, get_device_state, update_device_state
+from core.config_store import (
+    consume_pending_refresh,
+    get_active_config,
+    get_device_owner,
+    get_device_state,
+    get_or_create_claim_token,
+    update_device_state,
+)
 from core.context import get_date_context, get_weather
 from core.pipeline import generate_and_render
 from core.renderer import image_to_bmp_bytes, image_to_png_bytes, render_error
@@ -62,16 +70,29 @@ async def render(
     mac = params.mac
     cfg: Optional[dict] = None
     configured_refresh_minutes: Optional[int] = None
+    owner = None
     if mac:
         mac = validate_mac_param(mac)
         await require_device_token(mac, x_device_token)
         cfg = await get_active_config(mac, log_load=False)
         configured_refresh_minutes = _configured_refresh_minutes(cfg)
+        owner = await get_device_owner(mac)
 
     start_time = time.time()
     force_next = params.next_mode == 1
 
     try:
+        if mac and owner is None:
+            claim = await get_or_create_claim_token(mac, source="render")
+            img = _render_device_unbound_image(params.w, params.h, claim.get("pair_code", ""))
+            bmp_bytes = image_to_bmp_bytes(img)
+            headers: dict[str, str] = {}
+            if configured_refresh_minutes is not None:
+                headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
+            if await consume_pending_refresh(mac):
+                headers["X-Pending-Refresh"] = "1"
+            return Response(content=bmp_bytes, media_type="image/bmp", headers=headers)
+
         if mac:
             async with _preview_push_queue_lock:
                 pushed_payload = _preview_push_queue.pop(mac, None)

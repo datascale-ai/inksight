@@ -11,6 +11,8 @@ from core.config_store import (
     get_active_config,
     get_config_history,
     activate_config,
+    create_claim_token,
+    get_or_create_claim_token,
     remove_mode_from_all_configs,
 )
 
@@ -131,6 +133,19 @@ class TestConfigStore:
         assert config["countdown_events"][0]["name"] == "测试日"
         assert isinstance(config["time_slot_rules"], list)
         assert config["time_slot_rules"][0]["modes"] == ["DAILY"]
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_claim_token_reuses_active_pair_code(self):
+        await init_db()
+        mac = "33:44:55:66:77:88"
+
+        created = await create_claim_token(mac, source="portal")
+        reused = await get_or_create_claim_token(mac, source="render")
+
+        assert created is not None
+        assert reused is not None
+        assert reused["pair_code"] == created["pair_code"]
+        assert reused["expires_at"] == created["expires_at"]
 
     # 设备配置层面的 API key 行为已完全迁移到用户级配置（user_llm_config），
     # 不再在 config_store 里做单元测试，相关旧用例已移除。
