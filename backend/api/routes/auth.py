@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
 from core.auth import clear_session_cookie, create_session_token, require_user, set_session_cookie
-from core.config_store import authenticate_user, _hash_password, get_user_api_quota
+from core.config_store import (
+    DEFAULT_FREE_LLM_QUOTA,
+    INVITE_CODE_BONUS_QUOTA,
+    _hash_password,
+    authenticate_user,
+    ensure_user_api_quota,
+)
 from core.db import get_main_db
 
 router = APIRouter(tags=["auth"])
@@ -24,7 +30,6 @@ async def auth_register(body: dict, response: Response):
     password = body.get("password") or ""
     phone = (body.get("phone") or "").strip()
     email = (body.get("email") or "").strip()
-    invite_code = (body.get("invite_code") or "").strip()
 
     if not username or len(username) < 2 or len(username) > 30:
         return JSONResponse({"error": "用户名长度须为 2-30 字符"}, status_code=400)
@@ -44,24 +49,10 @@ async def auth_register(body: dict, response: Response):
     pw_hash, _ = _hash_password(password)
 
     try:
-        # 显式开启事务，确保「校验邀请码 -> 创建用户 -> 标记邀请码 -> 初始化额度」原子完成
+        # 显式开启事务，确保「创建用户 -> 初始化额度」原子完成
         await db.execute("BEGIN")
 
-        # 1) 如果提供了邀请码，校验其有效且未使用
-        if invite_code:
-            cursor = await db.execute(
-                "SELECT code, is_used FROM invitation_codes WHERE code = ? LIMIT 1",
-                (invite_code,),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                await db.rollback()
-                return JSONResponse({"error": "邀请码无效"}, status_code=400)
-            if row[1]:
-                await db.rollback()
-                return JSONResponse({"error": "邀请码已被使用"}, status_code=409)
-
-        # 2) 创建用户记录（用户名 + 手机/邮箱 + 记录邀请码）
+        # 注册默认发放平台免费额度，邀请码仅在登录后单独兑换，避免注册时误消耗。
         cursor = await db.execute(
             """
             INSERT INTO users (username, password_hash, phone, email, role, invite_code, created_at)
@@ -72,31 +63,19 @@ async def auth_register(body: dict, response: Response):
                 pw_hash,
                 phone or None,
                 email or None,
-                invite_code or "",
+                "",
                 now,
             ),
         )
         user_id = cursor.lastrowid
 
-        # 3) 如果提供了邀请码，标记邀请码已被使用
-        if invite_code:
-            await db.execute(
-                """
-                UPDATE invitation_codes
-                SET is_used = 1, used_by_user_id = ?
-                WHERE code = ?
-                """,
-                (user_id, invite_code),
-            )
-
-        # 4) 初始化 API 调用额度（有邀请码给50次，无邀请码给0次）
-        initial_quota = 50 if invite_code else 0
+        # 新用户默认获得 50 次平台免费 LLM 调用额度。
         await db.execute(
             """
             INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
             VALUES (?, 0, ?)
             """,
-            (user_id, initial_quota),
+            (user_id, DEFAULT_FREE_LLM_QUOTA),
         )
 
         await db.commit()
@@ -120,6 +99,7 @@ async def auth_login(body: dict, response: Response):
     user = await authenticate_user(username, password)
     if not user:
         return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
+    await ensure_user_api_quota(user["id"])
     token = create_session_token(user["id"], user["username"])
     set_session_cookie(response, token)
     return {"ok": True, "user_id": user["id"], "username": user["username"], "token": token}
@@ -134,6 +114,7 @@ async def auth_me(user_id: int = Depends(require_user)):
     row = await cursor.fetchone()
     if not row:
         return JSONResponse({"error": "用户不存在"}, status_code=404)
+    await ensure_user_api_quota(user_id)
     return {"user_id": row[0], "username": row[1], "created_at": row[2]}
 
 
@@ -150,6 +131,8 @@ async def auth_redeem_invite_code(body: dict, user_id: int = Depends(require_use
     
     if not invite_code:
         return JSONResponse({"error": "邀请码不能为空"}, status_code=400)
+
+    await ensure_user_api_quota(user_id)
     
     db = await get_main_db()
     
@@ -193,19 +176,19 @@ async def auth_redeem_invite_code(body: dict, user_id: int = Depends(require_use
         await db.execute(
             """
             UPDATE api_quotas
-            SET free_quota_remaining = free_quota_remaining + 50
+            SET free_quota_remaining = free_quota_remaining + ?
             WHERE user_id = ?
             """,
-            (user_id,),
+            (INVITE_CODE_BONUS_QUOTA, user_id),
         )
         
         await db.commit()
         
         # 获取更新后的额度信息
-        quota = await get_user_api_quota(user_id)
+        quota = await ensure_user_api_quota(user_id)
         return {
             "ok": True,
-            "message": "邀请码兑换成功，已获得 50 次免费 LLM 调用额度",
+            "message": f"邀请码兑换成功，已获得 {INVITE_CODE_BONUS_QUOTA} 次免费 LLM 调用额度",
             "free_quota_remaining": quota.get("free_quota_remaining", 0) if quota else 0,
         }
     except aiosqlite.IntegrityError:

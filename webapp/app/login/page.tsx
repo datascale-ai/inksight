@@ -33,7 +33,6 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +44,7 @@ function LoginForm() {
     setSuccessMsg("");
     setLoading(true);
     try {
-      // 基础前端校验：注册时强制要求手机号/邮箱（邀请码可选）
+      // 基础前端校验：注册时强制要求手机号/邮箱。
       if (mode === "register") {
         if (!phone.trim() && !email.trim()) {
           setError(locale === "en" ? "Please enter phone or email" : "手机号或邮箱至少填写一个");
@@ -58,9 +57,6 @@ function LoginForm() {
       const payload: Record<string, string> = { username, password };
       if (mode === "register" && phone.trim()) payload.phone = phone.trim();
       if (mode === "register" && email.trim()) payload.email = email.trim();
-      if (mode === "register" && inviteCode.trim()) {
-        payload.invite_code = inviteCode.trim();
-      }
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -196,25 +192,6 @@ function LoginForm() {
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
                   />
                 </div>
-              </div>
-            )}
-            {mode === "register" && (
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">
-                  {locale === "en" ? "Invitation code (optional)" : "邀请码（可选）"}
-                </label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  maxLength={50}
-                  placeholder={
-                    locale === "en"
-                      ? "Optional: Enter invitation code to get 5 free LLM calls"
-                      : "可选：填写邀请码可获得50次免费LLM调用额度"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                />
               </div>
             )}
             {successMsg && (

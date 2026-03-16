@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 PAIR_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+DEFAULT_FREE_LLM_QUOTA = 50
+INVITE_CODE_BONUS_QUOTA = 50
 
 from migrations import run_main_db_migrations
 from .db import get_main_db
@@ -188,7 +190,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS api_quotas (
                 user_id INTEGER PRIMARY KEY,
                 total_calls_made INTEGER DEFAULT 0,
-                free_quota_remaining INTEGER DEFAULT 5,
+                free_quota_remaining INTEGER DEFAULT 50,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
@@ -605,10 +607,10 @@ async def get_user_role(user_id: int) -> str | None:
 # ── API quota & invitation helpers ────────────────────────────
 
 
-async def init_user_api_quota(user_id: int, *, free_quota: int = 5) -> None:
+async def init_user_api_quota(user_id: int, *, free_quota: int = DEFAULT_FREE_LLM_QUOTA) -> None:
     """为新用户初始化 API 调用额度（幂等）。
 
-    默认 5 次免费额度，可通过 free_quota 参数调整。
+    默认 50 次免费额度，可通过 free_quota 参数调整。
     """
     db = await get_main_db()
     await db.execute(
@@ -619,6 +621,54 @@ async def init_user_api_quota(user_id: int, *, free_quota: int = 5) -> None:
         (user_id, free_quota),
     )
     await db.commit()
+
+
+async def ensure_user_api_quota(
+    user_id: int,
+    *,
+    free_quota: int = DEFAULT_FREE_LLM_QUOTA,
+) -> dict | None:
+    """确保用户存在可用额度记录，并补齐历史错误初始化的账号。"""
+    db = await get_main_db()
+    cursor = await db.execute("SELECT id FROM users WHERE id = ? LIMIT 1", (user_id,))
+    if not await cursor.fetchone():
+        return None
+
+    quota = await get_user_api_quota(user_id)
+    if quota is None:
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
+            VALUES (?, 0, ?)
+            """,
+            (user_id, free_quota),
+        )
+        await db.commit()
+        return {
+            "user_id": user_id,
+            "total_calls_made": 0,
+            "free_quota_remaining": free_quota,
+        }
+
+    total_calls_made = int(quota.get("total_calls_made") or 0)
+    free_quota_remaining = int(quota.get("free_quota_remaining") or 0)
+
+    # 修复历史错误：此前部分账号会被初始化为 0 或 5 次，但实际上应默认有 50 次。
+    if total_calls_made == 0 and free_quota_remaining < free_quota:
+        await db.execute(
+            """
+            UPDATE api_quotas
+            SET free_quota_remaining = ?
+            WHERE user_id = ?
+              AND total_calls_made = 0
+              AND free_quota_remaining < ?
+            """,
+            (free_quota, user_id, free_quota),
+        )
+        await db.commit()
+        quota["free_quota_remaining"] = free_quota
+
+    return quota
 
 
 async def get_user_api_quota(user_id: int) -> dict | None:

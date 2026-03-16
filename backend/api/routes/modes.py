@@ -18,8 +18,8 @@ from core.config_store import (
     get_custom_mode,
     save_custom_mode,
     delete_custom_mode,
-    get_user_api_quota,
     consume_user_free_quota,
+    ensure_user_api_quota,
     get_quota_owner_for_mac,
     get_user_role,
 )
@@ -198,7 +198,7 @@ async def custom_mode_preview(
             except Exception:
                 user_role = None
             if user_role != "root":
-                quota = await get_user_api_quota(quota_user_id)
+                quota = await ensure_user_api_quota(quota_user_id)
                 remaining = int(quota.get("free_quota_remaining") or 0) if quota else 0
                 if remaining <= 0:
                     return JSONResponse(
@@ -454,7 +454,7 @@ async def generate_mode(
         except Exception:
             user_role = None
         if user_role != "root":
-            quota = await get_user_api_quota(quota_user_id)
+            quota = await ensure_user_api_quota(quota_user_id)
             remaining = int(quota.get("free_quota_remaining") or 0) if quota else 0
             if remaining <= 0:
                 return JSONResponse(

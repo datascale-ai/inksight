@@ -9,15 +9,16 @@ from fastapi.responses import JSONResponse
 from api.shared import require_membership_access
 from core.auth import require_user, validate_mac_param
 from core.config_store import (
+    INVITE_CODE_BONUS_QUOTA,
     approve_access_request,
     bind_device,
+    ensure_user_api_quota,
     get_device_members,
     get_device_owner,
-    get_pending_requests_for_owner,
-    get_user_api_quota,
     get_user_by_username,
     get_user_devices,
     get_user_llm_config,
+    get_pending_requests_for_owner,
     reject_access_request,
     revoke_device_member,
     save_user_llm_config,
@@ -134,7 +135,7 @@ async def get_user_profile(user_id: int = Depends(require_user)):
         return JSONResponse({"error": "用户不存在"}, status_code=404)
     
     # 获取额度信息
-    quota = await get_user_api_quota(user_id)
+    quota = await ensure_user_api_quota(user_id)
     
     # 获取 LLM 配置
     llm_config = await get_user_llm_config(user_id)
@@ -173,6 +174,8 @@ async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
     
     if not invite_code:
         return JSONResponse({"error": "邀请码不能为空"}, status_code=400)
+
+    await ensure_user_api_quota(user_id)
     
     db = await get_main_db()
     
@@ -216,19 +219,19 @@ async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
         await db.execute(
             """
             UPDATE api_quotas
-            SET free_quota_remaining = free_quota_remaining + 50
+            SET free_quota_remaining = free_quota_remaining + ?
             WHERE user_id = ?
             """,
-            (user_id,),
+            (INVITE_CODE_BONUS_QUOTA, user_id),
         )
         
         await db.commit()
         
         # 获取更新后的额度信息
-        quota = await get_user_api_quota(user_id)
+        quota = await ensure_user_api_quota(user_id)
         return {
             "ok": True,
-            "message": "邀请码兑换成功，已获得 50 次免费 LLM 调用额度",
+            "message": f"邀请码兑换成功，已获得 {INVITE_CODE_BONUS_QUOTA} 次免费 LLM 调用额度",
             "free_quota_remaining": quota.get("free_quota_remaining", 0) if quota else 0,
         }
     except aiosqlite.IntegrityError:

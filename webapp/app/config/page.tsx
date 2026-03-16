@@ -2213,7 +2213,7 @@ function ConfigPageInner() {
             <CardContent className="space-y-4">
               <p className="text-sm text-ink-light">
                 {isEn
-                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 10 more free LLM calls, or configure your own API key in your profile settings."
+                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 50 more free LLM calls, or configure your own API key in your profile settings."
                   : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在个人信息中设置自己的 API key。"}
               </p>
               <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">

@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
 from core.config_store import (
+    DEFAULT_FREE_LLM_QUOTA,
     init_db,
+    ensure_user_api_quota,
     init_user_api_quota,
     get_user_api_quota,
     consume_user_free_quota,
@@ -41,7 +43,7 @@ class TestUserRegistration:
 
     @pytest.mark.asyncio
     async def test_register_with_valid_invite_code(self):
-        """测试使用有效邀请码注册"""
+        """测试注册默认发放 50 次额度，且不消耗邀请码"""
         await init_db()
         db = await get_main_db()
         
@@ -73,24 +75,24 @@ class TestUserRegistration:
         assert result["username"] == "testuser"
         user_id = result["user_id"]
         
-        # 4. 验证邀请码已被标记为使用
+        # 4. 验证邀请码未在注册阶段被消耗
         cursor = await db.execute(
             "SELECT is_used, used_by_user_id FROM invitation_codes WHERE code = ?",
             ("TEST123",),
         )
         row = await cursor.fetchone()
-        assert row[0] == 1  # is_used
-        assert row[1] == user_id  # used_by_user_id
-        
+        assert row[0] == 0
+        assert row[1] is None
+
         # 5. 验证用户获得了 50 次免费额度
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == 50
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
         assert quota["total_calls_made"] == 0
 
     @pytest.mark.asyncio
     async def test_register_without_invite_code(self):
-        """测试不使用邀请码注册（额度为 0）"""
+        """测试不使用邀请码注册也会默认获得 50 次额度"""
         await init_db()
         
         from api.routes.auth import auth_register
@@ -107,21 +109,20 @@ class TestUserRegistration:
         assert result["ok"] is True
         user_id = result["user_id"]
         
-        # 验证用户额度为 0
+        # 验证用户默认额度为 50
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == 0
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
         assert quota["total_calls_made"] == 0
 
     @pytest.mark.asyncio
     async def test_register_with_invalid_invite_code(self):
-        """测试使用无效邀请码注册"""
+        """测试注册时即使传入无效邀请码也不会失败"""
         await init_db()
-        
+
         from api.routes.auth import auth_register
         from fastapi import Response
-        from fastapi.responses import JSONResponse
-        
+
         body = {
             "username": "testuser3",
             "password": "testpass123",
@@ -130,14 +131,15 @@ class TestUserRegistration:
         }
         response = Response()
         result = await auth_register(body, response)
-        
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
-        assert "邀请码无效" in result.body.decode()
+
+        assert result["ok"] is True
+        quota = await get_user_api_quota(result["user_id"])
+        assert quota is not None
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
 
     @pytest.mark.asyncio
     async def test_register_with_used_invite_code(self):
-        """测试使用已使用的邀请码注册"""
+        """测试注册时传入已使用邀请码也不会失败或重复消耗"""
         await init_db()
         db = await get_main_db()
         
@@ -153,8 +155,7 @@ class TestUserRegistration:
         
         from api.routes.auth import auth_register
         from fastapi import Response
-        from fastapi.responses import JSONResponse
-        
+
         body = {
             "username": "testuser4",
             "password": "testpass123",
@@ -163,10 +164,18 @@ class TestUserRegistration:
         }
         response = Response()
         result = await auth_register(body, response)
-        
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 409
-        assert "邀请码已被使用" in result.body.decode()
+
+        assert result["ok"] is True
+        cursor = await db.execute(
+            "SELECT is_used, used_by_user_id FROM invitation_codes WHERE code = ?",
+            ("USED123",),
+        )
+        row = await cursor.fetchone()
+        assert row[0] == 1
+        assert row[1] == 999
+        quota = await get_user_api_quota(result["user_id"])
+        assert quota is not None
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
 
     @pytest.mark.asyncio
     async def test_register_phone_email_validation(self):
@@ -212,6 +221,36 @@ class TestUserRegistration:
         assert result3.status_code == 400
         assert "手机号或邮箱至少填写一个" in result3.body.decode()
 
+    @pytest.mark.asyncio
+    async def test_login_repairs_legacy_zero_quota(self):
+        """测试历史上被错误发成 0 次额度的账号，登录后会自动修复。"""
+        await init_db()
+        db = await get_main_db()
+        user_id = await create_user("legacylogin", "testpass123", email="legacy@login.example")
+        assert user_id is not None
+
+        await db.execute(
+            """
+            INSERT INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
+            VALUES (?, 0, 0)
+            """,
+            (user_id,),
+        )
+        await db.commit()
+
+        from api.routes.auth import auth_login
+        from fastapi import Response
+
+        result = await auth_login(
+            {"username": "legacylogin", "password": "testpass123"},
+            Response(),
+        )
+
+        assert result["ok"] is True
+        quota = await get_user_api_quota(user_id)
+        assert quota is not None
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
+
 
 class TestInviteCodeRedemption:
     """测试邀请码兑换功能"""
@@ -222,7 +261,7 @@ class TestInviteCodeRedemption:
         await init_db()
         db = await get_main_db()
         
-        # 1. 创建用户（无邀请码，额度为 0）
+        # 1. 创建用户（兑换时会先补齐默认 50 次，再叠加邀请码赠送的 50 次）
         user_id = await create_user("testuser", "testpass", email="test@example.com")
         assert user_id is not None
         
@@ -249,7 +288,7 @@ class TestInviteCodeRedemption:
         # 4. 验证兑换成功
         assert result["ok"] is True
         assert "邀请码兑换成功" in result["message"]
-        assert result["free_quota_remaining"] == 50
+        assert result["free_quota_remaining"] == 100
         
         # 5. 验证邀请码已被标记为使用
         cursor = await db.execute(
@@ -262,7 +301,7 @@ class TestInviteCodeRedemption:
         
         # 6. 验证用户额度已增加
         quota = await get_user_api_quota(user_id)
-        assert quota["free_quota_remaining"] == 50
+        assert quota["free_quota_remaining"] == 100
 
     @pytest.mark.asyncio
     async def test_redeem_invalid_invite_code(self):
@@ -321,19 +360,19 @@ class TestQuotaManagement:
         """测试初始化用户额度"""
         await init_db()
         user_id = await create_user("quotauser", "testpass", phone="13900139000")
-        
-        # 初始化额度（默认 5 次）
+
+        # 初始化额度（默认 50 次）
         await init_user_api_quota(user_id)
-        
+
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == 5
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
         assert quota["total_calls_made"] == 0
-        
+
         # 测试幂等性（再次初始化不应改变值）
         await init_user_api_quota(user_id)
         quota2 = await get_user_api_quota(user_id)
-        assert quota2["free_quota_remaining"] == 5
+        assert quota2["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
 
     @pytest.mark.asyncio
     async def test_init_user_api_quota_custom_amount(self):
@@ -345,6 +384,28 @@ class TestQuotaManagement:
         
         quota = await get_user_api_quota(user_id)
         assert quota["free_quota_remaining"] == 50
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("legacy_quota", [0, 5])
+    async def test_ensure_user_api_quota_repairs_legacy_signup_quota(self, legacy_quota):
+        """测试历史上被错误初始化为 0/5 次的账号会自动补齐到 50 次。"""
+        await init_db()
+        db = await get_main_db()
+        user_id = await create_user("legacyquota", "testpass", phone="13300133000")
+
+        await db.execute(
+            """
+            INSERT INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
+            VALUES (?, 0, ?)
+            """,
+            (user_id, legacy_quota),
+        )
+        await db.commit()
+
+        quota = await ensure_user_api_quota(user_id)
+        assert quota is not None
+        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
+        assert quota["total_calls_made"] == 0
 
     @pytest.mark.asyncio
     async def test_get_user_api_quota_nonexistent(self):

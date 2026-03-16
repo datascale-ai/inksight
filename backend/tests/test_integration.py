@@ -85,8 +85,8 @@ async def provision_device_headers(client: AsyncClient, mac: str) -> dict[str, s
 
 
 async def register_user(client: AsyncClient, username: str, password: str = "pass1234") -> dict:
-    # Register validates invite_code (optional). If provided, it must exist and be unused.
-    # We generate a unique code per user and seed it into the test DB to keep tests isolated.
+    # Register now grants the default quota directly; invite codes are redeemed after login.
+    # We still send a seeded code here to verify the endpoint safely ignores legacy invite input.
     invite_code = f"TEST_CODE_{username.upper()}"
     db = await get_main_db()
     await db.execute(

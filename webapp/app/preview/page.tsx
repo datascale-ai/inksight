@@ -38,6 +38,22 @@ const MODE_META: Record<string, { name: string; tip: string }> = {
   MY_ADAPTIVE: { name: "自适应照片", tip: "上传本地照片，自适应 4.2\" 墨水屏" },
 };
 
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const data = await res.json().catch(() => null);
+    if (data && typeof data === "object") {
+      const msg = (data as { message?: unknown; error?: unknown }).message;
+      if (typeof msg === "string" && msg.trim()) return msg.trim();
+      const err = (data as { error?: unknown }).error;
+      if (typeof err === "string" && err.trim()) return err.trim();
+    }
+  }
+  const text = await res.text().catch(() => "");
+  if (text.trim()) return text.trim().slice(0, 160);
+  return `${fallback}: HTTP ${res.status}`;
+}
+
 // 英文模式元数据（用于 /en/preview 下显示）
 const MODE_META_EN: Record<string, { name: string; tip: string }> = {
   DAILY: { name: "Everyday", tip: "A daily digest: quotes, book picks, and fun facts" },
@@ -520,8 +536,7 @@ export default function ExperiencePage() {
         }
       }
       if (!res.ok) {
-        const errText = await res.text().catch(() => "Unknown error");
-        throw new Error(`${t(locale, "preview.error.preview_failed", "Preview failed")}: HTTP ${res.status} ${errText.substring(0, 120)}`);
+        throw new Error(await readErrorMessage(res, t(locale, "preview.error.preview_failed", "Preview failed")));
       }
 
       const statusHeader = res.headers.get("x-preview-status");
@@ -682,8 +697,7 @@ export default function ExperiencePage() {
         body: JSON.stringify({ mode_def: def }),
       });
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Preview failed");
+        throw new Error(await readErrorMessage(res, locale === "zh" ? "预览失败" : "Preview failed"));
       }
       const statusHeader = res.headers.get("x-preview-status");
       const llmRequired = res.headers.get("x-llm-required");
@@ -1645,7 +1659,7 @@ export default function ExperiencePage() {
             <CardContent className="space-y-4">
               <p className="text-sm text-ink-light">
                 {locale === "en"
-                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 5 more free LLM calls, or configure your own API key in device settings."
+                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 50 more free LLM calls, or configure your own API key in device settings."
                   : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在设备配置中设置自己的 API key。"}
               </p>
               <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">

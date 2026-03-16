@@ -14,6 +14,7 @@ import os
 import sys
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
+from openai import OpenAIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -261,6 +262,69 @@ class TestJsonContentApiKey:
             # 应该返回 fallback 内容，并标记 api_key_invalid
             assert "quote" in result
             assert result.get("_api_key_invalid") is True
+
+    @pytest.mark.asyncio
+    async def test_json_content_marks_api_key_invalid_on_openai_auth_error(self, custom_mode_def):
+        """测试 OpenAI 兼容 SDK 的鉴权错误会被识别为 api_key_invalid，而不是抛出 500。"""
+        class FakeAuthenticationError(OpenAIError):
+            def __init__(self):
+                super().__init__("401 invalid_api_key")
+                self.status_code = 401
+
+        with patch("core.json_content._call_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.side_effect = FakeAuthenticationError()
+
+            result = await generate_json_mode_content(
+                custom_mode_def,
+                date_str="2025-03-12",
+                weather_str="晴 15°C",
+                api_key=None,
+            )
+
+            assert "quote" in result
+            assert result.get("_api_key_invalid") is True
+            assert result.get("_llm_ok") is False
+
+    @pytest.mark.asyncio
+    async def test_composite_content_preserves_api_key_invalid_flag(self):
+        """测试 composite 模式不会吞掉 api_key_invalid 标记。"""
+        mode_def = {
+            "mode_id": "TEST_COMPOSITE",
+            "content": {
+                "type": "composite",
+                "steps": [
+                    {
+                        "type": "llm_json",
+                        "prompt_template": "测试提示词 {context}",
+                        "output_schema": {
+                            "quote": {"type": "string", "default": "默认语录"},
+                            "author": {"type": "string", "default": "默认作者"},
+                        },
+                        "fallback": {"quote": "默认语录", "author": "默认作者"},
+                    }
+                ],
+                "fallback": {"quote": "默认语录", "author": "默认作者"},
+            },
+            "layout": {"body": []},
+        }
+
+        class FakeAuthenticationError(OpenAIError):
+            def __init__(self):
+                super().__init__("401 invalid_api_key")
+                self.status_code = 401
+
+        with patch("core.json_content._call_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.side_effect = FakeAuthenticationError()
+
+            result = await generate_json_mode_content(
+                mode_def,
+                date_str="2025-03-12",
+                weather_str="晴 15°C",
+                api_key=None,
+            )
+
+            assert result.get("_api_key_invalid") is True
+            assert result.get("_llm_ok") is False
 
     @pytest.mark.asyncio
     async def test_json_content_passes_api_key_to_nested_calls(self, custom_mode_def):

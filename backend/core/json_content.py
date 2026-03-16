@@ -289,7 +289,7 @@ async def generate_json_mode_content(
         try:
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
             llm_ok = True
-        except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
+        except (LLMKeyMissingError, OpenAIError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
             if DISABLE_FALLBACK:
                 result = {"text": f"[LLM_ERROR] {e}", "_is_fallback": True, "_llm_used": True, "_llm_ok": False}
@@ -298,18 +298,9 @@ async def generate_json_mode_content(
             if isinstance(e, LLMKeyMissingError):
                 api_key_invalid = True
                 logger.warning(f"[JSONContent] API key missing or invalid for {mode_id}: {e}")
-            elif isinstance(e, HTTPStatusError):
-                status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
-                if status_code in (401, 403):
-                    api_key_invalid = True
-                    logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: HTTP {status_code}")
-            elif isinstance(e, OpenAIError):
-                # OpenAI SDK 的错误可能包含状态码信息
-                error_message = str(e).lower()
-                error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
-                if error_code in (401, 403) or "401" in error_message or "403" in error_message or "unauthorized" in error_message or "invalid" in error_message or "authentication" in error_message:
-                    api_key_invalid = True
-                    logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
+            elif _is_api_key_error(e):
+                api_key_invalid = True
+                logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
             fb = dict(fallback)
             # 标记为使用兜底内容，便于前端/统计判断
             fb["_is_fallback"] = True
@@ -608,6 +599,7 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
     result: dict[str, Any] = {}
     any_llm_used = False
     any_llm_failed = False
+    any_api_key_invalid = False
     
     for step in steps:
         try:
@@ -622,12 +614,16 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
                     any_llm_used = True
                     if not part.get("_llm_ok", True):
                         any_llm_failed = True
+                if part.get("_api_key_invalid") is True:
+                    any_api_key_invalid = True
                 # 移除内部标记，避免污染最终结果
                 part_clean = {k: v for k, v in part.items() if not k.startswith("_")}
                 result.update(part_clean)
-        except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
+        except (LLMKeyMissingError, OpenAIError, httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
             logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}", exc_info=True)
             any_llm_failed = True
+            if isinstance(e, LLMKeyMissingError) or _is_api_key_error(e):
+                any_api_key_invalid = True
             # Continue with next step instead of failing entirely
             continue
     
@@ -637,6 +633,8 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             fb["_llm_used"] = True
             fb["_llm_ok"] = False
             fb["_used_fallback"] = True
+        if any_api_key_invalid:
+            fb["_api_key_invalid"] = True
         return fb
     
     merged = dict(fallback)
@@ -650,7 +648,9 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             merged["_used_fallback"] = True
         else:
             merged["_llm_ok"] = True
-    
+    if any_api_key_invalid:
+        merged["_api_key_invalid"] = True
+
     return merged
 
 

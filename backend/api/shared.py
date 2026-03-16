@@ -71,12 +71,12 @@ from core.config_store import (
     get_device_membership,
     get_device_state,
     get_quota_owner_for_mac,
-    get_user_api_quota,
     get_user_role,
     init_db,
     set_cycle_index,
     update_device_state,
     consume_user_free_quota,
+    ensure_user_api_quota,
 )
 from core.context import calc_battery_pct, get_date_context, get_weather
 from core.pipeline import generate_and_render, get_effective_mode_config
@@ -578,7 +578,7 @@ async def build_image(
                             quota_user_id,
                         )
                     else:
-                        quota = await get_user_api_quota(quota_user_id)
+                        quota = await ensure_user_api_quota(quota_user_id)
                         if quota is None:
                             logger.warning(
                                 "[QUOTA] Quota query returned None for user_id=%s (mac=%s, mode=%s) on cache hit, treating as exhausted",
@@ -595,9 +595,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted, False, False
+                                return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted, False, False
+                            return None, persona, False, True, quota_exhausted, False, False, user_provided_api_key
                         if int(quota.get("free_quota_remaining") or 0) <= 0:
                             quota_exhausted = True
                             logger.info(
@@ -614,9 +614,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted, False, False
+                                return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted, False, False
+                            return None, persona, False, True, quota_exhausted, False, False, user_provided_api_key
                 except Exception:
                     logger.warning(
                         "[QUOTA] Failed to check quota on cache hit for user_id=%s (mac=%s, mode=%s), allowing cache",
@@ -668,7 +668,7 @@ async def build_image(
                     quota_user_id,
                 )
             else:
-                quota = await get_user_api_quota(quota_user_id)
+                quota = await ensure_user_api_quota(quota_user_id)
                 if quota is None:
                     logger.warning(
                         "[QUOTA] Quota query returned None for user_id=%s (mac=%s, mode=%s), treating as exhausted",
@@ -683,7 +683,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted, False, False
+                    return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
                 if int(quota.get("free_quota_remaining") or 0) <= 0:
                     quota_exhausted = True
                     logger.info(
@@ -721,7 +721,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted, False, False
+                    return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
             except Exception:
                 # 如果连 role 都查不到，为了安全起见，也视为额度耗尽
                 logger.warning(
@@ -737,14 +737,14 @@ async def build_image(
                     last_persona=persona,
                     last_refresh_at=datetime.now().isoformat(),
                 )
-                return img, persona, False, True, quota_exhausted, False, False
+                return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
             # 更新设备状态，但不写入内容缓存，避免后续充值后仍命中"额度耗尽"图片
             await update_device_state(
                 mac,
                 last_persona=persona,
                 last_refresh_at=datetime.now().isoformat(),
             )
-            return img, persona, False, True, quota_exhausted, False, False
+            return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
 
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
@@ -839,11 +839,18 @@ async def build_image(
     api_key_invalid = False
     if isinstance(content_data, dict) and content_data.get("_api_key_invalid") is True:
         api_key_invalid = True
-        logger.warning(
-            "[API_KEY] User provided API key is invalid or expired for mac=%s, mode=%s",
-            mac,
-            persona,
-        )
+        if user_provided_api_key:
+            logger.warning(
+                "[API_KEY] User-provided API key is invalid or expired for mac=%s, mode=%s",
+                mac,
+                persona,
+            )
+        else:
+            logger.warning(
+                "[API_KEY] Platform default API key is invalid or expired for mac=%s, mode=%s",
+                mac,
+                persona,
+            )
         # 对于设备端，返回提示图片；对于 Web 预览，返回 api_key_invalid 标志让接口处理
         if mac:
             img = _render_api_key_invalid_image(screen_w, screen_h)
@@ -853,7 +860,7 @@ async def build_image(
                 last_refresh_at=datetime.now().isoformat(),
             )
 
-    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota
+    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, user_provided_api_key
 
 
 async def log_render_stats(

@@ -7,7 +7,7 @@ from json import JSONDecodeError
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Cookie, Depends, Header, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image, UnidentifiedImageError
 
 from api.shared import (
@@ -50,6 +50,24 @@ def _configured_refresh_minutes(config: Optional[dict]) -> int:
     if refresh_minutes > 1440:
         return 1440
     return refresh_minutes
+
+
+def _api_key_error_payload(user_provided_api_key: bool) -> dict:
+    if user_provided_api_key:
+        return {
+            "error": "api_key_invalid",
+            "message": "您配置的 API key 无效或已过期，请检查个人信息或设备配置中的 AI 配置。",
+        }
+    return {
+        "error": "platform_api_key_invalid",
+        "message": "服务器默认 AI 配置当前不可用。请在个人信息或设备配置中设置自己的 API key，或检查后端 .env 中的默认 API key。",
+    }
+
+
+def _api_key_error_response(user_provided_api_key: bool) -> JSONResponse:
+    payload = _api_key_error_payload(user_provided_api_key)
+    status_code = 400 if user_provided_api_key else 503
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 @router.get("/render")
@@ -134,7 +152,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, _user_provided_api_key = await build_image(
             params.v,
             mac,
             params.persona,
@@ -290,7 +308,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, user_provided_api_key = await build_image(
             effective_v,
             mac,
             persona,
@@ -305,14 +323,7 @@ async def preview(
         )
         # 如果 API key 无效，返回 JSON 响应，提醒用户
         if api_key_invalid:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=400,  # Bad Request
-                content={
-                    "error": "api_key_invalid",
-                    "message": "您提供的 API key 无效或已过期，请检查设备配置中的 AI 配置",
-                },
-            )
+            return _api_key_error_response(user_provided_api_key)
         # 如果额度耗尽，返回 JSON 响应，让前端显示邀请码输入弹窗
         if quota_exhausted:
             from fastapi.responses import JSONResponse
@@ -404,7 +415,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, user_provided_api_key = await build_image(
                 effective_v,
                 mac,
                 persona,
@@ -419,10 +430,7 @@ async def preview_stream(
             )
             # 如果 API key 无效，返回错误事件
             if api_key_invalid:
-                yield _sse_event("error", {
-                    "error": "api_key_invalid",
-                    "message": "您提供的 API key 无效或已过期，请检查设备配置中的 AI 配置",
-                })
+                yield _sse_event("error", _api_key_error_payload(user_provided_api_key))
                 return
             # 如果额度耗尽，返回错误事件
             if quota_exhausted:
