@@ -113,8 +113,12 @@ class TestPipelineApiKey:
         from core.crypto import encrypt_api_key
         encrypted_key = encrypt_api_key(user_api_key)
         
+        # 在新的实现中，pipeline 不再从设备配置的 llm_api_key 读取用户 Key，
+        # 而是由上层 shared.build_image 注入 config["user_api_key"]。
+        # 为了验证 generate_json_mode_content 收到正确的 api_key，
+        # 这里直接通过 config["user_api_key"] 传递。
         config = {
-            "llm_api_key": encrypted_key,
+            "user_api_key": user_api_key,
             "llm_provider": "deepseek",
             "llm_model": "deepseek-chat",
         }
@@ -142,9 +146,9 @@ class TestPipelineApiKey:
         """测试 pipeline 处理解密后为空的情况"""
         mock_reg = _mock_registry(json_modes=["TEST_CUSTOM"])
         
-        # 模拟解密失败（返回空字符串）
+        # 模拟上层传入 user_api_key 为空字符串（表示用户配置了但无效）
         config = {
-            "llm_api_key": "invalid-encrypted-key",
+            "user_api_key": "",
             "llm_provider": "deepseek",
             "llm_model": "deepseek-chat",
         }

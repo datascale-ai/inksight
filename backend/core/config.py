@@ -290,3 +290,24 @@ def get_cacheable_modes() -> set[str]:
     except (ImportError, AttributeError, RuntimeError):
         logger.warning("[Config] Falling back to builtin cacheable modes", exc_info=True)
         return {"STOIC", "ROAST", "ZEN", "DAILY"}
+
+
+from typing import Optional
+
+
+def get_default_llm_model_for_provider(provider: Optional[str]) -> str:
+    """根据服务商返回默认模型名。
+
+    - 百炼(aliyun)：默认 deepseek-v3.2（兼容模式）
+    - DeepSeek：默认 deepseek-chat
+    - Moonshot：默认 moonshot-v1-8k
+    - 其他/未知：回退到 DEFAULT_LLM_MODEL
+    """
+    p = (provider or "").strip().lower() or DEFAULT_LLM_PROVIDER
+    if p == "aliyun":
+        return "deepseek-v3.2"
+    if p == "deepseek":
+        return "deepseek-chat"
+    if p == "moonshot":
+        return "moonshot-v1-8k"
+    return DEFAULT_LLM_MODEL

@@ -19,26 +19,13 @@ interface ProfileData {
   free_quota_remaining: number;
   llm_config: {
     provider: string;
+    model: string;
     api_key: string;
     base_url: string;
     image_provider?: string;
     image_api_key?: string;
   } | null;
 }
-
-const LLM_MODELS: Record<string, { v: string; n: string }[]> = {
-  deepseek: [{ v: "deepseek-chat", n: "DeepSeek Chat" }],
-  aliyun: [
-    { v: "qwen-max", n: "通义千问 Max" },
-    { v: "qwen-plus", n: "通义千问 Plus" },
-    { v: "qwen-turbo", n: "通义千问 Turbo" },
-    { v: "deepseek-v3", n: "DeepSeek V3" },
-  ],
-  moonshot: [
-    { v: "moonshot-v1-8k", n: "Kimi K1.5" },
-    { v: "moonshot-v1-32k", n: "Kimi K1.5 32K" },
-  ],
-};
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -59,6 +46,7 @@ export default function ProfilePage() {
 
   // 自定义 LLM 配置状态
   const [llmProvider, setLlmProvider] = useState("deepseek");
+  const [llmModel, setLlmModel] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [imageProvider, setImageProvider] = useState("aliyun");
@@ -114,6 +102,7 @@ export default function ProfilePage() {
       // 如果有 LLM 配置，设置到表单中，并切换到自定义模式
       if (data.llm_config && data.llm_config.api_key) {
         setLlmProvider(data.llm_config.provider || "deepseek");
+        setLlmModel(data.llm_config.model || "");
         setLlmApiKey(data.llm_config.api_key || "");
         setLlmBaseUrl(data.llm_config.base_url || "");
         setImageProvider(data.llm_config.image_provider || "aliyun");
@@ -122,7 +111,7 @@ export default function ProfilePage() {
       } else {
         setQuotaMode("platform");
       }
-    } catch (e) {
+    } catch {
       showToast(isEn ? "Failed to load profile" : "加载个人信息失败", "error");
     } finally {
       setLoading(false);
@@ -180,6 +169,7 @@ export default function ProfilePage() {
         headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           provider: llmProvider,
+          model: llmModel.trim(),
           api_key: llmApiKey.trim(),
           base_url: llmBaseUrl.trim(),
           image_provider: imageProvider,
@@ -359,20 +349,22 @@ export default function ProfilePage() {
                 </p>
                 </div>
                 <Field label={tr("API 服务商", "API Provider")}>
-                  <select
+                  <input
+                    type="text"
                     value={llmProvider}
-                    onChange={(e) => {
-                      const provider = e.target.value;
-                      setLlmProvider(provider);
-                      // 切换服务商时，重置模型为第一个
-                      const defaultModel = LLM_MODELS[provider]?.[0]?.v || "";
-                    }}
+                    onChange={(e) => setLlmProvider(e.target.value)}
+                    placeholder={tr("例如 deepseek、aliyun、moonshot", "e.g. deepseek, aliyun, moonshot")}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
-                    <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
-                  </select>
+                  />
+                </Field>
+                <Field label={tr("模型名称", "Model Name")}>
+                  <input
+                    type="text"
+                    value={llmModel}
+                    onChange={(e) => setLlmModel(e.target.value)}
+                    placeholder={tr("例如 deepseek-chat、qwen-max", "e.g. deepseek-chat, qwen-max")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                  />
                 </Field>
                 <Field label={tr("API Key", "API Key")}>
                   <input

@@ -20,11 +20,17 @@ _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 @router.post("/auth/register")
 async def auth_register(body: dict, response: Response):
+    """
+    用户注册接口。
+
+    说明：
+    - 注册时不再支持输入邀请码，邀请码仅通过单独的兑换接口使用（/api/user/redeem）
+    - 新用户注册后统一获得 50 次免费 LLM 调用额度
+    """
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     phone = (body.get("phone") or "").strip()
     email = (body.get("email") or "").strip()
-    invite_code = (body.get("invite_code") or "").strip()
 
     if not username or len(username) < 2 or len(username) > 30:
         return JSONResponse({"error": "用户名长度须为 2-30 字符"}, status_code=400)
@@ -44,53 +50,27 @@ async def auth_register(body: dict, response: Response):
     pw_hash, _ = _hash_password(password)
 
     try:
-        # 显式开启事务，确保「校验邀请码 -> 创建用户 -> 标记邀请码 -> 初始化额度」原子完成
+        # 显式开启事务，确保「创建用户 -> 初始化额度」原子完成
         await db.execute("BEGIN")
 
-        # 1) 如果提供了邀请码，校验其有效且未使用
-        if invite_code:
-            cursor = await db.execute(
-                "SELECT code, is_used FROM invitation_codes WHERE code = ? LIMIT 1",
-                (invite_code,),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                await db.rollback()
-                return JSONResponse({"error": "邀请码无效"}, status_code=400)
-            if row[1]:
-                await db.rollback()
-                return JSONResponse({"error": "邀请码已被使用"}, status_code=409)
-
-        # 2) 创建用户记录（用户名 + 手机/邮箱 + 记录邀请码）
+        # 1) 创建用户记录（用户名 + 手机/邮箱）
         cursor = await db.execute(
             """
-            INSERT INTO users (username, password_hash, phone, email, role, invite_code, created_at)
-            VALUES (?, ?, ?, ?, 'user', ?, ?)
+            INSERT INTO users (username, password_hash, phone, email, role, created_at)
+            VALUES (?, ?, ?, ?, 'user', ?)
             """,
             (
                 username,
                 pw_hash,
                 phone or None,
                 email or None,
-                invite_code or "",
                 now,
             ),
         )
         user_id = cursor.lastrowid
 
-        # 3) 如果提供了邀请码，标记邀请码已被使用
-        if invite_code:
-            await db.execute(
-                """
-                UPDATE invitation_codes
-                SET is_used = 1, used_by_user_id = ?
-                WHERE code = ?
-                """,
-                (user_id, invite_code),
-            )
-
-        # 4) 初始化 API 调用额度（有邀请码给50次，无邀请码给0次）
-        initial_quota = 50 if invite_code else 0
+        # 2) 初始化 API 调用额度（统一给 50 次）
+        initial_quota = 50
         await db.execute(
             """
             INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)

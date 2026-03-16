@@ -64,6 +64,7 @@ from core.config import (
     DEFAULT_CITY,
     DEFAULT_MODES,
     DEFAULT_REFRESH_INTERVAL,
+    get_default_llm_model_for_provider,
 )
 from core.config_store import (
     get_active_config,
@@ -363,37 +364,50 @@ async def build_image(
     mode_info = registry.get_mode_info(persona)
     is_mode_cacheable = bool(mode_info.cacheable) if mode_info else True
 
-    # ── Web 相关请求：合入用户级别的 LLM / 图像 API 配置 ─────────────────────────────
-    # 只要存在 current_user_id（无论是否带 mac），都尝试读取用户在个人信息页中配置的 API key。
+    # ── 合入用户级别的 LLM / 图像 API 配置 ─────────────────────────────
+    # 对于 Web 预览：使用 current_user_id 获取用户配置
+    # 对于设备端渲染：使用设备 owner 的 user_id 获取用户配置
     # 这些配置通过 user_api_key / user_image_api_key 字段下发到 pipeline，
     # 同时也用于后续的额度豁免判断（user_provided_api_key）。
-    if current_user_id is not None:
+    target_user_id = current_user_id
+    if not target_user_id and mac:
+        # 设备端渲染：获取设备 owner 的 user_id
+        from core.config_store import get_device_owner
+        owner = await get_device_owner(mac)
+        if owner:
+            target_user_id = owner.get("user_id")
+    
+    if target_user_id is not None:
         config = dict(config or {})  # 不污染设备端 config
         
         # 如果前端传递了 API key（来自 x-inksight-llm-api-key 头），优先使用
         if user_api_key and user_api_key.strip():
             config["user_api_key"] = user_api_key.strip()
-            logger.debug("[BUILD_IMAGE] Using user_api_key from request header for user_id=%s", current_user_id)
+            logger.debug("[BUILD_IMAGE] Using user_api_key from request header for user_id=%s", target_user_id)
         else:
             # 否则从数据库读取用户配置的 API key
             try:
                 from core.config_store import get_user_llm_config
 
-                user_llm_cfg = await get_user_llm_config(current_user_id)
+                user_llm_cfg = await get_user_llm_config(target_user_id)
             except Exception:
                 user_llm_cfg = None
                 logger.warning(
-                    "[QUOTA] Failed to load user_llm_config for user_id=%s in Web preview",
-                    current_user_id,
+                    "[BUILD_IMAGE] Failed to load user_llm_config for user_id=%s (mac=%s)",
+                    target_user_id,
+                    mac,
                     exc_info=True,
                 )
             if user_llm_cfg:
-                # 文本 LLM 提供商与 API key（解密后的明文）
+                # 文本 LLM 提供商 / 模型与 API key（解密后的明文）
                 provider = (user_llm_cfg.get("provider") or "").strip()
+                model = (user_llm_cfg.get("model") or "").strip()
                 api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
                 if provider:
-                    # 仅在 config 中未显式指定时应用用户提供的 provider，避免覆盖模式级别的特殊配置
-                    config.setdefault("llm_provider", provider)
+                    # 用户级别 provider / model 优先级最高：**无条件覆盖** 设备配置中的 llm_provider/llm_model
+                    config["llm_provider"] = provider
+                    if model:
+                        config["llm_model"] = model
                 if api_key_plain:
                     # 使用专门的字段，避免与设备加密字段 llm_api_key 混淆
                     config["user_api_key"] = api_key_plain
@@ -485,17 +499,10 @@ async def build_image(
         logger.debug("[QUOTA DEBUG] Mode %s does NOT require quota", persona)
 
     # 检查用户是否提供了自己的 API key（如果提供了，则无需额度检查）
+    # 注意：API key 现在只从用户级别配置（user_llm_config 表）获取，不再从设备配置读取
     user_provided_api_key = False
     if config:
-        # 设备级别加密存储的 llm_api_key
-        encrypted_llm_key = config.get("llm_api_key", "")
-        if encrypted_llm_key:
-            from core.crypto import decrypt_api_key
-            decrypted_key = decrypt_api_key(encrypted_llm_key)
-            if decrypted_key and decrypted_key.strip():
-                user_provided_api_key = True
-                logger.debug("[QUOTA] User provided API key via device config, skipping quota check for mac=%s", mac)
-        # Web 预览场景下，个人信息页配置的明文 user_api_key
+        # 用户级别配置的 API key（通过 get_user_llm_config 获取并设置到 config["user_api_key"]）
         override_key = config.get("user_api_key")
         if isinstance(override_key, str) and override_key.strip():
             user_provided_api_key = True
@@ -547,6 +554,13 @@ async def build_image(
 
     cache_hit = False
     quota_exhausted = False
+    billing_enabled = os.getenv("INKSIGHT_BILLING_ENABLED", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
     if mac and config and is_mode_cacheable and not skip_cache:
         await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h)
         cached_img = await content_cache.get(
@@ -564,7 +578,8 @@ async def build_image(
             # Root 用户无需检查额度
             # 如果用户提供了自己的 API key，也无需检查额度
             if (
-                quota_user_id is not None
+                billing_enabled
+                and quota_user_id is not None
                 and llm_mode_requires_quota
                 and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
                 and not user_provided_api_key  # 用户提供了自己的 API key，无需检查额度
@@ -653,7 +668,8 @@ async def build_image(
     # Root 用户无需检查额度
     # 如果用户提供了自己的 API key，也无需检查额度
     if (
-        not cache_hit
+        billing_enabled
+        and not cache_hit
         and quota_user_id is not None
         and llm_mode_requires_quota
         and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
@@ -801,7 +817,8 @@ async def build_image(
     # Root 用户无需扣费
     # 如果用户提供了自己的 API key，也无需扣费
     if (
-        not cache_hit
+        billing_enabled
+        and not cache_hit
         and quota_user_id is not None
         and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要扣费
         and isinstance(content_data, dict)

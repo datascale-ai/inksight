@@ -80,26 +80,6 @@ const MODE_META: Record<string, { name: string; tip: string }> = {
 const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
 const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m));
 
-const LLM_MODELS: Record<string, { v: string; n: string }[]> = {
-  deepseek: [{ v: "deepseek-chat", n: "DeepSeek Chat" }],
-  aliyun: [
-    { v: "qwen-max", n: "通义千问 Max" },
-    { v: "qwen-plus", n: "通义千问 Plus" },
-    { v: "qwen-turbo", n: "通义千问 Turbo" },
-    { v: "deepseek-v3", n: "DeepSeek V3" },
-  ],
-  moonshot: [
-    { v: "moonshot-v1-8k", n: "Kimi K1.5" },
-    { v: "moonshot-v1-32k", n: "Kimi K1.5 32K" },
-  ],
-};
-
-const IMAGE_MODELS: Record<string, { v: string; n: string }[]> = {
-  aliyun: [
-    { v: "qwen-image-max", n: "通义万相 qwen-image-max" },
-  ],
-};
-
 const STRATEGIES: Record<string, string> = {
   random: "从已启用的模式中随机选取",
   cycle: "按顺序循环切换已启用的模式",
@@ -592,11 +572,6 @@ function ConfigPageInner() {
     const query = params.toString();
     return query ? `${withLocalePath(locale, "/config")}?${query}` : withLocalePath(locale, "/config");
   }, [locale, mac, preferMac, prefillCode]);
-
-  const supportedModeIds = useMemo(
-    () => new Set(serverModes.map((m) => m.mode_id.toUpperCase())),
-    [serverModes]
-  );
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -1907,37 +1882,6 @@ function ConfigPageInner() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Field label={tr("API 服务商", "API Provider")}>
-                    <select
-                      value={getModeOverride(settingsMode).llm_provider || "deepseek"}
-                      onChange={(e) => {
-                        const provider = e.target.value;
-                        const defaultModel = LLM_MODELS[provider]?.[0]?.v || "";
-                        const currentModel = getModeOverride(settingsMode).llm_model || "deepseek-chat";
-                        const modelAllowed = (LLM_MODELS[provider] || []).some((m) => m.v === currentModel);
-                        updateModeOverride(settingsMode, {
-                          llm_provider: provider,
-                          llm_model: modelAllowed ? currentModel : defaultModel,
-                        });
-                      }}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                    >
-                      <option value="deepseek">DeepSeek</option>
-                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
-                      <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
-                    </select>
-                  </Field>
-                  <Field label={tr("模型", "Model")}>
-                    <select
-                      value={getModeOverride(settingsMode).llm_model || "deepseek-chat"}
-                      onChange={(e) => updateModeOverride(settingsMode, { llm_model: e.target.value })}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                    >
-                      {(LLM_MODELS[getModeOverride(settingsMode).llm_provider || "deepseek"] || []).map((m) => (
-                        <option key={m.v} value={m.v}>{m.n}</option>
-                      ))}
-                    </select>
-                  </Field>
                   <Field label="城市（可选）">
                     <input
                       value={getModeOverride(settingsMode).city || ""}

@@ -289,25 +289,36 @@ async def generate_json_mode_content(
         try:
             text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
             llm_ok = True
-        except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
+        except (LLMKeyMissingError, httpx.HTTPError, HTTPStatusError, OpenAIError, OSError, TypeError, ValueError) as e:
+            # 这里捕获所有 LLM 调用异常（包括 OpenAI/DeepSeek 的 BadRequestError 等），
+            # 避免将 4xx/5xx 直接抛到上层导致 500，而是统一回退到 fallback 内容。
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
             if DISABLE_FALLBACK:
                 result = {"text": f"[LLM_ERROR] {e}", "_is_fallback": True, "_llm_used": True, "_llm_ok": False}
                 return _apply_post_process(result, content_cfg)
-            # 检查是否是 API key 缺失或无效错误
+            # 检查是否是 API key 缺失或无效错误（401/403 等），用于给上游返回更明确的 api_key_invalid 标记
             if isinstance(e, LLMKeyMissingError):
                 api_key_invalid = True
                 logger.warning(f"[JSONContent] API key missing or invalid for {mode_id}: {e}")
             elif isinstance(e, HTTPStatusError):
-                status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
+                status_code = e.response.status_code if hasattr(e, "response") and e.response else None
                 if status_code in (401, 403):
                     api_key_invalid = True
                     logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: HTTP {status_code}")
             elif isinstance(e, OpenAIError):
-                # OpenAI SDK 的错误可能包含状态码信息
+                # OpenAI/兼容 SDK 的错误可能包含状态码或错误码信息
+                # 这里只把「鉴权相关」错误视为 API key 问题，避免把诸如 Model Not Exist 也误判为 key 失效。
                 error_message = str(e).lower()
-                error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
-                if error_code in (401, 403) or "401" in error_message or "403" in error_message or "unauthorized" in error_message or "invalid" in error_message or "authentication" in error_message:
+                error_code = getattr(e, "status_code", None) or getattr(e, "code", None)
+                if (
+                    error_code in (401, 403)
+                    or "401" in error_message
+                    or "403" in error_message
+                    or "unauthorized" in error_message
+                    or "auth" in error_message
+                    or "api key" in error_message
+                    or "apikey" in error_message
+                ):
                     api_key_invalid = True
                     logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
             fb = dict(fallback)
@@ -561,11 +572,15 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
         prompt_template = str(content_cfg.get("prompt_template", "") or "")
         fallback_title = str(fallback.get("artwork_title", "") or "")
         api_key = kwargs.get("api_key")
+        llm_provider = kwargs.get("llm_provider") or DEFAULT_LLM_PROVIDER
+        llm_model = kwargs.get("llm_model") or DEFAULT_LLM_MODEL
         try:
             result = await generate_artwall_content(
                 date_str=kwargs.get("date_str", ""),
                 weather_str=kwargs.get("weather_str", ""),
                 festival=kwargs.get("festival", ""),
+                llm_provider=llm_provider,
+                llm_model=llm_model,
                 image_provider=kwargs.get("image_provider") or DEFAULT_IMAGE_PROVIDER,
                 image_model=kwargs.get("image_model") or DEFAULT_IMAGE_MODEL,
                 mode_display_name=mode_display_name,

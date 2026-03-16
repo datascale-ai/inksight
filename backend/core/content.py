@@ -18,6 +18,7 @@ from tenacity import (
 )
 
 from .errors import LLMKeyMissingError
+from .config import DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -740,6 +741,8 @@ async def generate_artwall_content(
     date_str: str = "",
     weather_str: str = "",
     festival: str = "",
+    llm_provider: str = DEFAULT_LLM_PROVIDER,
+    llm_model: str = DEFAULT_LLM_MODEL,
     image_provider: str = "aliyun",
     image_model: str = "qwen-image-max",
     mode_display_name: str = "",
@@ -750,11 +753,18 @@ async def generate_artwall_content(
     image_api_key: str | None = None,
     api_key: str | None = None,
 ) -> dict:
-    """生成 ARTWALL 模式的内容 - 使用文生图模型"""
+    """生成 ARTWALL 模式的内容 - 使用文生图模型。
+
+    标题生成优先使用上游传入/用户配置的 LLM provider + model，不再写死 deepseek。
+    """
     if ctx is not None:
         date_str = ctx.date_str
         weather_str = ctx.weather_str
         festival = ctx.festival
+        # 如果 ContentContext 中带了 LLM 配置，则优先使用
+        llm_provider = getattr(ctx, "llm_provider", llm_provider)
+        llm_model = getattr(ctx, "llm_model", llm_model)
+        api_key = getattr(ctx, "api_key", api_key)
     logger.info("[ARTWALL] Starting content generation...")
 
     context_parts = []
@@ -783,9 +793,10 @@ async def generate_artwall_content(
 
     artwork_title = title_seed or "墨韵天成"
     try:
-        title_text = await _call_llm("deepseek", "deepseek-chat", title_prompt, api_key=api_key)
+        # 标题生成：优先使用用户/上游配置的 LLM provider + model
+        title_text = await _call_llm(llm_provider, llm_model, title_prompt, api_key=api_key)
         artwork_title = title_text.strip('"').strip("「」") or artwork_title
-        logger.info(f"[ARTWALL] Generated title: {artwork_title}")
+        logger.info(f"[ARTWALL] Generated title via {llm_provider}/{llm_model}: {artwork_title}")
     except _LLM_RECOVERABLE_ERRORS as e:
         # 标题模型失败时继续执行文生图，避免整条 ARTWALL 流程直接降级为空图
         logger.warning(f"[ARTWALL] Title generation failed, use fallback title: {e}")
