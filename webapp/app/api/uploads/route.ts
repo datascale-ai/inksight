@@ -8,6 +8,17 @@ const store: Map<string, Stored> = (globalThis as unknown as { __inksight_upload
   .__inksight_uploads || new Map();
 (globalThis as unknown as { __inksight_uploads?: Map<string, Stored> }).__inksight_uploads = store;
 
+function getPublicOrigin(req: NextRequest): string {
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || req.headers.get("host")?.split(",")[0]?.trim();
+  if (host) {
+    const protocol = forwardedProto || req.nextUrl.protocol.replace(/:$/, "");
+    return `${protocol}://${host}`;
+  }
+  return req.nextUrl.origin;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
@@ -25,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
     const id = randomUUID();
     store.set(id, { bytes: buf, contentType: file.type || "application/octet-stream" });
-    const origin = req.nextUrl.origin;
+    const origin = getPublicOrigin(req);
     return NextResponse.json({ ok: true, id, url: `${origin}/api/uploads/${id}` });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "upload failed";

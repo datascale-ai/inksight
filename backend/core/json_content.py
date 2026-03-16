@@ -11,6 +11,8 @@ import random
 from json import JSONDecodeError
 from typing import Any
 
+import os
+
 import httpx
 from httpx import HTTPStatusError
 from openai import OpenAIError
@@ -20,6 +22,15 @@ from .content import _build_context_str, _build_style_instructions, _call_llm, _
 from .errors import LLMKeyMissingError
 
 logger = logging.getLogger(__name__)
+
+# Experiment switches
+DISABLE_FALLBACK = os.environ.get("INKSIGHT_DISABLE_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+DISABLE_DEDUP = os.environ.get("INKSIGHT_DISABLE_DEDUP", "").strip().lower() in ("1", "true", "yes")
+
+if DISABLE_FALLBACK:
+    logger.warning("[EXP] Fallback is DISABLED via INKSIGHT_DISABLE_FALLBACK")
+if DISABLE_DEDUP:
+    logger.warning("[EXP] Deduplication is DISABLED via INKSIGHT_DISABLE_DEDUP")
 
 DEDUP_MAX_RETRIES = 2
 
@@ -258,7 +269,7 @@ async def generate_json_mode_content(
     # Load recent content hashes for dedup
     recent_hashes: list[str] = []
     dedup_hint = ""
-    if mac and ctype in ("llm", "llm_json"):
+    if mac and ctype in ("llm", "llm_json") and not DISABLE_DEDUP:
         try:
             from .stats_store import get_recent_content_hashes, get_recent_content_summaries
             recent_hashes = await get_recent_content_hashes(mac, mode_id, limit=20)
@@ -280,6 +291,9 @@ async def generate_json_mode_content(
             llm_ok = True
         except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
+            if DISABLE_FALLBACK:
+                result = {"text": f"[LLM_ERROR] {e}", "_is_fallback": True, "_llm_used": True, "_llm_ok": False}
+                return _apply_post_process(result, content_cfg)
             # 检查是否是 API key 缺失或无效错误
             if isinstance(e, LLMKeyMissingError):
                 api_key_invalid = True
@@ -316,6 +330,11 @@ async def generate_json_mode_content(
 
         if not _validate_content_quality(result, content_cfg.get("output_schema")):
             logger.warning(f"[JSONContent] Quality check failed for {mode_id}, using fallback")
+            if DISABLE_FALLBACK:
+                result["_is_fallback"] = True
+                result["_llm_used"] = True
+                result["_llm_ok"] = llm_ok
+                return _apply_post_process(result, content_cfg)
             fb = _apply_post_process(dict(fallback), content_cfg)
             fb["_is_fallback"] = True
             fb["_used_fallback"] = True

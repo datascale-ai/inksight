@@ -212,6 +212,19 @@ async def test_config_save_and_load(client):
 
 
 @pytest.mark.asyncio
+async def test_cors_allows_local_expo_web(client):
+    resp = await client.options(
+        "/api/auth/login",
+        headers={
+            "Origin": "http://127.0.0.1:8081",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers["access-control-allow-origin"] == "http://127.0.0.1:8081"
+
+
+@pytest.mark.asyncio
 async def test_config_history_and_activate_flow(client, monkeypatch):
     monkeypatch.setenv("ADMIN_TOKEN", "admin-secret")
     mac = "AA:BB:CC:DD:EE:10"
@@ -573,6 +586,134 @@ async def test_auth_claim_and_membership_approval_flow(client):
     assert logout_resp.status_code == 200
     me_after_logout = await client.get("/api/auth/me")
     assert me_after_logout.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_mobile_preferences_and_push_registration_flow(client):
+    user = await register_user(client, "mobile_user")
+
+    prefs_resp = await client.get("/api/user/preferences")
+    assert prefs_resp.status_code == 200
+    prefs = prefs_resp.json()
+    assert prefs["user_id"] == user["user_id"]
+    assert prefs["push_enabled"] is False
+
+    update_resp = await client.put(
+        "/api/user/preferences",
+        json={
+            "push_enabled": True,
+            "push_time": "09:30",
+            "push_modes": ["DAILY", "POETRY"],
+            "widget_mode": "POETRY",
+            "locale": "en",
+            "timezone": "Asia/Shanghai",
+        },
+    )
+    assert update_resp.status_code == 200
+    updated = update_resp.json()["preferences"]
+    assert updated["push_enabled"] is True
+    assert updated["widget_mode"] == "POETRY"
+    assert updated["locale"] == "en"
+
+    register_resp = await client.post(
+        "/api/push/register",
+        json={
+            "push_token": "ExponentPushToken[test-mobile-token]",
+            "platform": "expo",
+            "timezone": "Asia/Shanghai",
+            "push_time": "09:30",
+        },
+    )
+    assert register_resp.status_code == 200
+    registration = register_resp.json()["registration"]
+    assert registration["push_token"] == "ExponentPushToken[test-mobile-token]"
+
+    unregister_resp = await client.request(
+        "DELETE",
+        "/api/push/unregister",
+        json={"push_token": "ExponentPushToken[test-mobile-token]"},
+    )
+    assert unregister_resp.status_code == 200
+    assert unregister_resp.json()["deleted"] == 1
+
+
+@pytest.mark.asyncio
+async def test_mobile_content_today_and_widget_data(client):
+    mac = "EE:FF:00:11:22:33"
+    headers = await provision_device_headers(client, mac)
+    await client.post(
+        "/api/config",
+        json={
+            "mac": mac,
+            "modes": ["POETRY", "DAILY"],
+            "refreshInterval": 60,
+            "llmProvider": "deepseek",
+            "llmModel": "deepseek-chat",
+            "city": "杭州",
+        },
+        headers=headers,
+    )
+
+    with patch("core.json_content._call_llm", new_callable=AsyncMock, return_value=MOCK_LLM_RESPONSE):
+        today_resp = await client.get("/api/content/today", params={"modes": "POETRY,DAILY", "limit": 2})
+        assert today_resp.status_code == 200
+        today_payload = today_resp.json()
+        assert len(today_payload["items"]) == 2
+        assert today_payload["items"][0]["preview_url"].startswith("/api/preview?")
+
+        widget_resp = await client.get(f"/api/widget/{mac}/data", params={"mode": "POETRY"}, headers=headers)
+        assert widget_resp.status_code == 200
+        widget_payload = widget_resp.json()
+        assert widget_payload["mode_id"] == "POETRY"
+        assert "content" in widget_payload
+        assert widget_payload["preview_url"].startswith("/api/preview?")
+
+
+@pytest.mark.asyncio
+async def test_user_can_preview_and_create_custom_mode(client):
+    await register_user(client, "creator_user")
+
+    mode_def = {
+        "mode_id": "MOBILE_NOTE",
+        "display_name": "Mobile Note",
+        "icon": "star",
+        "cacheable": True,
+        "description": "created from mobile editor",
+        "content": {
+            "type": "static",
+            "static_data": {"text": "Write with calm intent."},
+        },
+        "layout": {
+            "status_bar": {"line_width": 1},
+            "body": [
+                {
+                    "type": "centered_text",
+                    "field": "text",
+                    "font": "noto_serif_regular",
+                    "font_size": 18,
+                    "vertical_center": True,
+                }
+            ],
+            "footer": {"label": "MOBILE"},
+        },
+    }
+
+    preview_resp = await client.post(
+        "/api/modes/custom/preview",
+        json={"mode_def": mode_def, "responseType": "json"},
+    )
+    assert preview_resp.status_code == 200
+    preview = preview_resp.json()
+    assert preview["ok"] is True
+    assert preview["preview_text"] == "Write with calm intent."
+
+    create_resp = await client.post("/api/modes/custom", json=mode_def)
+    assert create_resp.status_code == 200
+    assert create_resp.json()["mode_id"] == "MOBILE_NOTE"
+
+    get_resp = await client.get("/api/modes/custom/MOBILE_NOTE")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["display_name"] == "Mobile Note"
 
 
 # ---------------------------------------------------------------------------

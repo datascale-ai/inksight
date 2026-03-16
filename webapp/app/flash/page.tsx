@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { fetchCurrentUser, onAuthChanged } from "@/lib/auth";
 import { localeFromPathname, withLocalePath } from "@/lib/i18n";
+import { buildReleaseKey, buildReleaseLabel, getPreferredBuild, type FirmwareReleaseOption } from "./release-options";
 
 declare global {
   interface Navigator {
@@ -57,13 +58,14 @@ type FlashStatus =
   | "success"
   | "failed";
 
-type FirmwareRelease = {
+type FirmwareRelease = FirmwareReleaseOption & {
   version: string;
   tag: string;
   published_at: string | null;
   download_url: string;
   size_bytes: number | null;
   chip_family: string;
+  asset_name: string;
   manifest: {
     name: string;
     version: string;
@@ -112,7 +114,7 @@ export default function FlashPage() {
     : FLASH_STATUS_LABEL;
   const [status, setStatus] = useState<FlashStatus>("initializing");
   const [releases, setReleases] = useState<FirmwareRelease[]>([]);
-  const [selectedVersion, setSelectedVersion] = useState<string>("");
+  const [selectedReleaseKey, setSelectedReleaseKey] = useState<string>("");
   const [releaseError, setReleaseError] = useState<string>("");
   const [manualFirmwareUrl, setManualFirmwareUrl] = useState<string>("");
   const [useManualFirmware, setUseManualFirmware] = useState<boolean>(false);
@@ -190,10 +192,10 @@ export default function FlashPage() {
           throw new Error("没有可用的固件版本，请先发布 GitHub Release");
         }
         setReleases(list);
-        setSelectedVersion(list[0].version);
+        setSelectedReleaseKey(buildReleaseKey(list[0]));
         setLogs((prev) => [
           ...prev,
-          `[系统] 已加载 ${list.length} 个固件版本，默认选择 v${list[0].version}`,
+          `[系统] 已加载 ${list.length} 个固件版本，默认选择 ${buildReleaseLabel(list[0])}`,
         ]);
         setStatus("ready");
       } catch (err) {
@@ -220,7 +222,7 @@ export default function FlashPage() {
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
-  const selectedRelease = releases.find((r) => r.version === selectedVersion);
+  const selectedRelease = releases.find((r) => buildReleaseKey(r) === selectedReleaseKey);
   const loginHref = `${withLocalePath(locale, "/login")}?next=${encodeURIComponent(withLocalePath(locale, "/flash"))}`;
   const [actualChip, setActualChip] = useState<string | null>(null);
   const [actualSizeMB, setActualSizeMB] = useState<string | null>(null);
@@ -247,7 +249,7 @@ export default function FlashPage() {
         throw new Error("没有可用固件版本");
       }
       setReleases(list);
-      setSelectedVersion(list[0].version);
+      setSelectedReleaseKey(buildReleaseKey(list[0]));
       setUseManualFirmware(false);
       setStatus("ready");
       setLogs((prev) => [...prev, "[系统] 已刷新固件版本列表"]);
@@ -319,11 +321,9 @@ export default function FlashPage() {
       if (!manualFirmwareUrl || !manualUrlVerified) return null;
       return `${window.location.origin}/api/firmware/download?url=${encodeURIComponent(manualFirmwareUrl)}`;
     }
-    const selected = releases.find((r) => r.version === selectedVersion);
+    const selected = releases.find((r) => buildReleaseKey(r) === selectedReleaseKey);
     if (!selected) return null;
-    const build = selected.manifest.builds.find(
-      (b) => b.chipFamily.toUpperCase() === "ESP32-C3"
-    );
+    const build = getPreferredBuild(selected);
     if (!build || !build.parts.length) return null;
     const rawUrl = build.parts[0].path;
     return `${window.location.origin}/api/firmware/download?url=${encodeURIComponent(rawUrl)}`;
@@ -448,7 +448,7 @@ export default function FlashPage() {
     status === "ready" || status === "failed" || status === "success"
       ? useManualFirmware
         ? manualFirmwareUrl && manualUrlVerified
-        : !!selectedVersion
+        : !!selectedReleaseKey
       : false;
   const loginGateActive = authState === "guest" && !skipLoginGate;
   const canStartFlash = canFlash && authState !== "checking" && !loginGateActive;
@@ -615,13 +615,13 @@ export default function FlashPage() {
               <div className="flex gap-2">
                 <select
                   className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm text-ink bg-white"
-                  value={selectedVersion}
-                  onChange={(e) => setSelectedVersion(e.target.value)}
+                  value={selectedReleaseKey}
+                  onChange={(e) => setSelectedReleaseKey(e.target.value)}
                   disabled={!releases.length || useManualFirmware}
                 >
                   {releases.map((item) => (
-                    <option key={item.tag} value={item.version}>
-                      v{item.version} ({item.tag})
+                    <option key={buildReleaseKey(item)} value={buildReleaseKey(item)}>
+                      {buildReleaseLabel(item)}
                     </option>
                   ))}
                 </select>

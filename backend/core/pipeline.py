@@ -90,6 +90,28 @@ async def generate_and_render(
     return img, content
 
 
+async def generate_content_only(
+    persona: str,
+    config: dict | None,
+    date_ctx: dict,
+    weather: dict,
+    *,
+    mac: str = "",
+    screen_w: int = SCREEN_WIDTH,
+    screen_h: int = SCREEN_HEIGHT,
+) -> dict:
+    cfg = get_effective_mode_config(config, persona)
+    return await _generate_content_for_persona(
+        persona,
+        cfg,
+        date_ctx,
+        weather.get("weather_str", ""),
+        mac=mac,
+        screen_w=screen_w,
+        screen_h=screen_h,
+    )
+
+
 async def _generate_content_for_persona(
     persona: str,
     cfg: dict,
