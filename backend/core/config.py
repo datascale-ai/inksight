@@ -204,6 +204,7 @@ CITY_COORDINATES = {
 
 # ==================== API 配置 ====================
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 HOLIDAY_WORK_API_URL = "https://date.appworlds.cn/work"
 HOLIDAY_NEXT_API_URL = "https://date.appworlds.cn/next"
 

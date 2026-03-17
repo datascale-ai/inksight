@@ -27,6 +27,7 @@ from .config import (
     DEFAULT_LATITUDE,
     DEFAULT_LONGITUDE,
     OPEN_METEO_URL,
+    OPEN_METEO_GEOCODING_URL,
     HOLIDAY_WORK_API_URL,
     HOLIDAY_NEXT_API_URL,
     DEFAULT_CITY,
@@ -71,6 +72,67 @@ def _resolve_city(city: str | None) -> tuple[float, float]:
     for name, c in CITY_COORDINATES.items():
         if name in city or city in name:
             return c
+    return DEFAULT_LATITUDE, DEFAULT_LONGITUDE
+
+
+@_api_retry
+async def _fetch_geocoding(name: str) -> dict:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(
+            OPEN_METEO_GEOCODING_URL,
+            params={
+                "name": name,
+                "count": 1,
+                "language": "zh",
+                "format": "json",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _resolve_city_coords(city: str | None) -> tuple[float, float]:
+    """Resolve city name to (lat, lon).
+
+    Priority:
+    1) CITY_COORDINATES exact match / fuzzy contains match
+    2) Open-Meteo Geocoding API (cached)
+    3) DEFAULT_LATITUDE/DEFAULT_LONGITUDE fallback
+    """
+    if not city:
+        return DEFAULT_LATITUDE, DEFAULT_LONGITUDE
+
+    coords = CITY_COORDINATES.get(city)
+    if coords:
+        return coords
+
+    for name, c in CITY_COORDINATES.items():
+        if name in city or city in name:
+            return c
+
+    cache_key = f"geocode:{city}"
+    cached = _cache_get(cache_key, ttl=86400)
+    if cached is not None and isinstance(cached, (tuple, list)) and len(cached) == 2:
+        try:
+            return float(cached[0]), float(cached[1])
+        except (TypeError, ValueError):
+            pass
+
+    try:
+        data = await _fetch_geocoding(city)
+        results = data.get("results") if isinstance(data, dict) else None
+        if isinstance(results, list) and results:
+            first = results[0] if isinstance(results[0], dict) else None
+            if first:
+                lat = first.get("latitude")
+                lon = first.get("longitude")
+                if lat is not None and lon is not None:
+                    lat_f, lon_f = float(lat), float(lon)
+                    _cache_set(cache_key, (lat_f, lon_f))
+                    return lat_f, lon_f
+    except (httpx.HTTPError, TypeError, ValueError, JSONDecodeError, Exception):
+        logger.warning("[Context] Failed to geocode city=%s, fallback to default", city, exc_info=True)
+
     return DEFAULT_LATITUDE, DEFAULT_LONGITUDE
 
 
@@ -208,7 +270,7 @@ async def get_weather(
     lat: float | None = None, lon: float | None = None, city: str | None = None
 ) -> dict:
     if lat is None or lon is None:
-        lat, lon = _resolve_city(city)
+        lat, lon = await _resolve_city_coords(city)
 
     params = {
         "latitude": lat,
@@ -260,7 +322,7 @@ async def get_weather_forecast(
     """Get multi-day weather forecast from Open-Meteo."""
     # city 为空时，既要使用默认经纬度，也要在返回数据里给出一个可展示的城市名
     display_city = city or DEFAULT_CITY
-    lat, lon = _resolve_city(display_city)
+    lat, lon = await _resolve_city_coords(display_city)
     params = {
         "latitude": lat,
         "longitude": lon,
