@@ -22,6 +22,7 @@ import {
   Trash2,
   Monitor,
   X,
+  Users,
 } from "lucide-react";
 import { authHeaders, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
 import { localeFromPathname, withLocalePath } from "@/lib/i18n";
@@ -193,6 +194,7 @@ const MODE_TEMPLATES: Record<string, { label: string; def: any }> = {
 const TABS = [
   { id: "modes", label: "模式", icon: Settings },
   { id: "preferences", label: "个性化", icon: Sliders },
+  { id: "sharing", label: "共享成员", icon: Users },
   { id: "stats", label: "状态", icon: BarChart3 },
 ] as const;
 
@@ -239,6 +241,13 @@ interface PendingPreviewConfirm {
   forceNoCache: boolean;
   forcedModeOverride?: ModeOverride;
   usageSource?: string;
+}
+
+type ParamModalType = "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar";
+interface ParamModalState {
+  type: ParamModalType;
+  mode: string;
+  action: "preview" | "apply";
 }
 
 interface ModeSettingSchemaItem {
@@ -545,6 +554,27 @@ function ConfigPageInner() {
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
   const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
   const [previewConfirm, setPreviewConfirm] = useState<PendingPreviewConfirm | null>(null);
+
+  // 自适应图片（MY_ADAPTIVE）本地选图 + 上传（与 /preview 页面一致）
+  const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingAdaptiveAction, setPendingAdaptiveAction] = useState<null | { action: "preview" | "apply"; mode: string }>(null);
+  const [adaptiveUploading, setAdaptiveUploading] = useState(false);
+
+  // 参数弹窗（与 /preview 页面保持一致）
+  const [paramModal, setParamModal] = useState<ParamModalState | null>(null);
+  const [quoteDraft, setQuoteDraft] = useState("");
+  const [authorDraft, setAuthorDraft] = useState("");
+  const [cityDraft, setCityDraft] = useState("");
+  const [memoDraft, setMemoDraft] = useState("");
+  const [countdownName, setCountdownName] = useState("元旦");
+  const [countdownDate, setCountdownDate] = useState("2027-01-01");
+  const [habitItems, setHabitItems] = useState([
+    { name: "早起", done: false },
+    { name: "运动", done: false },
+    { name: "阅读", done: false },
+  ]);
+  const [userAge, setUserAge] = useState(30);
+  const [lifeExpectancy, setLifeExpectancy] = useState<100 | 120>(100);
   // 邀请码弹窗状态
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -585,6 +615,19 @@ function ConfigPageInner() {
     }
     if (nextUrl) previewObjectUrlRef.current = nextUrl;
     setPreviewImg(nextUrl);
+  }, []);
+
+  const uploadLocalImage = useCallback(async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const up = await fetch("/api/uploads", { method: "POST", body: fd });
+    if (!up.ok) {
+      const err = await up.text().catch(() => "");
+      throw new Error(err || `upload failed: ${up.status}`);
+    }
+    const data = (await up.json()) as { url?: string };
+    if (!data.url) throw new Error("upload failed: missing url");
+    return data.url;
   }, []);
 
   useEffect(() => {
@@ -745,6 +788,44 @@ function ConfigPageInner() {
       return { ...prev, [modeId]: cleaned };
     });
   }, [sanitizeModeOverride]);
+
+  const requiresParamModal = useCallback((modeId: string) => {
+    const m = (modeId || "").toUpperCase();
+    return m === "WEATHER" || m === "MEMO" || m === "MY_QUOTE" || m === "COUNTDOWN" || m === "HABIT" || m === "LIFEBAR";
+  }, []);
+
+  const openParamModal = useCallback((modeId: string, action: "preview" | "apply") => {
+    const m = (modeId || "").toUpperCase();
+    if (m === "WEATHER") {
+      setCityDraft((modeOverrides[m]?.city as string) || city || "");
+      setParamModal({ type: "weather", mode: m, action });
+      return;
+    }
+    if (m === "MEMO") {
+      const existing = (modeOverrides[m]?.memo_text as string) || memoText || "";
+      setMemoDraft(existing);
+      setParamModal({ type: "memo", mode: m, action });
+      return;
+    }
+    if (m === "MY_QUOTE") {
+      setQuoteDraft("");
+      setAuthorDraft("");
+      setParamModal({ type: "quote", mode: m, action });
+      return;
+    }
+    if (m === "COUNTDOWN") {
+      setParamModal({ type: "countdown", mode: m, action });
+      return;
+    }
+    if (m === "HABIT") {
+      setParamModal({ type: "habit", mode: m, action });
+      return;
+    }
+    if (m === "LIFEBAR") {
+      setParamModal({ type: "lifebar", mode: m, action });
+      return;
+    }
+  }, [city, memoText, modeOverrides]);
 
   const clearModeOverride = useCallback((modeId: string) => {
     setModeOverrides((prev) => {
@@ -1384,18 +1465,62 @@ function ConfigPageInner() {
   };
 
   const handleModePreview = (m: string) => {
-    setPreviewMode(m);
+    const modeId = (m || "").toUpperCase();
+    setPreviewMode(modeId);
+    if (modeId === "MY_ADAPTIVE") {
+      setPendingAdaptiveAction({ action: "preview", mode: modeId });
+      adaptiveFileInputRef.current?.click();
+      return;
+    }
+    if (requiresParamModal(modeId)) {
+      openParamModal(modeId, "preview");
+      return;
+    }
     // Config page preview should bypass cache so it:
     // - reflects latest overrides
     // - triggers quota deduction when applicable (quota is only deducted on cache miss)
-    handlePreview(m, true);
+    handlePreview(modeId, true);
   };
 
   const handleModeApply = async (m: string) => {
-    const wasSelected = selectedModes.has(m);
-    toggleMode(m);
+    const modeId = (m || "").toUpperCase();
+    if (modeId === "MY_ADAPTIVE" && !selectedModes.has(modeId)) {
+      setPendingAdaptiveAction({ action: "apply", mode: modeId });
+      adaptiveFileInputRef.current?.click();
+      return;
+    }
+    if (requiresParamModal(modeId) && !selectedModes.has(modeId)) {
+      // only require params when adding to carousel
+      openParamModal(modeId, "apply");
+      return;
+    }
+    const wasSelected = selectedModes.has(modeId);
+    toggleMode(modeId);
     showToast(wasSelected ? "已从轮播移除" : "已加入轮播", "success");
   };
+
+  const commitModalAction = useCallback(async (modeId: string, action: "preview" | "apply", forcedOverride?: ModeOverride) => {
+    setParamModal(null);
+    if (forcedOverride && Object.keys(forcedOverride).length > 0) {
+      updateModeOverride(modeId, forcedOverride);
+      if (modeId === "MEMO" && typeof forcedOverride.memo_text === "string") {
+        setMemoText(forcedOverride.memo_text);
+      }
+      if (modeId === "WEATHER" && typeof forcedOverride.city === "string") {
+        // keep global city as-is; weather override is per-mode
+      }
+    }
+
+    setPreviewMode(modeId);
+    await handlePreview(modeId, true, forcedOverride);
+
+    if (action === "apply") {
+      if (!selectedModes.has(modeId)) {
+        toggleMode(modeId);
+        showToast("已加入轮播", "success");
+      }
+    }
+  }, [handlePreview, selectedModes, showToast, toggleMode, updateModeOverride]);
 
   const handlePreviewFromSettings = (addToCarousel: boolean) => {
     if (!settingsMode) return;
@@ -1633,12 +1758,37 @@ function ConfigPageInner() {
     ? [
         { id: "modes", label: "Modes", icon: Settings },
         { id: "preferences", label: "Preferences", icon: Sliders },
+        { id: "sharing", label: "Sharing", icon: Users },
         { id: "stats", label: "Status", icon: BarChart3 },
       ] as const
     : TABS;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
+      {/* Hidden file picker for MY_ADAPTIVE (local upload only) */}
+      <input
+        ref={adaptiveFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0] || null;
+          e.currentTarget.value = "";
+          if (!f) return;
+          setAdaptiveUploading(true);
+          try {
+            const url = await uploadLocalImage(f);
+            const pending = pendingAdaptiveAction;
+            setPendingAdaptiveAction(null);
+            await commitModalAction("MY_ADAPTIVE", pending?.action || "preview", { image_url: url } as ModeOverride);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : tr("请选择一张本地图片", "Please choose a local image");
+            showToast(msg, "error");
+          } finally {
+            setAdaptiveUploading(false);
+          }
+        }}
+      />
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-serif text-3xl font-bold text-ink mb-2">{tr("设备配置", "Device Configuration")}</h1>
@@ -1829,69 +1979,6 @@ function ConfigPageInner() {
 
       {mac && currentUser && !(macAccessDenied || denyByMembership) && !loading && (
         <div className="space-y-4">
-          {(currentUserRole === "owner" || pendingRequests.some((item) => item.mac === mac)) && (
-            <div className="grid gap-4 md:grid-cols-2">
-              {currentUserRole === "owner" && (
-                <Card>
-                  <CardHeader><CardTitle className="text-base">共享成员</CardTitle></CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex gap-2">
-                      <input
-                        value={shareUsernameInput}
-                        onChange={(e) => setShareUsernameInput(e.target.value)}
-                        placeholder="输入要共享的用户名"
-                        className="flex-1 rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                      />
-                      <Button variant="outline" size="sm" onClick={handleShareDevice} disabled={!shareUsernameInput.trim()}>
-                        分享
-                      </Button>
-                    </div>
-                    {membersLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-ink-light">
-                        <Loader2 size={14} className="animate-spin" /> 加载成员中...
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {deviceMembers.map((member) => (
-                          <div key={member.user_id} className="flex items-center justify-between rounded-sm border border-ink/10 p-2 text-sm">
-                            <div>
-                              <p className="font-medium text-ink">{member.username}</p>
-                              <p className="text-xs text-ink-light">{member.role === "owner" ? "Owner" : "Member"}</p>
-                            </div>
-                            {member.role !== "owner" && (
-                              <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.user_id)}>
-                                移除
-                              </Button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-              {pendingRequests.some((item) => item.mac === mac) && (
-                <Card>
-                  <CardHeader><CardTitle className="text-base">待处理绑定请求</CardTitle></CardHeader>
-                  <CardContent className="space-y-2">
-                    {pendingRequests.filter((item) => item.mac === mac).map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-sm border border-ink/10 p-2 text-sm">
-                        <div>
-                          <p className="font-medium text-ink">{item.requester_username}</p>
-                          <p className="text-xs text-ink-light">请求绑定此设备</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleRejectRequest(item.id)}>拒绝</Button>
-                          <Button size="sm" onClick={() => handleApproveRequest(item.id)}>同意</Button>
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
           <div className="flex gap-6">
             {/* Sidebar tabs */}
             <nav className="w-44 flex-shrink-0 hidden md:block">
@@ -2030,6 +2117,83 @@ function ConfigPageInner() {
                 personaPresets={PERSONA_PRESETS}
                 strategies={STRATEGIES}
               />
+            )}
+
+            {/* Sharing Tab */}
+            {activeTab === "sharing" && (
+              <div className="space-y-4">
+                {currentUserRole === "owner" ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">{tr("共享成员", "Sharing")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex gap-2 flex-wrap">
+                        <input
+                          value={shareUsernameInput}
+                          onChange={(e) => setShareUsernameInput(e.target.value)}
+                          placeholder={tr("输入要共享的用户名", "Enter username to share")}
+                          className="flex-1 min-w-[220px] rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                        />
+                        <Button variant="outline" size="sm" onClick={handleShareDevice} disabled={!shareUsernameInput.trim()}>
+                          {tr("分享", "Share")}
+                        </Button>
+                      </div>
+                      {membersLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-ink-light">
+                          <Loader2 size={14} className="animate-spin" /> {tr("加载成员中...", "Loading members...")}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {deviceMembers.map((member) => (
+                            <div key={member.user_id} className="flex items-center justify-between rounded-sm border border-ink/10 p-2 text-sm">
+                              <div>
+                                <p className="font-medium text-ink">{member.username}</p>
+                                <p className="text-xs text-ink-light">{member.role === "owner" ? "Owner" : "Member"}</p>
+                              </div>
+                              {member.role !== "owner" ? (
+                                <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.user_id)}>
+                                  {tr("移除", "Remove")}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="p-3 rounded-sm border border-ink/10 bg-paper text-sm text-ink-light">
+                    {tr("只有设备 Owner 可以管理共享成员。", "Only the device owner can manage sharing.")}
+                  </div>
+                )}
+
+                {pendingRequests.some((item) => item.mac === mac) ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">{tr("待处理绑定请求", "Pending requests")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {pendingRequests.filter((item) => item.mac === mac).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-2 rounded-sm border border-ink/10 p-2 text-sm">
+                          <div>
+                            <p className="font-medium text-ink">{item.requester_username}</p>
+                            <p className="text-xs text-ink-light">{tr("请求绑定此设备", "Requested to bind this device")}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleRejectRequest(item.id)}>
+                              {tr("拒绝", "Reject")}
+                            </Button>
+                            <Button size="sm" onClick={() => handleApproveRequest(item.id)}>
+                              {tr("同意", "Approve")}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
             )}
 
 
@@ -2512,6 +2676,343 @@ function ConfigPageInner() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      ) : null}
+
+      {/* 参数弹窗：与 /preview 页面一致（预览/加入轮播都会触发） */}
+      {paramModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setParamModal(null)} />
+          <div className="relative w-[min(520px,calc(100vw-32px))] rounded-sm border border-ink/15 bg-white shadow-xl">
+            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
+              <div className="text-sm font-semibold text-ink">
+                {paramModal.type === "quote"
+                  ? tr("自定义语录", "Custom Quote")
+                  : paramModal.type === "weather"
+                  ? tr("天气设置", "Weather Settings")
+                  : paramModal.type === "memo"
+                  ? tr("便签内容", "Memo Content")
+                  : paramModal.type === "countdown"
+                  ? tr("倒计时设置", "Countdown Settings")
+                  : paramModal.type === "habit"
+                  ? tr("习惯打卡", "Habit Tracker")
+                  : tr("人生进度条", "Life Progress")}
+              </div>
+              <button className="text-ink-light hover:text-ink" onClick={() => setParamModal(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              {paramModal.type === "quote" ? (
+                <>
+                  <div className="text-xs text-ink-light">
+                    {tr(
+                      "随机生成一条有深度的语录，或粘贴你自己的文字。",
+                      "Generate a deep quote randomly, or paste your own text.",
+                    )}
+                  </div>
+                  <textarea
+                    value={quoteDraft}
+                    onChange={(e) => setQuoteDraft(e.target.value)}
+                    placeholder={tr("输入语录内容...", "Type your quote...")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm min-h-28 bg-white"
+                  />
+                  <input
+                    value={authorDraft}
+                    onChange={(e) => setAuthorDraft(e.target.value)}
+                    placeholder={tr("作者（可选）", "Author (optional)")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    <Button
+                      onClick={() => {
+                        commitModalAction(paramModal.mode, paramModal.action);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("随机生成", "Random generate")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const q = quoteDraft.trim();
+                        const a = authorDraft.trim();
+                        commitModalAction(
+                          paramModal.mode,
+                          paramModal.action,
+                          q ? ({ quote: q, author: a } as ModeOverride) : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("使用我的输入", "Use my input")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "weather" ? (
+                <>
+                  <div className="text-xs text-ink-light">
+                    {tr(
+                      "输入城市名称查看天气。如果大模型调用失败，将显示默认城市天气。",
+                      "Enter city name to view weather. If LLM call fails, default city weather will be shown.",
+                    )}
+                  </div>
+                  <input
+                    value={cityDraft}
+                    onChange={(e) => setCityDraft(e.target.value)}
+                    placeholder={tr("输入城市名称（如：北京、上海）", "Enter city name (e.g., Beijing, Shanghai)")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                    autoFocus
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                    >
+                      {tr("使用默认城市", "Use default city")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const c = cityDraft.trim();
+                        commitModalAction(
+                          paramModal.mode,
+                          paramModal.action,
+                          c ? ({ city: c } as ModeOverride) : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览天气", "Preview weather")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "memo" ? (
+                <>
+                  <div className="text-xs text-ink-light">
+                    {tr("输入便签内容，将在墨水屏上显示。", "Enter memo content to display on e-ink screen.")}
+                  </div>
+                  <textarea
+                    value={memoDraft}
+                    onChange={(e) => setMemoDraft(e.target.value)}
+                    placeholder={tr("输入便签内容...", "Enter memo content...")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm min-h-32 bg-white"
+                    autoFocus
+                  />
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={() => {
+                        const m = memoDraft.trim();
+                        commitModalAction(
+                          paramModal.mode,
+                          paramModal.action,
+                          m ? ({ memo_text: m } as ModeOverride) : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览便签", "Preview memo")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "countdown" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr("设置倒计时事件名称和日期", "Set countdown event name and date")}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("事件名称", "Event Name")}
+                      </label>
+                      <input
+                        value={countdownName}
+                        onChange={(e) => setCountdownName(e.target.value)}
+                        placeholder={tr("例如：元旦、生日", "e.g., New Year, Birthday")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("目标日期", "Target Date")}
+                      </label>
+                      <input
+                        type="date"
+                        value={countdownDate}
+                        onChange={(e) => setCountdownDate(e.target.value)}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const today = new Date();
+                        const target = new Date(countdownDate);
+                        const days = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          events: [
+                            {
+                              name: countdownName || (isEn ? "Countdown" : "倒计时"),
+                              date: countdownDate,
+                              type: "countdown",
+                              days,
+                            },
+                          ],
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览倒计时", "Preview Countdown")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "habit" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr("设置你的习惯并勾选完成情况", "Set your habits and check completion")}
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {habitItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={(e) => {
+                            const next = [...habitItems];
+                            next[idx] = { ...next[idx], done: e.target.checked };
+                            setHabitItems(next);
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <input
+                          value={item.name}
+                          onChange={(e) => {
+                            const next = [...habitItems];
+                            next[idx] = { ...next[idx], name: e.target.value };
+                            setHabitItems(next);
+                          }}
+                          className="flex-1 rounded-sm border border-ink/20 px-3 py-1.5 text-sm bg-white"
+                        />
+                        <button
+                          onClick={() => setHabitItems(habitItems.filter((_, i) => i !== idx))}
+                          className="text-ink-light hover:text-red-500 px-2"
+                          title={tr("删除", "Delete")}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setHabitItems([...habitItems, { name: "", done: false }])}
+                    className="w-full mt-2 px-3 py-2 rounded-sm border border-dashed border-ink/20 text-sm text-ink-light hover:text-ink hover:border-ink/40 transition-colors"
+                  >
+                    + {tr("添加习惯", "Add Habit")}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const lines = habitItems.map((h) => `${h.name} ${h.done ? "✓" : "✗"}`);
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          habits: habitItems,
+                          summary: lines.join("\n"),
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览打卡", "Preview Habits")}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr("设置你的年龄和预期寿命", "Set your age and life expectancy")}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("芳龄几何？", "Your Age")}
+                      </label>
+                      <input
+                        type="number"
+                        value={userAge}
+                        onChange={(e) => setUserAge(parseInt(e.target.value) || 0)}
+                        min="0"
+                        max="120"
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("退休金领到？", "Life Expectancy")}
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setLifeExpectancy(100)}
+                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
+                            lifeExpectancy === 100
+                              ? "bg-ink text-white"
+                              : "bg-paper-dark text-ink hover:bg-ink/10"
+                          }`}
+                        >
+                          100 {tr("岁", "years")}
+                        </button>
+                        <button
+                          onClick={() => setLifeExpectancy(120)}
+                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
+                            lifeExpectancy === 120
+                              ? "bg-ink text-white"
+                              : "bg-paper-dark text-ink hover:bg-ink/10"
+                          }`}
+                        >
+                          120 {tr("岁", "years")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const lifePct = ((userAge / lifeExpectancy) * 100).toFixed(1);
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          age: userAge,
+                          life_expect: lifeExpectancy,
+                          life_pct: parseFloat(lifePct),
+                          life_label: isEn ? "Life" : "人生",
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览进度", "Preview Progress")}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
 

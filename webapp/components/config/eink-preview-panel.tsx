@@ -39,7 +39,7 @@ export function EInkPreviewPanel({
         </CardTitle>
       </CardHeader>
       {/* keep sizing consistent with /preview page */}
-      <CardContent className="h-[calc(70vh-220px)] w-[600px] flex flex-col p-0">
+      <CardContent className="h-[calc(85vh-80px)] w-[600px] flex flex-col p-0">
         <div className="border border-ink/10 rounded-sm bg-paper flex flex-col items-center justify-center flex-1 w-full">
           {previewLoading ? (
             <div className="flex items-center justify-center w-full">
@@ -50,7 +50,7 @@ export function EInkPreviewPanel({
             </div>
           ) : previewImg ? (
             <div className="flex flex-col items-center gap-2 w-full px-4">
-              <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
+              <div className="relative w-full max-w-xl / max-w-none aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
                 <Image src={previewImg} alt="Preview" fill unoptimized className="object-contain" />
               </div>
               {previewLlmStatus ? (
