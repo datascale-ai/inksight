@@ -170,6 +170,28 @@ async def publish_mode(
     try:
         from core.json_content import generate_json_mode_content
         from core.json_renderer import render_json_mode
+        from core.config_store import get_user_llm_config
+
+        # 获取用户的 LLM 配置（用于生成缩略图）
+        user_llm_cfg = await get_user_llm_config(user_id)
+        llm_provider = ""
+        llm_model = ""
+        api_key = ""
+        image_provider = ""
+        image_model = ""
+        image_api_key = ""
+        
+        if user_llm_cfg:
+            llm_provider = (user_llm_cfg.get("provider") or "").strip()
+            llm_model = (user_llm_cfg.get("model") or "").strip()
+            api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
+            if api_key_plain:
+                api_key = api_key_plain
+            image_provider = (user_llm_cfg.get("image_provider") or "").strip()
+            image_model = (user_llm_cfg.get("image_model") or "").strip()
+            image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
+            if image_api_key_plain:
+                image_api_key = image_api_key_plain
 
         # 获取上下文数据
         date_ctx = await get_date_context()
@@ -191,6 +213,12 @@ async def publish_mode(
                     weather_str=weather["weather_str"],
                     screen_w=SCREEN_WIDTH,
                     screen_h=SCREEN_HEIGHT,
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
+                    api_key=api_key,
+                    image_provider=image_provider,
+                    image_model=image_model,
+                    image_api_key=image_api_key,
                 )
                 
                 image_url = content.get("image_url", "")
@@ -229,6 +257,12 @@ async def publish_mode(
                 weather_str=weather["weather_str"],
                 screen_w=SCREEN_WIDTH,
                 screen_h=SCREEN_HEIGHT,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                api_key=api_key,
+                image_provider=image_provider,
+                image_model=image_model,
+                image_api_key=image_api_key,
             )
 
         # 渲染图片
