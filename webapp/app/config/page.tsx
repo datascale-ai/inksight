@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DeviceInfo } from "@/components/config/device-info";
 import { ModeSelector } from "@/components/config/mode-selector";
+import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
 import { Button } from "@/components/ui/button";
@@ -52,33 +53,18 @@ interface AccessRequestItem {
   created_at: string;
 }
 
-const MODE_META: Record<string, { name: string; tip: string }> = {
-  DAILY: { name: "每日", tip: "语录、书籍推荐、冷知识的综合日报" },
-  WEATHER: { name: "天气", tip: "实时天气和未来趋势看板" },
-  ZEN: { name: "禅意", tip: "一个大字表达当下心境" },
-  BRIEFING: { name: "简报", tip: "科技热榜 + AI 洞察简报" },
-  STOIC: { name: "斯多葛", tip: "每日一句哲学箴言" },
-  POETRY: { name: "诗词", tip: "古诗词与简短注解" },
-  ARTWALL: { name: "画廊", tip: "根据时令生成黑白艺术画" },
-  ALMANAC: { name: "老黄历", tip: "农历、节气、宜忌信息" },
-  RECIPE: { name: "食谱", tip: "按时段推荐三餐方案" },
-  COUNTDOWN: { name: "倒计时", tip: "重要日程倒计时/正计时" },
-  MEMO: { name: "便签", tip: "展示自定义便签文字" },
-  HABIT: { name: "打卡", tip: "每日习惯完成进度" },
-  ROAST: { name: "毒舌", tip: "轻松幽默的吐槽风格内容" },
-  FITNESS: { name: "健身", tip: "居家健身动作与建议" },
-  LETTER: { name: "慢信", tip: "来自不同时空的一封慢信" },
-  THISDAY: { name: "今日历史", tip: "历史上的今天重大事件" },
-  RIDDLE: { name: "猜谜", tip: "谜题与脑筋急转弯" },
-  QUESTION: { name: "每日一问", tip: "值得思考的开放式问题" },
-  BIAS: { name: "认知偏差", tip: "认知偏差与心理效应" },
-  STORY: { name: "微故事", tip: "可在 30 秒内读完的微故事" },
-  LIFEBAR: { name: "进度条", tip: "年/月/周/人生进度条" },
-  CHALLENGE: { name: "微挑战", tip: "每天一个 5 分钟微挑战" },
+type ModeCatalogItem = {
+  mode_id: string;
+  category: "core" | "more" | "custom" | string;
+  source?: string;
+  display_name?: string;
+  description?: string;
+  settings_schema?: ModeSettingSchemaItem[];
+  i18n?: {
+    zh?: { name?: string; tip?: string };
+    en?: { name?: string; tip?: string };
+  };
 };
-
-const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
-const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m));
 
 const STRATEGIES: Record<string, string> = {
   random: "从已启用的模式中随机选取",
@@ -267,14 +253,6 @@ interface ModeSettingSchemaItem {
   description?: string;
   as_json?: boolean;
   options?: Array<{ value: string; label: string } | string>;
-}
-
-interface ServerModeItem {
-  mode_id: string;
-  display_name: string;
-  description: string;
-  source: string;
-  settings_schema?: ModeSettingSchemaItem[];
 }
 
 interface DeviceStats {
@@ -565,6 +543,7 @@ function ConfigPageInner() {
   const [previewMode, setPreviewMode] = useState("");
   const [previewNoCacheOnce, setPreviewNoCacheOnce] = useState(false);
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
+  const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
   const [previewConfirm, setPreviewConfirm] = useState<PendingPreviewConfirm | null>(null);
   // 邀请码弹窗状态
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -592,7 +571,7 @@ function ConfigPageInner() {
   const [editingCustomMode, setEditingCustomMode] = useState(false);
   const [editorTab, setEditorTab] = useState<"ai" | "template">("ai");
 
-  const [serverModes, setServerModes] = useState<ServerModeItem[]>([]);
+  const [catalogItems, setCatalogItems] = useState<ModeCatalogItem[]>([]);
 
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
@@ -629,17 +608,32 @@ function ConfigPageInner() {
     return query ? `${withLocalePath(locale, "/config")}?${query}` : withLocalePath(locale, "/config");
   }, [locale, mac, preferMac, prefillCode]);
 
-  useEffect(() => {
+  const refreshCatalog = useCallback(async () => {
     const params = new URLSearchParams();
-    if (mac) {
-      params.append("mac", mac);
+    if (mac) params.append("mac", mac);
+    try {
+      const res = await fetch(`/api/modes/catalog?${params.toString()}`, { headers: authHeaders() });
+      if (!res.ok) {
+        console.error("[CONFIG] Catalog request failed:", res.status, res.statusText);
+        return;
+      }
+      const data = await res.json().catch((err) => {
+        console.error("[CONFIG] Failed to parse catalog JSON:", err);
+        return {};
+      });
+      if (data.items && Array.isArray(data.items)) {
+        setCatalogItems(data.items);
+      } else {
+        console.error("[CONFIG] Invalid catalog response:", data);
+      }
+    } catch (err) {
+      console.error("[CONFIG] Failed to load catalog:", err);
     }
-    fetch(`/api/modes?${params.toString()}`, {
-      headers: authHeaders(),
-    }).then((r) => r.json()).then((d) => {
-      if (d.modes) setServerModes(d.modes);
-    }).catch(() => {});
   }, [mac]);
+
+  useEffect(() => {
+    refreshCatalog();
+  }, [refreshCatalog]);
 
   useEffect(() => {
     if (mac && currentUser) {
@@ -775,8 +769,8 @@ function ConfigPageInner() {
   }, []);
 
   const modeSchemaMap = useMemo(
-    () => Object.fromEntries(serverModes.map((m) => [m.mode_id, m.settings_schema || []])),
-    [serverModes]
+    () => Object.fromEntries(catalogItems.map((m) => [m.mode_id.toUpperCase(), m.settings_schema || []])),
+    [catalogItems]
   );
 
   const applySettingsDrafts = useCallback((modeId: string) => {
@@ -941,6 +935,7 @@ function ConfigPageInner() {
 
     setPreviewConfirm(null);
     setPreviewCacheHit(null);
+    setPreviewLlmStatus(null);
     setPreviewLoading(true);
     setPreviewStatusText(tr("正在生成...", "Generating..."));
     try {
@@ -1000,6 +995,8 @@ function ConfigPageInner() {
               message?: string;
               image_url?: string;
               cache_hit?: boolean;
+              preview_status?: string;
+              llm_required?: boolean;
               usage_source?: string;
             };
             console.log("[PREVIEW] Result event received:", { hasImageUrl: !!data.image_url, message: data.message });
@@ -1022,9 +1019,19 @@ function ConfigPageInner() {
             console.log("[PREVIEW] Setting preview image:", data.image_url.substring(0, 50) + "...");
             replacePreviewImg(objectUrl);
             setPreviewCacheHit(typeof data.cache_hit === "boolean" ? data.cache_hit : null);
-            const usageText = formatPreviewUsageText(data.usage_source);
-            setPreviewStatusText(usageText || data.message || tr("完成", "Done"));
-            setPreviewLoading(false);
+            setPreviewStatusText(data.message || tr("完成", "Done"));
+            const status = (data.preview_status || "").toLowerCase();
+            const llmRequired = data.llm_required;
+            if (status === "no_llm_required" || llmRequired === false) {
+              setPreviewLlmStatus(isEn ? "This mode does not require LLM" : "该模式无需调用大模型");
+            } else if (status === "model_generated") {
+              setPreviewLlmStatus(isEn ? "Model call succeeded" : "大模型调用成功");
+            } else if (status === "fallback_used") {
+              setPreviewLlmStatus(isEn ? "Model call failed, using fallback content" : "大模型调用失败，使用默认内容");
+            } else {
+              setPreviewLlmStatus(null);
+            }
+            setPreviewLoading(false); // 重置加载状态
             stream.close();
             previewStreamRef.current = null;
             resolve();
@@ -1352,10 +1359,8 @@ function ConfigPageInner() {
       const data = await res.json();
       if (data.ok || data.status === "ok") {
         showToast(`模式 ${def.mode_id} 已保存`, "success");
-        // Refresh modes list with mac parameter
-        const params = new URLSearchParams();
-        params.append("mac", mac);
-        fetch(`/api/modes?${params.toString()}`, { headers: authHeaders() }).then((r) => r.json()).then((d) => { if (d.modes) setServerModes(d.modes); }).catch(() => {});
+        // Refresh catalog (modes + categories + settings schema)
+        refreshCatalog();
         setEditingCustomMode(false);
         setCustomJson("");
         setCustomDesc("");
@@ -1380,7 +1385,10 @@ function ConfigPageInner() {
 
   const handleModePreview = (m: string) => {
     setPreviewMode(m);
-    handlePreview(m);
+    // Config page preview should bypass cache so it:
+    // - reflects latest overrides
+    // - triggers quota deduction when applicable (quota is only deducted on cache miss)
+    handlePreview(m, true);
   };
 
   const handleModeApply = async (m: string) => {
@@ -1496,7 +1504,7 @@ function ConfigPageInner() {
         headers: authHeaders(),
       });
       if (!res.ok) throw new Error("delete failed");
-      setServerModes((prev) => prev.filter((m) => m.mode_id !== modeId));
+      refreshCatalog();
       setSelectedModes((prev) => {
         const next = new Set(prev);
         next.delete(modeId);
@@ -1524,8 +1532,43 @@ function ConfigPageInner() {
     }
   };
 
-  const customModes = serverModes.filter((m) => m.source === "custom" && m.mode_id !== "VOCAB_DAILY");
-  const customModeMeta = Object.fromEntries(serverModes.map((m) => [m.mode_id, { name: m.display_name, tip: m.description }]));
+  const modeMeta = useMemo(() => {
+    const map: Record<string, { name: string; tip: string }> = {};
+    for (const item of catalogItems) {
+      const mid = (item.mode_id || "").toUpperCase();
+      if (!mid) continue;
+      const lang = isEn ? item.i18n?.en : item.i18n?.zh;
+      const name = (lang?.name && String(lang.name)) || (item.display_name && String(item.display_name)) || mid;
+      const tip = (lang?.tip && String(lang.tip)) || (item.description && String(item.description)) || "";
+      map[mid] = { name, tip };
+    }
+    return map;
+  }, [catalogItems, isEn]);
+
+  const coreModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "core").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const extraModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "more").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const customModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "custom").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const customModeMeta = useMemo(
+    () =>
+      Object.fromEntries(
+        catalogItems
+          .filter((m) => m.category === "custom")
+          .map((m) => [
+            m.mode_id.toUpperCase(),
+            { name: m.display_name || m.mode_id, tip: m.description || "" },
+          ]),
+      ),
+    [catalogItems],
+  );
   const activeModeSchema = settingsMode ? (modeSchemaMap[settingsMode] || []) : [];
 
   const batteryPct = stats?.last_battery_voltage
@@ -1595,7 +1638,7 @@ function ConfigPageInner() {
     : TABS;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-serif text-3xl font-bold text-ink mb-2">{tr("设备配置", "Device Configuration")}</h1>
@@ -1903,49 +1946,62 @@ function ConfigPageInner() {
             {/* Modes Tab */}
             {activeTab === "modes" && (
               <div className="space-y-6">
-                <ModeSelector
-                  tr={tr}
-                  selectedModes={selectedModes}
-                  favoritedModes={favoritedModes}
-                  customModes={customModes.map((cm) => cm.mode_id)}
-                  customModeMeta={customModeMeta}
-                  modeMeta={MODE_META}
-                  coreModes={CORE_MODES}
-                  extraModes={EXTRA_MODES}
-                  modeTemplates={MODE_TEMPLATES}
-                  previewMode={previewMode}
-                  previewImg={previewImg}
-                  previewLoading={previewLoading}
-                  previewStatusText={previewStatusText}
-                  previewCacheHit={previewCacheHit}
-                  applyToScreenLoading={applyToScreenLoading}
-                  handlePreview={handlePreview}
-                  handleModePreview={handleModePreview}
-                  handleModeApply={handleModeApply}
-                  handleModeFavorite={handleModeFavorite}
-                  setSettingsMode={setSettingsMode}
-                  handleDeleteCustomMode={handleDeleteCustomMode}
-                  editingCustomMode={editingCustomMode}
-                  setEditingCustomMode={setEditingCustomMode}
-                  editorTab={editorTab}
-                  setEditorTab={setEditorTab}
-                  customDesc={customDesc}
-                  setCustomDesc={setCustomDesc}
-                  customModeName={customModeName}
-                  setCustomModeName={setCustomModeName}
-                  customJson={customJson}
-                  setCustomJson={setCustomJson}
-                  customGenerating={customGenerating}
-                  customPreviewImg={customPreviewImg}
-                  customPreviewLoading={customPreviewLoading}
-                  customApplyToScreenLoading={customApplyToScreenLoading}
-                  handleGenerateMode={handleGenerateMode}
-                  handleCustomPreview={handleCustomPreview}
-                  handleApplyCustomPreviewToScreen={handleApplyCustomPreviewToScreen}
-                  handleSaveCustomMode={handleSaveCustomMode}
-                  handleApplyPreviewToScreen={handleApplyPreviewToScreen}
-                  mac={mac}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-6 items-start">
+                  <ModeSelector
+                    tr={tr}
+                    selectedModes={selectedModes}
+                    favoritedModes={favoritedModes}
+                    customModes={customModes}
+                    customModeMeta={customModeMeta}
+                    modeMeta={modeMeta}
+                    coreModes={coreModes}
+                    extraModes={extraModes}
+                    modeTemplates={MODE_TEMPLATES}
+                    handlePreview={handlePreview}
+                    handleModePreview={handleModePreview}
+                    handleModeApply={handleModeApply}
+                    handleModeFavorite={handleModeFavorite}
+                    setSettingsMode={setSettingsMode}
+                    handleDeleteCustomMode={handleDeleteCustomMode}
+                    editingCustomMode={editingCustomMode}
+                    setEditingCustomMode={setEditingCustomMode}
+                    editorTab={editorTab}
+                    setEditorTab={setEditorTab}
+                    customDesc={customDesc}
+                    setCustomDesc={setCustomDesc}
+                    customModeName={customModeName}
+                    setCustomModeName={setCustomModeName}
+                    customJson={customJson}
+                    setCustomJson={setCustomJson}
+                    customGenerating={customGenerating}
+                    customPreviewImg={customPreviewImg}
+                    customPreviewLoading={customPreviewLoading}
+                    customApplyToScreenLoading={customApplyToScreenLoading}
+                    handleGenerateMode={handleGenerateMode}
+                    handleCustomPreview={handleCustomPreview}
+                    handleApplyCustomPreviewToScreen={handleApplyCustomPreviewToScreen}
+                    handleSaveCustomMode={handleSaveCustomMode}
+                    mac={mac}
+                  />
+
+                  <EInkPreviewPanel
+                    tr={tr}
+                    previewModeLabel={
+                      previewMode
+                        ? `${tr("模式", "Mode")}: ${modeMeta[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode}`
+                        : tr("请选择模式", "Select a mode")
+                    }
+                    previewLoading={previewLoading}
+                    previewStatusText={previewStatusText}
+                    previewImg={previewImg}
+                    previewCacheHit={previewCacheHit}
+                    previewLlmStatus={previewLlmStatus}
+                    canApplyToScreen={Boolean(mac && previewMode && previewImg)}
+                    applyToScreenLoading={applyToScreenLoading}
+                    onRegenerate={() => handlePreview(previewMode, true)}
+                    onApplyToScreen={handleApplyPreviewToScreen}
+                  />
+                </div>
 
               </div>
             )}
@@ -2010,7 +2066,7 @@ function ConfigPageInner() {
                             const max = Math.max(...Object.values(stats.mode_frequency!));
                             return (
                               <div key={mode} className="flex items-center gap-2 text-sm">
-                                <span className="w-20 text-ink-light truncate">{MODE_META[mode]?.name || mode}</span>
+                                <span className="w-20 text-ink-light truncate">{modeMeta[mode]?.name || customModeMeta[mode]?.name || mode}</span>
                                 <div className="flex-1 bg-paper-dark rounded-full h-4 overflow-hidden">
                                   <div className="bg-ink h-full rounded-full" style={{ width: `${(count / max) * 100}%` }} />
                                 </div>
@@ -2033,7 +2089,7 @@ function ConfigPageInner() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between text-base">
                     <span>
-                      {tr("模式设置", "Mode Settings")}: {MODE_META[settingsMode]?.name || customModeMeta[settingsMode]?.name || settingsMode}
+                      {tr("模式设置", "Mode Settings")}: {modeMeta[settingsMode]?.name || customModeMeta[settingsMode]?.name || settingsMode}
                     </span>
                     <button className="text-ink-light hover:text-ink" onClick={() => setSettingsMode(null)}>
                       <X size={16} />

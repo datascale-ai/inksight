@@ -9,68 +9,17 @@ import { AlertCircle, Eye, Loader2, Sparkles, LayoutGrid } from "lucide-react";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
-// 模式元数据（从设备配置页面复制）
-const MODE_META: Record<string, { name: string; tip: string }> = {
-  DAILY: { name: "每日", tip: "语录、书籍推荐、冷知识的综合日报" },
-  WEATHER: { name: "天气", tip: "实时天气和未来趋势看板" },
-  WORD_OF_THE_DAY: { name: "每日一词", tip: "每日精选一个英语单词，展示其拼写与释义" },
-  ZEN: { name: "禅意", tip: "一个大字表达当下心境" },
-  BRIEFING: { name: "简报", tip: "科技热榜 + AI 洞察简报" },
-  MY_QUOTE: { name: "自定义语录", tip: "可在预览弹窗中随机生成，或输入你自己的语录内容" },
-  STOIC: { name: "斯多葛", tip: "每日一句哲学箴言" },
-  POETRY: { name: "诗词", tip: "古诗词与简短注解" },
-  ARTWALL: { name: "画廊", tip: "根据时令生成黑白艺术画" },
-  ALMANAC: { name: "老黄历", tip: "农历、节气、宜忌信息" },
-  RECIPE: { name: "食谱", tip: "按时段推荐三餐方案" },
-  COUNTDOWN: { name: "倒计时", tip: "重要日程倒计时/正计时" },
-  MEMO: { name: "便签", tip: "展示自定义便签文字" },
-  HABIT: { name: "打卡", tip: "每日习惯完成进度" },
-  ROAST: { name: "毒舌", tip: "轻松幽默的吐槽风格内容" },
-  FITNESS: { name: "健身", tip: "居家健身动作与建议" },
-  LETTER: { name: "慢信", tip: "来自不同时空的一封慢信" },
-  THISDAY: { name: "今日历史", tip: "历史上的今天重大事件" },
-  RIDDLE: { name: "猜谜", tip: "谜题与脑筋急转弯" },
-  QUESTION: { name: "每日一问", tip: "值得思考的开放式问题" },
-  BIAS: { name: "认知偏差", tip: "认知偏差与心理效应" },
-  STORY: { name: "微故事", tip: "可在 30 秒内读完的微故事" },
-  LIFEBAR: { name: "进度条", tip: "年/月/周/人生进度条" },
-  CHALLENGE: { name: "微挑战", tip: "每天一个 5 分钟微挑战" },
+type ModeCatalogItem = {
+  mode_id: string;
+  category: "core" | "more" | "custom" | string;
+  source?: string;
+  display_name?: string;
+  description?: string;
+  i18n?: {
+    zh?: { name?: string; tip?: string };
+    en?: { name?: string; tip?: string };
+  };
 };
-
-// 英文模式元数据（用于 /en/preview 下显示）
-const MODE_META_EN: Record<string, { name: string; tip: string }> = {
-  DAILY: { name: "Everyday", tip: "A daily digest: quotes, book picks, and fun facts" },
-  WEATHER: { name: "Weather", tip: "Current weather and forecast dashboard" },
-  WORD_OF_THE_DAY: { name: "Word of the Day", tip: "One English word with a short explanation" },
-  MY_QUOTE: { name: "Custom Quote", tip: "Supports custom input or random generation" },
-  MY_ADAPTIVE: { name: "Adaptive Photo", tip: "Upload a local photo and auto-fit it to the 4.2\" e-ink screen" },
-  ADAPTIVE_PHOTO: { name: "Adaptive Photo", tip: "Auto-fit photo mode for the e-ink screen" },
-  PHOTO: { name: "Photo", tip: "Photo mode" },
-  MY_PHOTO: { name: "Custom Photo", tip: "Your own photo mode (JSON-defined)" },
-  ZEN: { name: "Zen", tip: "A single character to reflect your mood" },
-  BRIEFING: { name: "Briefing", tip: "Tech trends + AI insights briefing" },
-  STOIC: { name: "Stoic", tip: "A daily stoic quote" },
-  POETRY: { name: "Poetry", tip: "Classical poetry with a short note" },
-  ARTWALL: { name: "Gallery", tip: "Seasonal black & white generative art" },
-  ALMANAC: { name: "Almanac", tip: "Lunar calendar, solar terms, and daily luck" },
-  RECIPE: { name: "Recipe", tip: "Meal ideas based on time of day" },
-  COUNTDOWN: { name: "Countdown", tip: "Countdown / count-up for important events" },
-  MEMO: { name: "Memo", tip: "Show your custom memo text" },
-  HABIT: { name: "Habits", tip: "Daily habit progress" },
-  ROAST: { name: "Roast", tip: "Lighthearted, sarcastic daily roast" },
-  FITNESS: { name: "Fitness", tip: "At-home workout tips" },
-  LETTER: { name: "Letter", tip: "A slow letter from another time" },
-  THISDAY: { name: "On This Day", tip: "Major events in history today" },
-  RIDDLE: { name: "Riddle", tip: "Riddles and brain teasers" },
-  QUESTION: { name: "Daily Question", tip: "A thought-provoking open question" },
-  BIAS: { name: "Bias", tip: "A cognitive bias or psychological effect" },
-  STORY: { name: "Micro Story", tip: "A complete micro fiction in three parts" },
-  LIFEBAR: { name: "Life Bar", tip: "Progress bars for year / month / week / life" },
-  CHALLENGE: { name: "Challenge", tip: "A 5-minute daily micro challenge" },
-};
-
-const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
-const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m) && m !== "MY_QUOTE");
 
 // 自定义模式模板（与配置页使用的模板保持一致的最小子集）
 type ModeTemplateDef = {
@@ -109,13 +58,6 @@ const MODE_TEMPLATES: Record<string, { label: string; def: ModeTemplateDef }> = 
   },
 };
 
-interface ServerModeItem {
-  mode_id: string;
-  display_name: string;
-  description: string;
-  source: string;
-}
-
 function ModeSection({
   title,
   modes,
@@ -152,11 +94,7 @@ function ModeSection({
       {collapsed ? null : (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {modes.map((m) => {
-            const meta =
-              (locale === "en" ? MODE_META_EN[m] : MODE_META[m]) ||
-              customMeta?.[m] ||
-              MODE_META[m] ||
-              { name: m, tip: "" };
+            const meta = customMeta?.[m] || { name: m, tip: "" };
             const isCurrent = currentMode === m;
             return (
               <div key={m} className="rounded-sm border border-ink/10 bg-white overflow-hidden">
@@ -198,9 +136,10 @@ export default function ExperiencePage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [userLlmApiKey, setUserLlmApiKey] = useState<string>("");
 
-  const [serverModes, setServerModes] = useState<ServerModeItem[]>([]);
+  const [catalogItems, setCatalogItems] = useState<ModeCatalogItem[]>([]);
   const [modesError, setModesError] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState("DAILY");
+  // do not preselect any mode
+  const [previewMode, setPreviewMode] = useState("");
 
   const [city, setCity] = useState("杭州");
   const [memoText, setMemoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
@@ -294,24 +233,51 @@ export default function ExperiencePage() {
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
   };
 
-  const customModes = useMemo(
-    () => serverModes.filter((m) => m.source === "custom" && m.mode_id !== "WORD_OF_THE_DAY"),
-    [serverModes],
+  const modeMeta = useMemo(() => {
+    const map: Record<string, { name: string; tip: string }> = {};
+    for (const item of catalogItems) {
+      const mid = (item.mode_id || "").toUpperCase();
+      if (!mid) continue;
+      const lang = locale === "en" ? item.i18n?.en : item.i18n?.zh;
+      const name =
+        (lang?.name && String(lang.name)) ||
+        (item.display_name && String(item.display_name)) ||
+        mid;
+      const tip =
+        (lang?.tip && String(lang.tip)) ||
+        (item.description && String(item.description)) ||
+        "";
+      map[mid] = { name, tip };
+    }
+    return map;
+  }, [catalogItems, locale]);
+
+  const coreModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "core").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
   );
-  const customModeMeta = useMemo(
-    () => Object.fromEntries(serverModes.map((m) => [m.mode_id, { name: m.display_name, tip: m.description }])),
-    [serverModes],
+  const moreModes = useMemo(
+    () =>
+      catalogItems
+        .filter((m) => m.category === "more")
+        .map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const customModes = useMemo(
+    () =>
+      catalogItems
+        .filter((m) => m.category === "custom")
+        .map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
   );
 
   const previewModeName =
-    (locale === "en" ? MODE_META_EN[previewMode]?.name : MODE_META[previewMode]?.name) ||
-    customModeMeta[previewMode]?.name ||
+    modeMeta[previewMode]?.name ||
     previewMode ||
     t(locale, "preview.unknown_mode", "Unknown");
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const previewModeTip =
-    (locale === "en" ? MODE_META_EN[previewMode]?.tip : MODE_META[previewMode]?.tip) ||
-    customModeMeta[previewMode]?.tip ||
+    modeMeta[previewMode]?.tip ||
     "";
 
   const handlePreview = async (modeId?: string, override?: Record<string, unknown>) => {
@@ -601,24 +567,29 @@ export default function ExperiencePage() {
   useEffect(() => {
     setModesError(null);
     if (!authChecked) return;
-    fetch("/api/modes", { headers: authHeaders() })
+    fetch("/api/modes/catalog", { headers: authHeaders() })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((d) => {
-        if (d.modes) setServerModes(d.modes);
-        else setModesError(t(locale, "preview.error.no_modes", "No modes data"));
+        if (d.items && Array.isArray(d.items)) {
+          setCatalogItems(d.items);
+        } else {
+          console.error("[PREVIEW] Invalid catalog response:", d);
+          setModesError(t(locale, "preview.error.no_modes", "No modes data"));
+        }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[PREVIEW] Failed to load catalog:", err);
         setModesError(t(locale, "preview.error.modes_unreachable", "Cannot load modes. Make sure backend is running."));
-        setServerModes([]);
+        setCatalogItems([]);
       });
   }, [authChecked, locale]);
 
   useEffect(() => {
     if (!authChecked) return;
-    handlePreview().catch(() => {});
+    // no auto-preview on enter; user must pick a mode
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authChecked]);
 
@@ -680,30 +651,32 @@ export default function ExperiencePage() {
 
               <ModeSection
                 title={t(locale, "preview.section.core", "Core modes")}
-                modes={CORE_MODES}
+                modes={coreModes}
                 currentMode={previewMode}
                 onPreview={applyModeAndPreview}
                 collapsible
+                customMeta={modeMeta}
                 locale={locale}
               />
 
               <ModeSection
                 title={t(locale, "preview.section.more", "More modes")}
-                modes={EXTRA_MODES}
+                modes={moreModes}
                 currentMode={previewMode}
                 onPreview={applyModeAndPreview}
                 collapsible
+                customMeta={modeMeta}
                 locale={locale}
               />
 
               {customModes.length ? (
                 <ModeSection
                   title={t(locale, "preview.section.custom", "Custom modes")}
-                  modes={customModes.map((m) => m.mode_id)}
+                  modes={customModes}
                   currentMode={previewMode}
                   onPreview={applyModeAndPreview}
                   collapsible
-                  customMeta={customModeMeta}
+                  customMeta={modeMeta}
                   locale={locale}
                 />
               ) : null}
@@ -747,7 +720,7 @@ export default function ExperiencePage() {
                       </p>
                     ) : null}
                   </div>
-                ) : previewMode === null ? (
+                ) : !previewMode ? (
                   <div className="flex items-center justify-center w-full">
                     <div className="text-center">
                       <Eye size={32} className="mx-auto text-ink-light mb-3" />

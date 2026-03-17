@@ -22,6 +22,7 @@ export function Navbar() {
   ];
   const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const refreshUser = useCallback(() => {
     fetchCurrentUser()
@@ -32,6 +33,11 @@ export function Navbar() {
   useEffect(() => {
     refreshUser();
   }, [pathname, refreshUser]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     const off = onAuthChanged(refreshUser);
@@ -49,6 +55,16 @@ export function Navbar() {
     setUsername(null);
     router.refresh();
   };
+
+  // Avoid hydration mismatch: initial SSR does not have stable auth state
+  // (depends on client-side token/cookie). Render a stable placeholder until mounted.
+  if (!hydrated) {
+    return (
+      <header className="sticky top-0 z-40 w-full border-b border-ink/10 bg-white/80 backdrop-blur-md">
+        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6" />
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-ink/10 bg-white/80 backdrop-blur-md">

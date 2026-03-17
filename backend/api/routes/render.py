@@ -472,6 +472,12 @@ async def preview_stream(
             yield _sse_event("status", {"stage": "rendering", "message": "正在渲染..."})
             png_bytes = image_to_png_bytes(img)
             data_url = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
+            # Keep SSE result payload aligned with /preview headers for UI.
+            status_msg = (
+                "no_llm_required"
+                if not llm_mode_requires_quota
+                else ("model_generated" if not _content_fallback else "fallback_used")
+            )
             yield _sse_event(
                 "result",
                 {
@@ -481,6 +487,8 @@ async def preview_stream(
                     "cache_hit": cache_hit,
                     "usage_source": usage_source,
                     "image_url": data_url,
+                    "preview_status": status_msg,
+                    "llm_required": bool(llm_mode_requires_quota),
                 },
             )
         except (OSError, RuntimeError, TypeError, ValueError, UnidentifiedImageError) as exc:

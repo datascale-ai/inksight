@@ -14,6 +14,7 @@ from core.config import SCREEN_HEIGHT, SCREEN_WIDTH, get_default_llm_model_for_p
 from core.config_store import remove_mode_from_all_configs
 from core.context import get_date_context, get_weather
 from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def, get_registry
+from core.mode_catalog import BUILTIN_CATALOG, builtin_catalog_map
 from core.config_store import (
     get_user_custom_modes,
     get_custom_mode,
@@ -117,6 +118,129 @@ async def list_modes(
     # Removed backward compatibility for file-based custom modes
     
     return {"modes": modes}
+
+
+@router.get("/modes/catalog")
+async def mode_catalog(
+    mac: str = Query(None, description="Device MAC address to filter custom modes"),
+    user_id: int = Depends(optional_user),
+):
+    """
+    Unified mode catalog for UIs (preview/config).
+
+    - Builtin modes: grouped by a single source of truth in `core.mode_catalog`.
+    - Custom modes: dynamic, always category="custom".
+    """
+    try:
+        catalog = builtin_catalog_map()
+        registry = get_registry()
+
+        # Normalize mac if provided
+        if mac:
+            mac = mac.upper()
+
+        # Reuse list_modes logic (including device isolation) by loading custom modes here.
+        if user_id is not None and mac:
+            from core.config_store import has_active_membership
+
+            if not await has_active_membership(mac, user_id):
+                # Not a member: only builtin modes
+                items = []
+                for info in registry.list_modes(mac):
+                    if info.source == "custom":
+                        continue
+                    cat = catalog.get(info.mode_id)
+                    items.append(
+                        {
+                            "mode_id": info.mode_id,
+                            "source": info.source,
+                            "category": (cat.category if cat else "more"),
+                            "display_name": info.display_name,
+                            "description": info.description,
+                            "settings_schema": info.settings_schema or [],
+                            "i18n": {
+                                "zh": {
+                                    "name": (cat.zh.name if cat else info.display_name),
+                                    "tip": (cat.zh.tip if cat else info.description),
+                                },
+                                "en": {
+                                    "name": (cat.en.name if cat else info.display_name),
+                                    "tip": (cat.en.tip if cat else info.description),
+                                },
+                            },
+                        }
+                    )
+                return {"items": items}
+
+            # User has access: load their custom modes
+            registry.unregister_device_modes(mac)
+            await registry.load_user_custom_modes(user_id, mac)
+
+        def _item_from_info(info):
+            mid = info.mode_id
+            if info.source == "custom":
+                return {
+                    "mode_id": mid,
+                    "source": info.source,
+                    "category": "custom",
+                    "display_name": info.display_name,
+                    "description": info.description,
+                    "settings_schema": info.settings_schema or [],
+                    "i18n": {
+                        "zh": {"name": info.display_name, "tip": info.description},
+                        "en": {"name": info.display_name, "tip": info.description},
+                    },
+                }
+            cat = catalog.get(mid)
+            return {
+                "mode_id": mid,
+                "source": info.source,
+                "category": (cat.category if cat else "more"),
+                "display_name": info.display_name,
+                "description": info.description,
+                "settings_schema": info.settings_schema or [],
+                "i18n": {
+                    "zh": {
+                        "name": (cat.zh.name if cat else info.display_name),
+                        "tip": (cat.zh.tip if cat else info.description),
+                    },
+                    "en": {
+                        "name": (cat.en.name if cat else info.display_name),
+                        "tip": (cat.en.tip if cat else info.description),
+                    },
+                },
+            }
+
+        items: list[dict] = []
+
+        # 1) Builtin modes in catalog order (stable UX)
+        for cat_item in BUILTIN_CATALOG:
+            info = registry.get_mode_info(cat_item.mode_id.upper())
+            if not info or info.source == "custom":
+                continue
+            items.append(_item_from_info(info))
+
+        emitted = {x["mode_id"] for x in items}
+
+        # 2) Remaining non-custom modes not in catalog (fallback)
+        for info in registry.list_modes(mac):
+            if info.source == "custom":
+                continue
+            if info.mode_id in emitted:
+                continue
+            items.append(_item_from_info(info))
+            emitted.add(info.mode_id)
+
+        # 3) Custom modes (dynamic)
+        for info in registry.list_modes(mac):
+            if info.source != "custom":
+                continue
+            items.append(_item_from_info(info))
+
+        return {"items": items}
+    except Exception as e:
+        logger.exception("[CATALOG] Error in mode_catalog endpoint")
+        return JSONResponse({"error": str(e), "items": []}, status_code=500)
 
 
 def _preview_payload(content: dict) -> dict:
