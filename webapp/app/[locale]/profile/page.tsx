@@ -167,7 +167,7 @@ export default function ProfilePage() {
   // 根据 provider 返回可选文本模型列表
   const getLlmModelOptions = (provider: string): string[] => {
     if (provider === "aliyun") {
-      return ["qwen3.5-flash", "deepseek-v3.2", "Kimi-k2.5"];
+      return ["qwen3.5-flash", "deepseek-v3.2", "Moonshot-Kimi-K2-Instruct"];
     }
     // 默认 DeepSeek
     return ["deepseek-chat", "deepseek-reasoner"];
@@ -389,7 +389,7 @@ export default function ProfilePage() {
                       <>
                         <option value="qwen3.5-flash">qwen3.5-flash</option>
                         <option value="deepseek-v3.2">deepseek-v3.2</option>
-                        <option value="Kimi-k2.5">Kimi-k2.5</option>
+                        <option value="Moonshot-Kimi-K2-Instruct">Moonshot-Kimi-K2-Instruct</option>
                       </>
                     ) : (
                       <>

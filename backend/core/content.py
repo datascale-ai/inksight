@@ -169,7 +169,7 @@ def _get_client(
         # 如果用户提供了 api_key 但为空或无效，给出明确提示
         if user_provided_key:
             raise LLMKeyMissingError(
-                f"您配置的 API key 为空或无效（provider: {provider}）。请在设备配置页面检查并更新您的 API key。"
+                f"您配置的 API key 为空或无效（provider: {provider}）。请在个人信息页面检查并更新您的 API key 配置。"
             )
         else:
             raise LLMKeyMissingError(
