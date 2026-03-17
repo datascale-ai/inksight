@@ -248,6 +248,13 @@ interface ModeOverride {
   [key: string]: unknown;
 }
 
+interface PendingPreviewConfirm {
+  mode: string;
+  forceNoCache: boolean;
+  forcedModeOverride?: ModeOverride;
+  usageSource?: string;
+}
+
 interface ModeSettingSchemaItem {
   key: string;
   label: string;
@@ -558,6 +565,7 @@ function ConfigPageInner() {
   const [previewMode, setPreviewMode] = useState("");
   const [previewNoCacheOnce, setPreviewNoCacheOnce] = useState(false);
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
+  const [previewConfirm, setPreviewConfirm] = useState<PendingPreviewConfirm | null>(null);
   // 邀请码弹窗状态
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -569,6 +577,7 @@ function ConfigPageInner() {
   const favoritesLoadedMacRef = useRef<string>("");
   const memoSettingsInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previewStreamRef = useRef<EventSource | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("unknown");
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
@@ -588,6 +597,24 @@ function ConfigPageInner() {
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const replacePreviewImg = useCallback((nextUrl: string | null) => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+    if (nextUrl) previewObjectUrlRef.current = nextUrl;
+    setPreviewImg(nextUrl);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+        previewObjectUrlRef.current = null;
+      }
+    };
   }, []);
 
   const nextConfigPath = useMemo(() => {
@@ -833,53 +860,96 @@ function ConfigPageInner() {
     }
   };
 
-  const handlePreview = async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
+  const buildPreviewParams = (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
     const m = mode || previewMode;
     const consumeNoCacheOnce = previewNoCacheOnce;
     const forceFresh = forceNoCache || consumeNoCacheOnce;
+    const params = new URLSearchParams({ persona: m });
+    if (mac) params.set("mac", mac);
+    const activeModeOverride = sanitizeModeOverride({
+      ...(modeOverrides[m] || {}),
+      ...(forcedModeOverride || {}),
+    });
+    if (m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
+      activeModeOverride.memo_text = memoText.trim();
+    }
+    const hasModeOverride = Object.keys(activeModeOverride).length > 0;
+    if (hasModeOverride) {
+      params.set("mode_override", JSON.stringify(activeModeOverride));
+    }
+    if (m === "MEMO") {
+      const memoCandidate = (
+        typeof forcedModeOverride?.memo_text === "string" && forcedModeOverride.memo_text.trim()
+          ? forcedModeOverride.memo_text
+          : typeof activeModeOverride.memo_text === "string" && activeModeOverride.memo_text.trim()
+          ? activeModeOverride.memo_text
+          : memoText
+      ).trim();
+      if (memoCandidate) {
+        params.set("memo_text", memoCandidate);
+      }
+    }
+    const modeCity = (modeOverrides[m]?.city || "").trim();
+    const globalCity = city.trim();
+    const previewCity = modeCity || globalCity;
+    const savedGlobalCity = (config.city || "").trim();
+    const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
+    const savedModeCity = (savedOverrides[m]?.city || "").trim();
+    const cityChanged = previewCity.length > 0 && (modeCity ? modeCity !== savedModeCity : globalCity !== savedGlobalCity);
+    if (cityChanged) params.set("city_override", previewCity);
+    if (forceFresh || cityChanged || hasModeOverride) params.set("no_cache", "1");
+    return { m, params, consumeNoCacheOnce };
+  };
+
+  const handlePreview = async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, confirmed = false) => {
+    const { m, params, consumeNoCacheOnce } = buildPreviewParams(mode, forceNoCache, forcedModeOverride);
+    if (!m) return;
+
+    if (mac && !confirmed) {
+      try {
+        const intentParams = new URLSearchParams(params);
+        intentParams.set("intent", "1");
+        const intentRes = await fetch(`/api/preview?${intentParams.toString()}`, {
+          cache: "no-store",
+          headers: authHeaders(),
+        });
+        if (intentRes.ok) {
+          const intentData = (await intentRes.json()) as {
+            cache_hit?: boolean;
+            usage_source?: string;
+            requires_invite_code?: boolean;
+          };
+          if (intentData.requires_invite_code) {
+            setPreviewConfirm(null);
+            setShowInviteModal(true);
+            setPendingPreviewMode(m);
+            setPreviewStatusText(formatPreviewUsageText(intentData.usage_source));
+            return;
+          }
+          if (!intentData.cache_hit) {
+            setPreviewConfirm({
+              mode: m,
+              forceNoCache,
+              forcedModeOverride,
+              usageSource: intentData.usage_source,
+            });
+            return;
+          }
+        }
+      } catch {}
+    }
+
+    setPreviewConfirm(null);
     setPreviewCacheHit(null);
     setPreviewLoading(true);
     setPreviewStatusText(tr("正在生成...", "Generating..."));
     try {
-      const params = new URLSearchParams({ persona: m });
-      if (mac) params.set("mac", mac);
-      const activeModeOverride = sanitizeModeOverride({
-        ...(modeOverrides[m] || {}),
-        ...(forcedModeOverride || {}),
-      });
-      if (m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
-        activeModeOverride.memo_text = memoText.trim();
-      }
-      const hasModeOverride = Object.keys(activeModeOverride).length > 0;
-      if (hasModeOverride) {
-        params.set("mode_override", JSON.stringify(activeModeOverride));
-      }
-      if (m === "MEMO") {
-        const memoCandidate = (
-          typeof forcedModeOverride?.memo_text === "string" && forcedModeOverride.memo_text.trim()
-            ? forcedModeOverride.memo_text
-            : typeof activeModeOverride.memo_text === "string" && activeModeOverride.memo_text.trim()
-            ? activeModeOverride.memo_text
-            : memoText
-        ).trim();
-        if (memoCandidate) {
-          params.set("memo_text", memoCandidate);
-        }
-      }
-      const modeCity = (modeOverrides[m]?.city || "").trim();
-      const globalCity = city.trim();
-      const previewCity = modeCity || globalCity;
-      const savedGlobalCity = (config.city || "").trim();
-      const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
-      const savedModeCity = (savedOverrides[m]?.city || "").trim();
-      const cityChanged = previewCity.length > 0 && (modeCity ? modeCity !== savedModeCity : globalCity !== savedGlobalCity);
-      if (cityChanged) params.set("city_override", previewCity);
-      if (forceFresh || cityChanged || hasModeOverride) params.set("no_cache", "1");
       previewStreamRef.current?.close();
       const stream = new EventSource(`/api/preview/stream?${params.toString()}`);
       previewStreamRef.current = stream;
 
       await new Promise<void>((resolve, reject) => {
+        let settled = false;
         stream.addEventListener("status", (event) => {
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as { message?: string };
@@ -890,69 +960,87 @@ function ConfigPageInner() {
         });
 
         stream.addEventListener("error", (event) => {
+          if (settled) return;
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as {
               error?: string;
               message?: string;
               requires_invite_code?: boolean;
+              usage_source?: string;
             };
-            // 如果额度耗尽，显示邀请码输入弹窗
             if (data.requires_invite_code) {
+              settled = true;
               stream.close();
               previewStreamRef.current = null;
+              setPreviewConfirm(null);
               setShowInviteModal(true);
-              setPendingPreviewMode(previewMode);
-              setPreviewStatusText("");
-              setPreviewLoading(false); // 重置加载状态
-              resolve(); // 不 reject，而是 resolve，因为这是预期的业务逻辑
+              setPendingPreviewMode(m);
+              setPreviewStatusText(formatPreviewUsageText(data.usage_source));
+              setPreviewLoading(false);
+              resolve();
               return;
             }
-            // 其他错误，正常 reject
+            settled = true;
             stream.close();
             previewStreamRef.current = null;
-            setPreviewLoading(false); // 重置加载状态
+            setPreviewLoading(false);
             reject(new Error(data.message || "Preview failed"));
           } catch {
+            settled = true;
             stream.close();
             previewStreamRef.current = null;
-            setPreviewLoading(false); // 重置加载状态
+            setPreviewLoading(false);
             reject(new Error("Preview failed"));
           }
         });
 
-        stream.addEventListener("result", (event) => {
+        stream.addEventListener("result", async (event) => {
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as {
               message?: string;
               image_url?: string;
               cache_hit?: boolean;
+              usage_source?: string;
             };
             console.log("[PREVIEW] Result event received:", { hasImageUrl: !!data.image_url, message: data.message });
             if (!data.image_url) {
+              settled = true;
               console.error("[PREVIEW] Missing image_url in result event");
-              setPreviewLoading(false); // 重置加载状态
+              setPreviewLoading(false);
               reject(new Error("Preview image missing"));
               return;
             }
+            settled = true;
+            const imageResponse = await fetch(data.image_url, { cache: "no-store" });
+            if (!imageResponse.ok) {
+              setPreviewLoading(false);
+              reject(new Error("Preview image unavailable"));
+              return;
+            }
+            const imageBlob = await imageResponse.blob();
+            const objectUrl = URL.createObjectURL(imageBlob);
             console.log("[PREVIEW] Setting preview image:", data.image_url.substring(0, 50) + "...");
-            setPreviewImg(data.image_url);
+            replacePreviewImg(objectUrl);
             setPreviewCacheHit(typeof data.cache_hit === "boolean" ? data.cache_hit : null);
-            setPreviewStatusText(data.message || tr("完成", "Done"));
-            setPreviewLoading(false); // 重置加载状态
+            const usageText = formatPreviewUsageText(data.usage_source);
+            setPreviewStatusText(usageText || data.message || tr("完成", "Done"));
+            setPreviewLoading(false);
             stream.close();
             previewStreamRef.current = null;
             resolve();
           } catch (error) {
             console.error("[PREVIEW] Error processing result event:", error);
-            setPreviewLoading(false); // 重置加载状态
+            setPreviewLoading(false);
             reject(error);
           }
         });
 
         stream.onerror = () => {
+          if (settled) return;
+          settled = true;
           stream.close();
           previewStreamRef.current = null;
-          setPreviewLoading(false); // 重置加载状态
+          setPreviewLoading(false);
           reject(new Error("Preview failed"));
         };
       });
@@ -1421,7 +1509,7 @@ function ConfigPageInner() {
       });
       if (previewMode === modeId) {
         setPreviewMode("");
-        setPreviewImg(null);
+        replacePreviewImg(null);
         setPreviewCacheHit(null);
       }
       if (currentMode === modeId) {
@@ -1446,6 +1534,43 @@ function ConfigPageInner() {
   const currentDeviceMembership = userDevices.find((d) => d.mac.toUpperCase() === mac.toUpperCase()) || null;
   const denyByMembership = Boolean(mac && currentUser && !devicesLoading && !currentDeviceMembership);
   const currentUserRole = currentDeviceMembership?.role || "";
+  const ownerUsername = deviceMembers.find((member) => member.role === "owner")?.username || "";
+  const formatPreviewUsageText = useCallback((usageSource?: string) => {
+    switch (usageSource) {
+      case "current_user_api_key":
+        return tr("当前使用你的 API key", "Using your API key");
+      case "owner_api_key":
+        return ownerUsername
+          ? tr(`当前使用 owner（${ownerUsername}）的 API key`, `Using ${ownerUsername}'s API key`)
+          : tr("当前使用 owner 的 API key", "Using owner's API key");
+      case "owner_free_quota":
+        return ownerUsername
+          ? tr(`当前消耗 owner（${ownerUsername}）的免费额度`, `Using ${ownerUsername}'s free quota`)
+          : tr("当前消耗 owner 的免费额度", "Using owner's free quota");
+      case "current_user_free_quota":
+        return tr("当前消耗你的免费额度", "Using your free quota");
+      default:
+        return "";
+    }
+  }, [ownerUsername, tr]);
+  const formatPreviewConfirmText = useCallback((usageSource?: string) => {
+    switch (usageSource) {
+      case "current_user_api_key":
+        return tr("本次预览将使用你的 API key。是否继续？", "This preview will use your API key. Continue?");
+      case "owner_api_key":
+        return ownerUsername
+          ? tr(`本次预览将使用 owner（${ownerUsername}）的 API key。是否继续？`, `This preview will use ${ownerUsername}'s API key. Continue?`)
+          : tr("本次预览将使用 owner 的 API key。是否继续？", "This preview will use the owner's API key. Continue?");
+      case "owner_free_quota":
+        return ownerUsername
+          ? tr(`本次预览将消耗 owner（${ownerUsername}）的免费额度。是否继续？`, `This preview will use ${ownerUsername}'s free quota. Continue?`)
+          : tr("本次预览将消耗 owner 的免费额度。是否继续？", "This preview will use the owner's free quota. Continue?");
+      case "current_user_free_quota":
+        return tr("本次预览将消耗你的免费额度。是否继续？", "This preview will use your free quota. Continue?");
+      default:
+        return tr("当前未命中缓存，将生成新的预览。是否继续？", "No cache hit. A new preview will be generated. Continue?");
+    }
+  }, [ownerUsername, tr]);
   const statusLabel = !isOnline
     ? tr("离线", "Offline")
     : runtimeMode === "active"
@@ -2181,57 +2306,115 @@ function ConfigPageInner() {
         </div>
       )}
 
+      {previewConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>{isEn ? "Confirm Preview" : "确认预览"}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm leading-6 text-ink">
+                {formatPreviewConfirmText(previewConfirm.usageSource)}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPreviewConfirm(null);
+                  }}
+                >
+                  {isEn ? "Cancel" : "取消"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const pending = previewConfirm;
+                    setPreviewConfirm(null);
+                    if (pending) {
+                      handlePreview(pending.mode, pending.forceNoCache, pending.forcedModeOverride, true);
+                    }
+                  }}
+                  className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white"
+                >
+                  {isEn ? "Confirm" : "确定"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
       {/* 邀请码输入弹窗 */}
       {showInviteModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <Card className="w-full max-w-md mx-4">
             <CardHeader>
-              <CardTitle>{isEn ? "Enter Invitation Code" : "请输入邀请码"}</CardTitle>
+              <CardTitle>
+                {currentUserRole === "member"
+                  ? (isEn ? "Free Quota Exhausted" : "免费额度已用完")
+                  : (isEn ? "Enter Invitation Code" : "请输入邀请码")}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-ink-light">
+              <p className={`${currentUserRole === "member" ? "text-base leading-7 text-ink" : "text-sm text-ink-light"}`}>
                 {isEn
-                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 10 more free LLM calls, or configure your own API key in your profile settings."
-                  : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在个人信息中设置自己的 API key。"}
+                  ? (currentUserRole === "member"
+                    ? `This device owner's free quota is exhausted. Please contact ${ownerUsername || "the owner"}, or continue with device-free preview.`
+                    : "Your free quota has been exhausted. You can enter an invitation code or configure your own API key in your profile.")
+                  : (currentUserRole === "member"
+                    ? `当前设备 owner${ownerUsername ? `（${ownerUsername}）` : ""} 的免费额度已用完，请联系 owner，或继续在线体验。`
+                    : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在个人信息中设置自己的 API key。")}
               </p>
-              <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
-                <p className="text-xs text-ink-light mb-2">
-                  {isEn
-                    ? "💡 Tip: If you have your own API key, you can configure it in your profile to avoid quota limits."
-                    : "💡 提示：如果您有自己的 API key，可以在个人信息中配置，这样就不会受到额度限制了。"}
-                </p>
-                <Link href={withLocalePath(locale, "/profile")}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowInviteModal(false);
-                    }}
-                    className="w-full text-xs"
-                  >
-                    {isEn ? "Go to Profile Settings" : "前往个人信息配置"}
-                  </Button>
-                </Link>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">
-                  {isEn ? "Invitation Code" : "邀请码"}
-                </label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder={isEn ? "Enter invitation code" : "请输入邀请码"}
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !redeemingInvite) {
-                      handleRedeemInviteCode();
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
+              {currentUserRole === "member" ? (
+                <div className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs leading-5 text-amber-800">
+                    {isEn
+                      ? "Member free quota only applies to device-free preview, not on-device generation."
+                      : "Member 免费额度仅用于无设备预览，不用于设备端生成。"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
+                    <p className="text-xs text-ink-light mb-2">
+                      {isEn
+                        ? "Tip: If you have your own API key, you can configure it in your profile to avoid quota limits."
+                        : "提示：如果您有自己的 API key，可以在个人信息中配置，这样就不会受到额度限制了。"}
+                    </p>
+                    <Link href={withLocalePath(locale, "/profile")}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowInviteModal(false);
+                        }}
+                        className="w-full text-xs"
+                      >
+                        {isEn ? "Go to Profile Settings" : "前往个人信息配置"}
+                      </Button>
+                    </Link>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-1">
+                      {isEn ? "Invitation Code" : "邀请码"}
+                    </label>
+                    <input
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value)}
+                      placeholder={isEn ? "Enter invitation code" : "请输入邀请码"}
+                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !redeemingInvite) {
+                          handleRedeemInviteCode();
+                        }
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+              <div className={`flex gap-2 ${currentUserRole === "member" ? "flex-col-reverse sm:flex-row sm:justify-end" : "justify-end"}`}>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -2239,20 +2422,37 @@ function ConfigPageInner() {
                     setInviteCode("");
                     setPendingPreviewMode(null);
                   }}
-                  disabled={redeemingInvite}
+                  disabled={currentUserRole === "member" ? false : redeemingInvite}
                 >
                   {isEn ? "Cancel" : "取消"}
                 </Button>
-                <Button onClick={handleRedeemInviteCode} disabled={redeemingInvite || !inviteCode.trim()}>
-                  {redeemingInvite ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                      {isEn ? "Redeeming..." : "兑换中..."}
-                    </>
-                  ) : (
-                    isEn ? "Redeem" : "兑换"
-                  )}
-                </Button>
+                {currentUserRole === "member" && (
+                  <Link href={withLocalePath(locale, "/preview")} className="sm:min-w-[180px]">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowInviteModal(false);
+                        setInviteCode("");
+                        setPendingPreviewMode(null);
+                      }}
+                      className="w-full bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
+                    >
+                      {isEn ? "Continue Online Preview" : "继续在线体验"}
+                    </Button>
+                  </Link>
+                )}
+                {currentUserRole !== "member" && (
+                  <Button onClick={handleRedeemInviteCode} disabled={redeemingInvite || !inviteCode.trim()}>
+                    {redeemingInvite ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin mr-2" />
+                        {isEn ? "Redeeming..." : "兑换中..."}
+                      </>
+                    ) : (
+                      isEn ? "Redeem" : "兑换"
+                    )}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

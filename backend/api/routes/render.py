@@ -155,7 +155,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, _usage_source = await build_image(
             params.v,
             mac,
             params.persona,
@@ -279,6 +279,7 @@ async def preview(
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
+    intent: Optional[int] = Query(default=None),
     x_device_token: Optional[str] = Header(default=None),
     x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
@@ -311,7 +312,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source = await build_image(
             effective_v,
             mac,
             persona,
@@ -323,7 +324,21 @@ async def preview(
             preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
             current_user_id=current_user_id,
             user_api_key=x_inksight_llm_api_key,
+            intent_only=(intent == 1),
         )
+        if intent == 1:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "cache_hit": cache_hit,
+                    "usage_source": usage_source,
+                    "persona": resolved_persona,
+                    "requires_invite_code": quota_exhausted,
+                    "llm_mode_requires_quota": llm_mode_requires_quota,
+                },
+            )
         # 如果 API key 无效，返回 JSON 响应，提醒用户
         if api_key_invalid:
             from fastapi.responses import JSONResponse
@@ -425,7 +440,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source = await build_image(
                 effective_v,
                 mac,
                 persona,
@@ -451,6 +466,7 @@ async def preview_stream(
                     "error": "quota_exhausted",
                     "message": "您的免费额度已用完，请输入邀请码获取更多额度",
                     "requires_invite_code": True,
+                    "usage_source": usage_source,
                 })
                 return
             yield _sse_event("status", {"stage": "rendering", "message": "正在渲染..."})
@@ -463,6 +479,7 @@ async def preview_stream(
                     "message": "完成",
                     "persona": resolved_persona,
                     "cache_hit": cache_hit,
+                    "usage_source": usage_source,
                     "image_url": data_url,
                 },
             )

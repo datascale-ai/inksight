@@ -323,6 +323,11 @@ export function ModeSelector({
                     )}
                   </div>
                 )}
+                {previewStatusText && !previewLoading && (
+                  <div className="mb-2 text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-sm px-2 py-1.5">
+                    {previewStatusText}
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
