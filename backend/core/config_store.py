@@ -255,6 +255,7 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS user_llm_config (
                 user_id INTEGER PRIMARY KEY,
+                llm_access_mode TEXT DEFAULT 'preset',
                 provider TEXT DEFAULT 'deepseek',
                 api_key TEXT DEFAULT '',
                 base_url TEXT DEFAULT '',
@@ -1818,11 +1819,33 @@ async def get_user_llm_config(user_id: int) -> dict | None:
     # 检查表结构，兼容旧版本（没有 image / model 相关列）
     cursor = await db.execute("PRAGMA table_info(user_llm_config)")
     columns = [col[1] for col in await cursor.fetchall()]
+    has_access_mode_column = "llm_access_mode" in columns
     has_image_config = "image_provider" in columns and "image_api_key" in columns
     has_model_column = "model" in columns
     has_image_model_column = "image_model" in columns
     
-    if has_image_config and has_model_column and has_image_model_column:
+    # Build SELECT with backward compatibility across schema versions.
+    if has_access_mode_column and has_image_config and has_model_column and has_image_model_column:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key, model, image_model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_access_mode_column and has_image_config and has_model_column:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key, model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_access_mode_column and has_image_config:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_access_mode_column:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_image_config and has_model_column and has_image_model_column:
         cursor = await db.execute(
             "SELECT provider, api_key, base_url, image_provider, image_api_key, model, image_model FROM user_llm_config WHERE user_id = ?",
             (user_id,),
@@ -1846,12 +1869,18 @@ async def get_user_llm_config(user_id: int) -> dict | None:
     if not row:
         return None
     from .crypto import decrypt_api_key
+    offset = 0
+    llm_access_mode = "preset"
+    if has_access_mode_column:
+        llm_access_mode = row[0] or "preset"
+        offset = 1
     result: dict[str, str] = {
-        "provider": row[0] or "deepseek",
-        "api_key": decrypt_api_key(row[1] or "") if row[1] else "",
-        "base_url": row[2] or "",
+        "llm_access_mode": llm_access_mode,
+        "provider": row[0 + offset] or "deepseek",
+        "api_key": decrypt_api_key(row[1 + offset] or "") if row[1 + offset] else "",
+        "base_url": row[2 + offset] or "",
     }
-    idx = 3
+    idx = 3 + offset
     if has_image_config:
         result["image_provider"] = row[idx] or "aliyun"
         result["image_api_key"] = decrypt_api_key(row[idx + 1] or "") if row[idx + 1] else ""
@@ -1869,6 +1898,7 @@ async def get_user_llm_config(user_id: int) -> dict | None:
 
 async def save_user_llm_config(
     user_id: int,
+    llm_access_mode: str = "preset",
     provider: str = "deepseek",
     model: str = "",
     api_key: str = "",
@@ -1889,9 +1919,20 @@ async def save_user_llm_config(
     # 检查表结构，兼容旧版本
     cursor = await db.execute("PRAGMA table_info(user_llm_config)")
     columns = [col[1] for col in await cursor.fetchall()]
+    has_access_mode_column = "llm_access_mode" in columns
     has_image_config = "image_provider" in columns and "image_api_key" in columns
     has_model_column = "model" in columns
     has_image_model_column = "image_model" in columns
+
+    # 如果表没有 llm_access_mode 列，先添加
+    if not has_access_mode_column:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN llm_access_mode TEXT DEFAULT 'preset'")
+            await db.commit()
+            has_access_mode_column = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add llm_access_mode column: {e}")
+            await db.rollback()
     
     # 如果表没有图像配置 / model 列，先添加
     if not has_image_config:
@@ -1921,7 +1962,51 @@ async def save_user_llm_config(
             await db.rollback()
     
     try:
-        if has_image_config and has_image_model_column:
+        if has_access_mode_column and has_image_config and has_image_model_column:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, image_provider, image_api_key, image_model, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       llm_access_mode = excluded.llm_access_mode,
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       image_model = excluded.image_model,
+                       updated_at = excluded.updated_at""",
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, image_model, now),
+            )
+        elif has_access_mode_column and has_image_config:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, image_provider, image_api_key, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       llm_access_mode = excluded.llm_access_mode,
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       updated_at = excluded.updated_at""",
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, now),
+            )
+        elif has_access_mode_column:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       llm_access_mode = excluded.llm_access_mode,
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       updated_at = excluded.updated_at""",
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, now),
+            )
+        elif has_image_config and has_image_model_column:
             await db.execute(
                 """INSERT INTO user_llm_config (user_id, provider, model, api_key, base_url, image_provider, image_api_key, image_model, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1966,5 +2051,21 @@ async def save_user_llm_config(
         return True
     except Exception as e:
         logger.error(f"[USER_LLM_CONFIG] Failed to save config for user {user_id}: {e}")
+        await db.rollback()
+        return False
+
+
+async def delete_user_llm_config(user_id: int) -> bool:
+    """删除用户级别的 LLM 配置（BYOK）。删除后将回退到平台默认 key + 额度模式。"""
+    db = await get_main_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logger.error(f"[USER_LLM_CONFIG] Failed to delete config for user {user_id}: {e}")
         await db.rollback()
         return False

@@ -408,18 +408,24 @@ async def build_image(
         owner_user_llm_cfg = current_user_llm_cfg
 
     def apply_user_llm_cfg(user_llm_cfg: dict) -> None:
+        llm_access_mode = (user_llm_cfg.get("llm_access_mode") or "preset").strip().lower()
         provider = (user_llm_cfg.get("provider") or "").strip()
         model = (user_llm_cfg.get("model") or "").strip()
         api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
+        base_url = (user_llm_cfg.get("base_url") or "").strip()
         image_provider = (user_llm_cfg.get("image_provider") or "").strip()
         image_model = (user_llm_cfg.get("image_model") or "").strip()
         image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
+        config["llm_access_mode"] = llm_access_mode
         if provider:
             config["llm_provider"] = provider
             if model:
                 config["llm_model"] = model
         if api_key_plain:
             config["user_api_key"] = api_key_plain
+        # base_url only matters for custom_openai. Keep it isolated to avoid affecting preset providers.
+        if llm_access_mode == "custom_openai" and base_url:
+            config["llm_base_url"] = base_url
         if image_provider:
             config["image_provider"] = image_provider
         if image_model:
@@ -537,12 +543,21 @@ async def build_image(
     # 注意：API key 现在只从用户级别配置（user_llm_config 表）获取，不再从设备配置读取
     user_provided_api_key = False
     if config:
-        # 用户级别配置的 API key（通过 get_user_llm_config 获取并设置到 config["user_api_key"]）
+        # BYOK 有效性判定：
+        # - preset：必须有 user_api_key
+        # - custom_openai：必须有 user_api_key + llm_base_url
+        llm_access_mode = (config.get("llm_access_mode") or "preset").strip().lower()
         override_key = config.get("user_api_key")
-        if isinstance(override_key, str) and override_key.strip():
+        base_url = config.get("llm_base_url")
+        has_key = isinstance(override_key, str) and override_key.strip()
+        has_base = isinstance(base_url, str) and base_url.strip()
+        if (llm_access_mode == "custom_openai" and has_key and has_base) or (
+            llm_access_mode != "custom_openai" and has_key
+        ):
             user_provided_api_key = True
             logger.debug(
-                "[QUOTA] User provided API key via profile config, skipping quota check (mac=%s, user_id=%s)",
+                "[QUOTA] BYOK active (mode=%s), skipping quota check (mac=%s, user_id=%s)",
+                llm_access_mode,
                 mac,
                 selected_config_user_id,
             )

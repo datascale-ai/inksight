@@ -177,16 +177,20 @@ async def publish_mode(
         llm_provider = ""
         llm_model = ""
         api_key = ""
+        llm_base_url = ""
         image_provider = ""
         image_model = ""
         image_api_key = ""
         
         if user_llm_cfg:
+            llm_access_mode = (user_llm_cfg.get("llm_access_mode") or "preset").strip().lower()
             llm_provider = (user_llm_cfg.get("provider") or "").strip()
             llm_model = (user_llm_cfg.get("model") or "").strip()
             api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
             if api_key_plain:
                 api_key = api_key_plain
+            if llm_access_mode == "custom_openai":
+                llm_base_url = (user_llm_cfg.get("base_url") or "").strip()
             image_provider = (user_llm_cfg.get("image_provider") or "").strip()
             image_model = (user_llm_cfg.get("image_model") or "").strip()
             image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
@@ -215,6 +219,7 @@ async def publish_mode(
                     screen_h=SCREEN_HEIGHT,
                     llm_provider=llm_provider,
                     llm_model=llm_model,
+                    llm_base_url=(llm_base_url or None),
                     api_key=api_key,
                     image_provider=image_provider,
                     image_model=image_model,
@@ -259,6 +264,7 @@ async def publish_mode(
                 screen_h=SCREEN_HEIGHT,
                 llm_provider=llm_provider,
                 llm_model=llm_model,
+                llm_base_url=(llm_base_url or None),
                 api_key=api_key,
                 image_provider=image_provider,
                 image_model=image_model,

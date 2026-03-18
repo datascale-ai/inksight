@@ -128,6 +128,7 @@ async def generate_json_mode_content(
     content_tone: str | None = None,
     llm_provider: str = "",
     llm_model: str = "",
+    llm_base_url: str | None = None,
     image_provider: str = "",
     image_model: str = "",
     mac: str = "",
@@ -178,6 +179,7 @@ async def generate_json_mode_content(
         content_tone=content_tone,
         llm_provider=llm_provider,
         llm_model=llm_model,
+        llm_base_url=llm_base_url,
         image_provider=image_provider,
         image_model=image_model,
         config=config or {},
@@ -287,7 +289,7 @@ async def generate_json_mode_content(
         llm_ok = False
         api_key_invalid = False
         try:
-            text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
+            text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key, base_url=llm_base_url)
             llm_ok = True
         except (LLMKeyMissingError, httpx.HTTPError, HTTPStatusError, OpenAIError, OSError, TypeError, ValueError) as e:
             # 这里捕获所有 LLM 调用异常（包括 OpenAI/DeepSeek 的 BadRequestError 等），

@@ -173,6 +173,7 @@ async def _generate_content_for_persona(
         llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
         api_key=device_api_key,
         image_api_key=device_image_api_key,
+        llm_base_url=cfg.get("llm_base_url"),
     )
 
     # JSON-defined mode
@@ -212,6 +213,7 @@ async def _generate_content_for_persona(
             content_tone=cfg.get("content_tone", DEFAULT_CONTENT_TONE),
             llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
             llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
+            llm_base_url=cfg.get("llm_base_url"),
             image_provider=cfg.get("image_provider", DEFAULT_IMAGE_PROVIDER),
             image_model=cfg.get("image_model", DEFAULT_IMAGE_MODEL),
             mac=mac,

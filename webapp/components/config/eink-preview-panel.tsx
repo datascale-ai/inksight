@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { ReactNode } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ export function EInkPreviewPanel({
   applyToScreenLoading,
   onRegenerate,
   onApplyToScreen,
+  rightActions,
 }: {
   tr: (zh: string, en: string) => string;
   previewModeLabel: string;
@@ -29,6 +31,7 @@ export function EInkPreviewPanel({
   applyToScreenLoading: boolean;
   onRegenerate: () => void;
   onApplyToScreen: () => void;
+  rightActions?: ReactNode;
 }) {
   return (
     <Card>
@@ -39,7 +42,7 @@ export function EInkPreviewPanel({
         </CardTitle>
       </CardHeader>
       {/* keep sizing consistent with /preview page */}
-      <CardContent className="h-[calc(70vh-220px)] w-[600px] flex flex-col p-0">
+      <CardContent className="h-[calc(55vh-80px)] w-[400px] flex flex-col p-0">
         <div className="border border-ink/10 rounded-sm bg-paper flex flex-col items-center justify-center flex-1 w-full">
           {previewLoading ? (
             <div className="flex items-center justify-center w-full">
@@ -50,7 +53,7 @@ export function EInkPreviewPanel({
             </div>
           ) : previewImg ? (
             <div className="flex flex-col items-center gap-2 w-full px-4">
-              <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
+              <div className="relative w-full max-w-xl / max-w-none aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
                 <Image src={previewImg} alt="Preview" fill unoptimized className="object-contain" />
               </div>
               {previewLlmStatus ? (
@@ -76,7 +79,7 @@ export function EInkPreviewPanel({
               )}
             </div>
           ) : null}
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <Button
               variant="outline"
               size="sm"
@@ -96,6 +99,7 @@ export function EInkPreviewPanel({
               {applyToScreenLoading ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
               {tr("应用到墨水屏", "Apply to E-Ink")}
             </Button>
+            {rightActions ? <div className="ml-auto flex items-center gap-2">{rightActions}</div> : null}
           </div>
         </div>
       </CardContent>
