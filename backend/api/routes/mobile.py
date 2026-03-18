@@ -24,7 +24,7 @@ from core.config_store import (
     save_user_preferences,
     unregister_push_token,
 )
-from core.context import get_date_context, get_weather
+from core.context import extract_location_settings, get_date_context, get_weather
 from core.mode_registry import get_registry
 from core.pipeline import generate_content_only
 from core.schemas import PushRegistrationRequest, UserPreferencesRequest
@@ -124,7 +124,7 @@ async def get_today_content(
     resolved_locale = (locale or (prefs or {}).get("locale") or DEFAULT_LANGUAGE).lower()
     selected_modes = _normalize_modes(modes, limit)
     date_ctx = await get_date_context()
-    weather = await get_weather(city=city)
+    weather = await get_weather(**extract_location_settings({"city": city}, fallback_city=DEFAULT_CITY))
     registry = get_registry()
 
     items: list[dict] = []
@@ -221,10 +221,11 @@ async def get_widget_data(
         content = latest["content"]
         updated_at = latest_history[0]["time"] if latest_history else ""
     else:
-        city = (config or {}).get("city", DEFAULT_CITY)
+        effective_cfg = config or {}
+        city = effective_cfg.get("city", DEFAULT_CITY)
         locale = (config or {}).get("language", DEFAULT_LANGUAGE)
         date_ctx = await get_date_context()
-        weather = await get_weather(city=city)
+        weather = await get_weather(**extract_location_settings(effective_cfg, fallback_city=DEFAULT_CITY))
         try:
             content = await generate_content_only(
                 selected_mode,

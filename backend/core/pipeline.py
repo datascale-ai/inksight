@@ -29,11 +29,33 @@ def get_effective_mode_config(cfg: dict | None, persona: str) -> dict:
     override = mode_overrides.get((persona or "").upper(), {})
     if not isinstance(override, dict):
         return base
-    for key in ("city", "llm_provider", "llm_model"):
+    for key in (
+        "city",
+        "latitude",
+        "longitude",
+        "timezone",
+        "admin1",
+        "country",
+        "llm_provider",
+        "llm_model",
+    ):
         value = override.get(key)
         if isinstance(value, str) and value.strip():
             base[key] = value.strip()
-    reserved = {"city", "llm_provider", "llm_model", "llmProvider", "llmModel"}
+        elif isinstance(value, (int, float)) and key in {"latitude", "longitude"}:
+            base[key] = value
+    reserved = {
+        "city",
+        "latitude",
+        "longitude",
+        "timezone",
+        "admin1",
+        "country",
+        "llm_provider",
+        "llm_model",
+        "llmProvider",
+        "llmModel",
+    }
     mode_settings = {k: v for k, v in override.items() if k not in reserved}
     if mode_settings:
         base["mode_settings"] = mode_settings

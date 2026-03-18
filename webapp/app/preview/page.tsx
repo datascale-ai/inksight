@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { LocationPicker } from "@/components/config/location-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, Eye, Loader2, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
+import { cleanLocationValue, type LocationValue } from "@/lib/locations";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
 type ModeCatalogItem = {
@@ -129,7 +131,7 @@ export default function ExperiencePage() {
   const [_imageUploadLoading, setImageUploadLoading] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
-  const [cityDraft, setCityDraft] = useState("");
+  const [weatherDraftLocation, setWeatherDraftLocation] = useState<LocationValue>({ city: "杭州" });
   const [memoDraft, setMemoDraft] = useState("");
   
   // 倒计时状态
@@ -249,7 +251,7 @@ export default function ExperiencePage() {
     modeMeta[previewMode]?.tip ||
     "";
 
-  const handlePreview = async (modeId?: string, override?: Record<string, unknown>) => {
+  const handlePreview = async (modeId?: string, override?: Record<string, unknown> | LocationValue) => {
     const targetMode = modeId || previewMode;
     if (!targetMode) return;
     if (!authChecked) return;
@@ -258,7 +260,7 @@ export default function ExperiencePage() {
     if (!override) {
       if (targetMode === "WEATHER") {
         setModal({ type: "weather", modeId: targetMode });
-        setCityDraft(city);
+        setWeatherDraftLocation({ city });
         return;
       }
       if (targetMode === "MEMO") {
@@ -301,7 +303,9 @@ export default function ExperiencePage() {
       
       // 处理便签文本：优先使用 override 中的 memo_text
       if (targetMode === "MEMO") {
-        const memoOverride = override?.memo_text ? String(override.memo_text) : memoText;
+        const memoOverrideValue =
+          override && "memo_text" in override ? override.memo_text : undefined;
+        const memoOverride = memoOverrideValue ? String(memoOverrideValue) : memoText;
         params.set("memo_text", memoOverride);
       }
       
@@ -331,9 +335,7 @@ export default function ExperiencePage() {
       const llmRequired = res.headers.get("x-llm-required");
       
       if (statusHeader === "no_llm_required" || llmRequired === "0") {
-        setPreviewLlmStatus(
-          locale === "zh" ? "该模式无需调用大模型" : "This mode does not require LLM",
-        );
+        setPreviewLlmStatus(null);
       } else if (statusHeader === "model_generated") {
         setPreviewLlmStatus(
           locale === "zh" ? "大模型调用成功" : "Model call succeeded",
@@ -414,7 +416,7 @@ export default function ExperiencePage() {
     }
     if (modeId === "WEATHER") {
       setPreviewMode(modeId);
-      setCityDraft(city); // 使用当前城市作为默认值
+      setWeatherDraftLocation({ city });
       setModal({ type: "weather", modeId });
       return;
     }
@@ -460,9 +462,7 @@ export default function ExperiencePage() {
       const llmRequired = res.headers.get("x-llm-required");
       
       if (statusHeader === "no_llm_required" || llmRequired === "0") {
-        setPreviewLlmStatus(
-          locale === "zh" ? "该模式无需调用大模型" : "This mode does not require LLM",
-        );
+        setPreviewLlmStatus(null);
       } else if (statusHeader === "model_generated") {
         setPreviewLlmStatus(
           locale === "zh" ? "大模型调用成功" : "Model call succeeded",
@@ -803,14 +803,16 @@ export default function ExperiencePage() {
               ) : modal.type === "weather" ? (
                 <>
                   <div className="text-xs text-ink-light">
-                    {locale === "zh" 
-                      ? "输入城市名称查看天气。如果大模型调用失败，将显示默认城市天气。" 
-                      : "Enter city name to view weather. If LLM call fails, default city weather will be shown."}
+                    {locale === "zh"
+                      ? "搜索并选择具体地点查看天气，避免重名地点。"
+                      : "Search and choose a specific place to avoid ambiguous names."}
                   </div>
-                  <input
-                    value={cityDraft}
-                    onChange={(e) => setCityDraft(e.target.value)}
-                    placeholder={locale === "zh" ? "输入城市名称（如：北京、上海）" : "Enter city name (e.g., Beijing, Shanghai)"}
+                  <LocationPicker
+                    value={weatherDraftLocation}
+                    onChange={setWeatherDraftLocation}
+                    locale={locale === "zh" ? "zh" : "en"}
+                    placeholder={locale === "zh" ? "输入地点名称（如：上海、巴黎、Singapore）" : "Enter a place name (e.g. Shanghai, Paris, Singapore)"}
+                    helperText={locale === "zh" ? "建议从候选列表中点选。" : "Pick a result from the suggestion list."}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                     autoFocus
                   />
@@ -828,10 +830,10 @@ export default function ExperiencePage() {
                     </Button>
                     <Button
                       onClick={async () => {
-                        const c = cityDraft.trim();
+                        const nextLocation = cleanLocationValue(weatherDraftLocation);
                         setModal(null);
-                        if (c) {
-                          await handlePreview(modal.modeId, { city: c });
+                        if (nextLocation.city) {
+                          await handlePreview(modal.modeId, nextLocation);
                         } else {
                           await handlePreview(modal.modeId);
                         }

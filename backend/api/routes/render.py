@@ -34,7 +34,7 @@ from core.config_store import (
     get_or_create_claim_token,
     update_device_state,
 )
-from core.context import get_date_context, get_weather
+from core.context import extract_location_settings, get_date_context, get_weather
 from core.pipeline import generate_and_render
 from core.renderer import image_to_bmp_bytes, image_to_png_bytes, render_error
 from core.schemas import RenderQuery
@@ -244,9 +244,9 @@ async def get_widget(
 
     config = await get_active_config(mac) or {}
     persona = mode.upper() if mode else config.get("modes", ["STOIC"])[0] if config.get("modes") else "STOIC"
-    city = config.get("city")
+    location_args = extract_location_settings(config)
     date_ctx = await get_date_context()
-    weather = await get_weather(city=city)
+    weather = await get_weather(**location_args)
     img, _ = await generate_and_render(
         persona,
         config,

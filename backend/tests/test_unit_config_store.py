@@ -49,6 +49,11 @@ class TestConfigStore:
             "language": "zh",
             "contentTone": "neutral",
             "city": "北京",
+            "latitude": 39.9042,
+            "longitude": 116.4074,
+            "timezone": "Asia/Shanghai",
+            "admin1": "北京市",
+            "country": "中国",
             "llmProvider": "deepseek",
             "llmModel": "deepseek-chat",
         }
@@ -60,6 +65,8 @@ class TestConfigStore:
         assert config["nickname"] == "Test"
         assert "STOIC" in config["modes"]
         assert config["refresh_strategy"] == "cycle"
+        assert config["latitude"] == pytest.approx(39.9042)
+        assert config["country"] == "中国"
         assert isinstance(config["countdown_events"], list)
         assert isinstance(config["countdownEvents"], list)
 

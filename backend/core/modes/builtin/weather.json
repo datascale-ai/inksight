@@ -16,31 +16,8 @@
     }
   ],
   "content": {
-    "type": "composite",
-    "steps": [
-      {
-        "type": "external_data",
-        "provider": "weather_forecast",
-        "fallback": {
-          "city": "",
-          "today_temp": "--",
-          "today_desc": "暂无数据",
-          "today_code": -1,
-          "today_low": "--",
-          "today_high": "--",
-          "today_range": "-- / --",
-          "forecast": []
-        }
-      },
-      {
-        "type": "llm_json",
-        "prompt_template": "你是一位贴心的生活助手。根据以下天气信息，生成一句简短的穿衣建议（20字以内）。只输出 JSON：{\"advice\": \"建议内容\"}\n天气：{context}",
-        "output_schema": {
-          "advice": {"type": "string", "default": "注意添减衣物"}
-        },
-        "fallback": {"advice": "注意添减衣物"}
-      }
-    ],
+    "type": "external_data",
+    "provider": "weather_forecast",
     "fallback": {
       "city": "",
       "today_temp": "--",

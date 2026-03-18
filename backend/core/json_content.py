@@ -539,16 +539,15 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         return result
 
     if provider == "weather_forecast":
-        from .context import get_weather_forecast
+        from .context import extract_location_settings, get_weather_forecast
         try:
             config = kwargs.get("config") or {}
             mode_settings = config.get("mode_settings", {}) if isinstance(config.get("mode_settings", {}), dict) else {}
-            city = config.get("city")
             days = mode_settings.get("forecast_days", 4)
             if not isinstance(days, int):
                 days = 4
             days = max(1, min(7, days))
-            data = await get_weather_forecast(city=city, days=days)
+            data = await get_weather_forecast(days=days, **extract_location_settings(config))
             if not data:
                 return dict(fallback)
             if not data.get("today_temp") or data["today_temp"] == "--":

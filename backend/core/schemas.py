@@ -54,7 +54,12 @@ class ConfigRequest(BaseModel):
     )
     language: str = Field(default="zh", description="语言: zh / en / mixed")
     contentTone: str = Field(default="neutral", description="调性: positive / neutral / deep / humor")
-    city: str = Field(default="杭州", max_length=20, description="城市名称")
+    city: str = Field(default="杭州", max_length=40, description="城市名称")
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90, description="地点纬度")
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180, description="地点经度")
+    timezone: str = Field(default="", max_length=64, description="地点时区")
+    admin1: str = Field(default="", max_length=64, description="地点所属省级行政区")
+    country: str = Field(default="", max_length=64, description="地点所属国家")
     characterTones: list[str] = Field(
         default_factory=list, max_length=5, description="角色调性列表"
     )
@@ -166,7 +171,33 @@ class ConfigRequest(BaseModel):
             item: dict[str, object] = {}
             city = raw.get("city")
             if isinstance(city, str) and city.strip():
-                item["city"] = city.strip()[:20]
+                item["city"] = city.strip()[:40]
+
+            latitude = raw.get("latitude")
+            if latitude not in ("", None):
+                try:
+                    item["latitude"] = float(latitude)
+                except (TypeError, ValueError):
+                    raise ValueError(f"无效地点纬度: {latitude}")
+
+            longitude = raw.get("longitude")
+            if longitude not in ("", None):
+                try:
+                    item["longitude"] = float(longitude)
+                except (TypeError, ValueError):
+                    raise ValueError(f"无效地点经度: {longitude}")
+
+            timezone = raw.get("timezone")
+            if isinstance(timezone, str) and timezone.strip():
+                item["timezone"] = timezone.strip()[:64]
+
+            admin1 = raw.get("admin1")
+            if isinstance(admin1, str) and admin1.strip():
+                item["admin1"] = admin1.strip()[:64]
+
+            country = raw.get("country")
+            if isinstance(country, str) and country.strip():
+                item["country"] = country.strip()[:64]
 
             provider = raw.get("llm_provider", raw.get("llmProvider"))
             if isinstance(provider, str) and provider.strip():
@@ -179,7 +210,18 @@ class ConfigRequest(BaseModel):
                 item["llm_model"] = model.strip()[:50]
 
             for k, val in raw.items():
-                if k in {"city", "llm_provider", "llmProvider", "llm_model", "llmModel"}:
+                if k in {
+                    "city",
+                    "latitude",
+                    "longitude",
+                    "timezone",
+                    "admin1",
+                    "country",
+                    "llm_provider",
+                    "llmProvider",
+                    "llm_model",
+                    "llmModel",
+                }:
                     continue
                 if isinstance(val, (str, int, float, bool, list, dict)) or val is None:
                     item[k] = val

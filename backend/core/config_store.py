@@ -43,6 +43,11 @@ async def init_db():
                 language TEXT DEFAULT 'zh',
                 content_tone TEXT DEFAULT 'neutral',
                 city TEXT DEFAULT '杭州',
+                latitude REAL,
+                longitude REAL,
+                timezone TEXT DEFAULT '',
+                admin1 TEXT DEFAULT '',
+                country TEXT DEFAULT '',
                 refresh_interval INTEGER DEFAULT 60,
                 llm_provider TEXT DEFAULT 'deepseek',
                 llm_model TEXT DEFAULT 'deepseek-chat',
@@ -79,6 +84,11 @@ async def init_db():
                         language TEXT DEFAULT 'zh',
                         content_tone TEXT DEFAULT 'neutral',
                         city TEXT DEFAULT '杭州',
+                        latitude REAL,
+                        longitude REAL,
+                        timezone TEXT DEFAULT '',
+                        admin1 TEXT DEFAULT '',
+                        country TEXT DEFAULT '',
                         refresh_interval INTEGER DEFAULT 60,
                         llm_provider TEXT DEFAULT 'deepseek',
                         llm_model TEXT DEFAULT 'deepseek-chat',
@@ -96,7 +106,7 @@ async def init_db():
                 await db.execute("""
                     INSERT INTO configs_new (
                         id, mac, nickname, modes, refresh_strategy,
-                        character_tones, language, content_tone, city,
+                        character_tones, language, content_tone, city, latitude, longitude, timezone, admin1, country,
                         refresh_interval, llm_provider, llm_model,
                         image_provider, image_model,
                         countdown_events, time_slot_rules, memo_text,
@@ -104,7 +114,7 @@ async def init_db():
                     )
                     SELECT
                         id, mac, nickname, modes, refresh_strategy,
-                        character_tones, language, content_tone, city,
+                        character_tones, language, content_tone, city, NULL, NULL, '', '', '',
                         refresh_interval, llm_provider, llm_model,
                         image_provider, image_model,
                         countdown_events, time_slot_rules, memo_text,
@@ -1326,9 +1336,10 @@ async def save_config(mac: str, data: dict) -> int:
     cursor = await db.execute(
         """INSERT INTO configs
            (mac, nickname, modes, refresh_strategy, character_tones,
-            language, content_tone, city, refresh_interval, llm_provider, llm_model, image_provider, image_model,
+            language, content_tone, city, latitude, longitude, timezone, admin1, country,
+            refresh_interval, llm_provider, llm_model, image_provider, image_model,
             countdown_events, time_slot_rules, memo_text, mode_overrides, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             mac,
             data.get("nickname", ""),
@@ -1338,6 +1349,11 @@ async def save_config(mac: str, data: dict) -> int:
             data.get("language", DEFAULT_LANGUAGE),
             data.get("contentTone", DEFAULT_CONTENT_TONE),
             data.get("city", DEFAULT_CITY),
+            data.get("latitude"),
+            data.get("longitude"),
+            data.get("timezone", ""),
+            data.get("admin1", ""),
+            data.get("country", ""),
             data.get("refreshInterval", DEFAULT_REFRESH_INTERVAL),
             data.get("llmProvider", DEFAULT_LLM_PROVIDER),
             data.get("llmModel", DEFAULT_LLM_MODEL),

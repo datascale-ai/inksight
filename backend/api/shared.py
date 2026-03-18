@@ -79,7 +79,7 @@ from core.config_store import (
     update_device_state,
     consume_user_free_quota,
 )
-from core.context import calc_battery_pct, get_date_context, get_weather
+from core.context import calc_battery_pct, extract_location_settings, get_date_context, get_weather
 from core.pipeline import generate_and_render, get_effective_mode_config
 from core.renderer import image_to_bmp_bytes
 from core.stats_store import (
@@ -826,10 +826,10 @@ async def build_image(
 
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
-        city = effective_cfg.get("city", DEFAULT_CITY) if effective_cfg else None
+        location_args = extract_location_settings(effective_cfg, fallback_city=DEFAULT_CITY)
         date_ctx, weather = await asyncio.gather(
             get_date_context(),
-            get_weather(city=city),
+            get_weather(**location_args),
         )
         img, content_data = await generate_and_render(
             persona,

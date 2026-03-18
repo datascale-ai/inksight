@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense, useMemo, useRef } from "rea
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DeviceInfo } from "@/components/config/device-info";
+import { LocationPicker } from "@/components/config/location-picker";
 import { ModeSelector } from "@/components/config/mode-selector";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
@@ -27,6 +28,14 @@ import {
 } from "lucide-react";
 import { authHeaders, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
 import { localeFromPathname, withLocalePath } from "@/lib/i18n";
+import {
+  buildLocationValue,
+  cleanLocationValue,
+  describeLocation,
+  extractLocationValue,
+  locationsEqual,
+  type LocationValue,
+} from "@/lib/locations";
 
 interface UserDevice {
   mac: string;
@@ -154,6 +163,11 @@ interface DeviceConfig {
   refresh_strategy?: string;
   refresh_minutes?: number;
   city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  admin1?: string;
+  country?: string;
   language?: string;
   contentTone?: string;
   content_tone?: string;
@@ -177,6 +191,11 @@ interface DeviceConfig {
 
 interface ModeOverride {
   city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  admin1?: string;
+  country?: string;
   llm_provider?: string;
   llm_model?: string;
   [key: string]: unknown;
@@ -478,6 +497,7 @@ function ConfigPageInner() {
   const [strategy, setStrategy] = useState("random");
   const [refreshMin, setRefreshMin] = useState(60);
   const [city, setCity] = useState("");
+  const [locationMeta, setLocationMeta] = useState<LocationValue>({});
   const [language, setLanguage] = useState("zh");
   const [contentTone, setContentTone] = useState("neutral");
   const [characterTones, setCharacterTones] = useState<string[]>([]);
@@ -510,7 +530,7 @@ function ConfigPageInner() {
   const [paramModal, setParamModal] = useState<ParamModalState | null>(null);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
-  const [cityDraft, setCityDraft] = useState("");
+  const [weatherDraftLocation, setWeatherDraftLocation] = useState<LocationValue>({});
   const [memoDraft, setMemoDraft] = useState("");
   const [countdownName, setCountdownName] = useState("元旦");
   const [countdownDate, setCountdownDate] = useState("2027-01-01");
@@ -553,6 +573,17 @@ function ConfigPageInner() {
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const currentLocation = useMemo(
+    () => buildLocationValue(city, locationMeta),
+    [city, locationMeta],
+  );
+
+  const applyGlobalLocation = useCallback((next: Partial<LocationValue> | null | undefined) => {
+    const cleaned = cleanLocationValue(next);
+    setCity(cleaned.city || "");
+    setLocationMeta(cleaned);
   }, []);
 
   const replacePreviewImg = useCallback((nextUrl: string | null) => {
@@ -671,7 +702,7 @@ function ConfigPageInner() {
         if (cfg.modes?.length) setSelectedModes(new Set(cfg.modes.map((m) => m.toUpperCase())));
         if (cfg.refreshStrategy || cfg.refresh_strategy) setStrategy((cfg.refreshStrategy || cfg.refresh_strategy) as string);
         if (cfg.refreshInterval || cfg.refresh_minutes) setRefreshMin((cfg.refreshInterval || cfg.refresh_minutes) as number);
-        if (cfg.city) setCity(cfg.city);
+        applyGlobalLocation(extractLocationValue(cfg as Record<string, unknown>));
         if (cfg.language) setLanguage(normalizeLanguage(cfg.language));
         if (cfg.contentTone || cfg.content_tone) setContentTone(normalizeTone(cfg.contentTone || cfg.content_tone));
         if (cfg.characterTones || cfg.character_tones) setCharacterTones((cfg.characterTones || cfg.character_tones) as string[]);
@@ -687,7 +718,7 @@ function ConfigPageInner() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [mac]);
+  }, [applyGlobalLocation, mac]);
 
   const getModeOverride = useCallback((modeId: string) => {
     return modeOverrides[modeId] || {};
@@ -696,8 +727,19 @@ function ConfigPageInner() {
   const sanitizeModeOverride = useCallback((input: ModeOverride) => {
     const cleaned: ModeOverride = {};
     for (const [k, raw] of Object.entries(input)) {
-      if (k === "city" || k === "llm_provider" || k === "llm_model") {
+      if (
+        k === "city" ||
+        k === "timezone" ||
+        k === "admin1" ||
+        k === "country" ||
+        k === "llm_provider" ||
+        k === "llm_model"
+      ) {
         if (typeof raw === "string" && raw.trim()) cleaned[k] = raw.trim();
+        continue;
+      }
+      if (k === "latitude" || k === "longitude") {
+        if (typeof raw === "number" && Number.isFinite(raw)) cleaned[k] = raw;
         continue;
       }
       if (typeof raw === "string") {
@@ -744,7 +786,13 @@ function ConfigPageInner() {
   const openParamModal = useCallback((modeId: string, action: "preview" | "apply") => {
     const m = (modeId || "").toUpperCase();
     if (m === "WEATHER") {
-      setCityDraft((modeOverrides[m]?.city as string) || city || "");
+      setWeatherDraftLocation(
+        cleanLocationValue(
+          modeOverrides[m]?.city
+            ? extractLocationValue(modeOverrides[m] as Record<string, unknown>)
+            : currentLocation,
+        ),
+      );
       setParamModal({ type: "weather", mode: m, action });
       return;
     }
@@ -772,7 +820,7 @@ function ConfigPageInner() {
       setParamModal({ type: "lifebar", mode: m, action });
       return;
     }
-  }, [city, memoText, modeOverrides]);
+  }, [currentLocation, memoText, modeOverrides]);
 
   const clearModeOverride = useCallback((modeId: string) => {
     setModeOverrides((prev) => {
@@ -842,7 +890,7 @@ function ConfigPageInner() {
         modes: Array.from(selectedModes),
         refreshStrategy: strategy,
         refreshInterval: refreshMin,
-        city,
+        ...currentLocation,
         language,
         contentTone,
         characterTones: characterTones,
@@ -888,9 +936,26 @@ function ConfigPageInner() {
     const forceFresh = forceNoCache || consumeNoCacheOnce;
     const params = new URLSearchParams({ persona: m });
     if (mac) params.set("mac", mac);
-    const activeModeOverride = sanitizeModeOverride({
+    const modeOverrideSource = sanitizeModeOverride({
       ...(modeOverrides[m] || {}),
       ...(forcedModeOverride || {}),
+    });
+    const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
+    const effectiveLocation = cleanLocationValue(
+      modeOverrideSource.city
+        ? extractLocationValue(modeOverrideSource as Record<string, unknown>)
+        : currentLocation,
+    );
+    const savedEffectiveLocation = cleanLocationValue(
+      savedOverrides[m]?.city
+        ? extractLocationValue(savedOverrides[m] as Record<string, unknown>)
+        : extractLocationValue(config as Record<string, unknown>),
+    );
+    const locationChanged = Boolean(effectiveLocation.city) && !locationsEqual(effectiveLocation, savedEffectiveLocation);
+
+    const activeModeOverride = sanitizeModeOverride({
+      ...modeOverrideSource,
+      ...(locationChanged ? effectiveLocation : {}),
     });
     if (m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
       activeModeOverride.memo_text = memoText.trim();
@@ -911,17 +976,10 @@ function ConfigPageInner() {
         params.set("memo_text", memoCandidate);
       }
     }
-    const modeCity = (modeOverrides[m]?.city || "").trim();
-    const globalCity = city.trim();
-    const previewCity = modeCity || globalCity;
-    const savedGlobalCity = (config.city || "").trim();
-    const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
-    const savedModeCity = (savedOverrides[m]?.city || "").trim();
-    const cityChanged = previewCity.length > 0 && (modeCity ? modeCity !== savedModeCity : globalCity !== savedGlobalCity);
-    if (cityChanged) params.set("city_override", previewCity);
-    if (forceFresh || cityChanged || hasModeOverride) params.set("no_cache", "1");
+    if (locationChanged && effectiveLocation.city) params.set("city_override", effectiveLocation.city);
+    if (forceFresh || locationChanged || hasModeOverride) params.set("no_cache", "1");
     return { m, params, consumeNoCacheOnce };
-  }, [city, config.city, config.modeOverrides, config.mode_overrides, mac, memoText, modeOverrides, previewMode, previewNoCacheOnce, sanitizeModeOverride]);
+  }, [config, currentLocation, mac, memoText, modeOverrides, previewMode, previewNoCacheOnce, sanitizeModeOverride]);
 
   const ownerUsername = useMemo(
     () => deviceMembers.find((member) => member.role === "owner")?.username || "",
@@ -964,6 +1022,7 @@ function ConfigPageInner() {
             cache_hit?: boolean;
             usage_source?: string;
             requires_invite_code?: boolean;
+            llm_mode_requires_quota?: boolean;
           };
           if (intentData.requires_invite_code) {
             setPreviewConfirm(null);
@@ -972,7 +1031,7 @@ function ConfigPageInner() {
             setPreviewStatusText(formatPreviewUsageText(intentData.usage_source));
             return;
           }
-          if (!intentData.cache_hit) {
+          if (!intentData.cache_hit && intentData.llm_mode_requires_quota) {
             setPreviewConfirm({
               mode: m,
               forceNoCache,
@@ -1075,7 +1134,7 @@ function ConfigPageInner() {
             const status = (data.preview_status || "").toLowerCase();
             const llmRequired = data.llm_required;
             if (status === "no_llm_required" || llmRequired === false) {
-              setPreviewLlmStatus(isEn ? "This mode does not require LLM" : "该模式无需调用大模型");
+              setPreviewLlmStatus(null);
             } else if (status === "model_generated") {
               setPreviewLlmStatus(isEn ? "Model call succeeded" : "大模型调用成功");
             } else if (status === "fallback_used") {
@@ -1340,7 +1399,7 @@ function ConfigPageInner() {
       const status = (res.headers.get("x-preview-status") || "").toLowerCase();
       const llmRequiredHeader = (res.headers.get("x-llm-required") || "").toLowerCase();
       if (status === "no_llm_required" || llmRequiredHeader === "0" || llmRequiredHeader === "false") {
-        setPreviewLlmStatus(isEn ? "This mode does not require LLM" : "该模式无需调用大模型");
+        setPreviewLlmStatus(null);
       } else if (status === "model_generated") {
         setPreviewLlmStatus(isEn ? "Model call succeeded" : "大模型调用成功");
       } else if (status === "fallback_used") {
@@ -2058,8 +2117,9 @@ function ConfigPageInner() {
             {activeTab === "preferences" && (
               <RefreshStrategyEditor
                 tr={tr}
-                city={city}
-                setCity={setCity}
+                locale={isEn ? "en" : "zh"}
+                location={currentLocation}
+                setLocation={applyGlobalLocation}
                 language={language}
                 setLanguage={setLanguage}
                 contentTone={contentTone}
@@ -2223,10 +2283,24 @@ function ConfigPageInner() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Field label="城市（可选）">
-                    <input
-                      value={getModeOverride(settingsMode).city || ""}
-                      onChange={(e) => updateModeOverride(settingsMode, { city: e.target.value })}
-                      placeholder={`留空使用全局默认：${city || "杭州"}`}
+                    <LocationPicker
+                      value={extractLocationValue(getModeOverride(settingsMode) as Record<string, unknown>)}
+                      onChange={(next) =>
+                        updateModeOverride(settingsMode, {
+                          city: next.city,
+                          latitude: next.latitude,
+                          longitude: next.longitude,
+                          timezone: next.timezone,
+                          admin1: next.admin1,
+                          country: next.country,
+                        })
+                      }
+                      locale={isEn ? "en" : "zh"}
+                      placeholder={tr("搜索模式专属地点", "Search a mode-specific place")}
+                      helperText={tr(
+                        `留空则使用全局默认：${describeLocation(currentLocation) || "杭州"}`,
+                        `Leave empty to use global default: ${describeLocation(currentLocation) || "Hangzhou"}`,
+                      )}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
                     />
                   </Field>
@@ -2714,14 +2788,16 @@ function ConfigPageInner() {
                 <>
                   <div className="text-xs text-ink-light">
                     {tr(
-                      "输入城市名称查看天气。如果大模型调用失败，将显示默认城市天气。",
-                      "Enter city name to view weather. If LLM call fails, default city weather will be shown.",
+                      "搜索并选择具体地点查看天气，避免重名城市误匹配。",
+                      "Search and choose a specific place to avoid ambiguous city names.",
                     )}
                   </div>
-                  <input
-                    value={cityDraft}
-                    onChange={(e) => setCityDraft(e.target.value)}
-                    placeholder={tr("输入城市名称（如：北京、上海）", "Enter city name (e.g., Beijing, Shanghai)")}
+                  <LocationPicker
+                    value={weatherDraftLocation}
+                    onChange={setWeatherDraftLocation}
+                    locale={isEn ? "en" : "zh"}
+                    placeholder={tr("输入地点名称（如：上海、巴黎、Singapore）", "Enter a place name (e.g. Shanghai, Paris, Singapore)")}
+                    helperText={tr("建议从候选列表中点选具体地点。", "Pick a precise result from the suggestion list.")}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                     autoFocus
                   />
@@ -2735,11 +2811,11 @@ function ConfigPageInner() {
                     </Button>
                     <Button
                       onClick={() => {
-                        const c = cityDraft.trim();
+                        const nextLocation = cleanLocationValue(weatherDraftLocation);
                         commitModalAction(
                           paramModal.mode,
                           paramModal.action,
-                          c ? ({ city: c } as ModeOverride) : undefined,
+                          nextLocation.city ? (nextLocation as ModeOverride) : undefined,
                         );
                       }}
                       disabled={previewLoading}

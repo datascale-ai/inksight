@@ -46,7 +46,7 @@ from .config import (
     DEFAULT_MODES,
     get_cacheable_modes,
 )
-from .context import get_date_context, get_weather, calc_battery_pct
+from .context import get_date_context, get_weather, calc_battery_pct, extract_location_settings
 from .pipeline import generate_and_render, get_effective_mode_config
 
 
@@ -280,8 +280,7 @@ class ContentCache:
         try:
             logger.info(f"[CACHE] Generating {mac}:{persona}...")
             effective_cfg = get_effective_mode_config(config, persona)
-            city = effective_cfg.get("city")
-            weather = await get_weather(city=city)
+            weather = await get_weather(**extract_location_settings(effective_cfg))
 
             img, _content = await generate_and_render(
                 persona, config, date_ctx, weather, battery_pct,
@@ -319,8 +318,7 @@ class ContentCache:
                     if len(args) >= 2 and isinstance(args[1], int):
                         screen_h = args[1]
             effective_cfg = get_effective_mode_config(config, persona)
-            city = effective_cfg.get("city")
-            weather = await get_weather(city=city)
+            weather = await get_weather(**extract_location_settings(effective_cfg))
 
             img, _content = await generate_and_render(
                 persona, config, date_ctx, weather, battery_pct,
