@@ -8,6 +8,7 @@ import { ModeSelector } from "@/components/config/mode-selector";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -133,63 +134,8 @@ function normalizeTone(v: unknown): string {
   return found?.value || "neutral";
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const MODE_TEMPLATES: Record<string, { label: string; def: any }> = {
-  quote: {
-    label: "语录模板",
-    def: {
-      mode_id: "MY_QUOTE", display_name: "自定义语录", icon: "book", cacheable: true,
-      description: "自定义语录模式",
-      content: {
-        type: "llm_json", prompt_template: "请生成一条有深度的语录，用 JSON 返回 {quote, author}。{context}",
-        output_schema: { quote: { type: "string" }, author: { type: "string" } }, temperature: 0.8,
-        fallback: { quote: "路漫漫其修远兮", author: "屈原" },
-        fallback_pool: [{ quote: "路漫漫其修远兮", author: "屈原" }, { quote: "知者不惑，仁者不忧", author: "孔子" }, { quote: "天行健，君子以自强不息", author: "易经" }],
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "centered_text", field: "quote", font: "NotoSerifSC-Light.ttf", font_size: 18, vertical_center: true }], footer: { label: "MY_QUOTE", attribution_template: "— {author}" } },
-    },
-  },
-  list: {
-    label: "列表模板",
-    def: {
-      mode_id: "MY_LIST", display_name: "自定义列表", icon: "list", cacheable: true,
-      description: "列表展示模式",
-      content: {
-        type: "llm_json", prompt_template: "请生成3条科技快讯，JSON 格式 {title, items: [{text}]}。{context}",
-        output_schema: { title: { type: "string" }, items: { type: "array", items: { type: "object", properties: { text: { type: "string" } } } } },
-        temperature: 0.7, fallback: { title: "今日快讯", items: [{ text: "暂无内容" }] },
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "text", field: "title", font_size: 16, align: "center", bold: true }, { type: "spacer", height: 8 }, { type: "list", field: "items", item_template: "{text}", max_items: 5, font_size: 12 }], footer: { label: "MY_LIST" } },
-    },
-  },
-  zen: {
-    label: "禅意模板",
-    def: {
-      mode_id: "MY_ZEN", display_name: "自定义禅", icon: "zen", cacheable: true,
-      description: "单字禅意模式",
-      content: {
-        type: "llm_json", prompt_template: "请给出一个蕴含哲理的汉字，并简短解读。JSON: {word, reading}。{context}",
-        output_schema: { word: { type: "string" }, reading: { type: "string" } }, temperature: 0.9,
-        fallback: { word: "道", reading: "万物之始" },
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "centered_text", field: "word", font: "NotoSerifSC-Bold.ttf", font_size: 80, vertical_center: true }, { type: "centered_text", field: "reading", font_size: 13 }], footer: { label: "MY_ZEN" } },
-    },
-  },
-  sections: {
-    label: "综合模板",
-    def: {
-      mode_id: "MY_DAILY", display_name: "自定义综合", icon: "daily", cacheable: true,
-      description: "多栏综合内容",
-      content: {
-        type: "llm_json", prompt_template: "请生成今日内容：一句话语录、一个推荐、一个小贴士。JSON: {quote, recommend, tip}。{context}",
-        output_schema: { quote: { type: "string" }, recommend: { type: "string" }, tip: { type: "string" } }, temperature: 0.8,
-        fallback: { quote: "今天是美好的一天", recommend: "推荐阅读", tip: "记得喝水" },
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "section", label: "📖 语录", blocks: [{ type: "text", field: "quote", font_size: 13 }] }, { type: "separator", dashed: true }, { type: "section", label: "💡 推荐", blocks: [{ type: "text", field: "recommend", font_size: 12 }] }, { type: "separator", dashed: true }, { type: "section", label: "🌟 小贴士", blocks: [{ type: "text", field: "tip", font_size: 12 }] }], footer: { label: "MY_DAILY" } },
-    },
-  },
-};
-/* eslint-enable @typescript-eslint/no-explicit-any */
+// Custom mode templates removed (AI-only creation)
+
 
 const TABS = [
   { id: "modes", label: "模式", icon: Settings },
@@ -558,7 +504,7 @@ function ConfigPageInner() {
   // 自适应图片（MY_ADAPTIVE）本地选图 + 上传（与 /preview 页面一致）
   const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingAdaptiveAction, setPendingAdaptiveAction] = useState<null | { action: "preview" | "apply"; mode: string }>(null);
-  const [adaptiveUploading, setAdaptiveUploading] = useState(false);
+  const [, setAdaptiveUploading] = useState(false);
 
   // 参数弹窗（与 /preview 页面保持一致）
   const [paramModal, setParamModal] = useState<ParamModalState | null>(null);
@@ -580,9 +526,9 @@ function ConfigPageInner() {
   const [inviteCode, setInviteCode] = useState("");
   const [redeemingInvite, setRedeemingInvite] = useState(false);
   const [pendingPreviewMode, setPendingPreviewMode] = useState<string | null>(null);
-  const [currentMode, setCurrentMode] = useState<string>("");
+  const [, setCurrentMode] = useState<string>("");
   const [applyToScreenLoading, setApplyToScreenLoading] = useState(false);
-  const [favoritedModes, setFavoritedModes] = useState<Set<string>>(new Set());
+  const [, setFavoritedModes] = useState<Set<string>>(new Set());
   const favoritesLoadedMacRef = useRef<string>("");
   const memoSettingsInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previewStreamRef = useRef<EventSource | null>(null);
@@ -596,10 +542,11 @@ function ConfigPageInner() {
   const [customJson, setCustomJson] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
   const [customPreviewImg, setCustomPreviewImg] = useState<string | null>(null);
-  const [customPreviewLoading, setCustomPreviewLoading] = useState(false);
-  const [customApplyToScreenLoading, setCustomApplyToScreenLoading] = useState(false);
+  const [, setCustomPreviewLoading] = useState(false);
   const [editingCustomMode, setEditingCustomMode] = useState(false);
-  const [editorTab, setEditorTab] = useState<"ai" | "template">("ai");
+  const [customEditorSource, setCustomEditorSource] = useState<"ai" | "manual" | null>(null);
+  const [previewModeLabelOverride, setPreviewModeLabelOverride] = useState<string | null>(null);
+  const previewPanelRef = useRef<HTMLDivElement | null>(null);
 
   const [catalogItems, setCatalogItems] = useState<ModeCatalogItem[]>([]);
 
@@ -935,7 +882,7 @@ function ConfigPageInner() {
     }
   };
 
-  const buildPreviewParams = (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
+  const buildPreviewParams = useCallback((mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
     const m = mode || previewMode;
     const consumeNoCacheOnce = previewNoCacheOnce;
     const forceFresh = forceNoCache || consumeNoCacheOnce;
@@ -974,9 +921,33 @@ function ConfigPageInner() {
     if (cityChanged) params.set("city_override", previewCity);
     if (forceFresh || cityChanged || hasModeOverride) params.set("no_cache", "1");
     return { m, params, consumeNoCacheOnce };
-  };
+  }, [city, config.city, config.modeOverrides, config.mode_overrides, mac, memoText, modeOverrides, previewMode, previewNoCacheOnce, sanitizeModeOverride]);
 
-  const handlePreview = async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, confirmed = false) => {
+  const ownerUsername = useMemo(
+    () => deviceMembers.find((member) => member.role === "owner")?.username || "",
+    [deviceMembers],
+  );
+
+  const formatPreviewUsageText = useCallback((usageSource?: string) => {
+    switch (usageSource) {
+      case "current_user_api_key":
+        return tr("当前使用你的 API key", "Using your API key");
+      case "owner_api_key":
+        return ownerUsername
+          ? tr(`当前使用 owner（${ownerUsername}）的 API key`, `Using ${ownerUsername}'s API key`)
+          : tr("当前使用 owner 的 API key", "Using owner's API key");
+      case "owner_free_quota":
+        return ownerUsername
+          ? tr(`当前消耗 owner（${ownerUsername}）的免费额度`, `Using ${ownerUsername}'s free quota`)
+          : tr("当前消耗 owner 的免费额度", "Using owner's free quota");
+      case "current_user_free_quota":
+        return tr("当前消耗你的免费额度", "Using your free quota");
+      default:
+        return "";
+    }
+  }, [ownerUsername, tr]);
+
+  const handlePreview = useCallback(async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, confirmed = false) => {
     const { m, params, consumeNoCacheOnce } = buildPreviewParams(mode, forceNoCache, forcedModeOverride);
     if (!m) return;
 
@@ -1140,7 +1111,7 @@ function ConfigPageInner() {
       setPreviewLoading(false);
       if (consumeNoCacheOnce) setPreviewNoCacheOnce(false);
     }
-  };
+  }, [buildPreviewParams, formatPreviewUsageText, isEn, mac, replacePreviewImg, showToast, tr]);
 
   const handleRedeemInviteCode = async () => {
     if (!inviteCode.trim()) {
@@ -1290,7 +1261,22 @@ function ConfigPageInner() {
       if (!data.ok) throw new Error(data.error || "生成失败");
       setCustomJson(JSON.stringify(data.mode_def, null, 2));
       setCustomModeName((data.mode_def?.display_name || "").toString());
+      setCustomEditorSource("ai");
       showToast("模式生成成功", "success");
+
+      // Close modal right after generation, then start preview on the right panel
+      const finalName = (customModeName || data.mode_def?.display_name || "").toString().trim();
+      setPreviewModeLabelOverride(finalName || null);
+      setEditingCustomMode(false);
+      requestAnimationFrame(() => {
+        previewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+
+      // show "previewing" on the right panel while preview is being built
+      setPreviewLoading(true);
+      setPreviewStatusText(isEn ? "Generating preview..." : "模式预览中...");
+
+      await handleCustomPreview(data.mode_def);
     } catch (e) {
       showToast(`生成失败: ${e instanceof Error ? e.message : "未知错误"}`, "error");
     } finally {
@@ -1298,14 +1284,27 @@ function ConfigPageInner() {
     }
   };
 
-  const handleCustomPreview = async () => {
-    if (!customJson.trim()) return;
+  const handleCustomPreview = async (defOverride?: unknown) => {
+    if (!defOverride && !customJson.trim()) return;
     setCustomPreviewLoading(true);
+    setPreviewLoading(true);
+    if (!previewStatusText) setPreviewStatusText(isEn ? "Generating preview..." : "模式预览中...");
     try {
-      const def = JSON.parse(customJson);
+      const def = defOverride ? (defOverride as Record<string, unknown>) : (JSON.parse(customJson) as Record<string, unknown>);
       if (customModeName.trim()) {
-        def.display_name = customModeName.trim();
+        (def as Record<string, unknown>).display_name = customModeName.trim();
       }
+      let modeHint = "CUSTOM_PREVIEW";
+      try {
+        if (customModeName.trim()) {
+          modeHint = customModeName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+        } else {
+          const modeIdRaw = (def as Record<string, unknown>)["mode_id"];
+          if (typeof modeIdRaw === "string" && modeIdRaw.trim()) {
+            modeHint = modeIdRaw.trim().toUpperCase();
+          }
+        }
+      } catch {}
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1329,62 +1328,32 @@ function ConfigPageInner() {
         throw new Error(d.error || "预览失败");
       }
       const blob = await res.blob();
-      setCustomPreviewImg(URL.createObjectURL(blob));
+      const objectUrl = URL.createObjectURL(blob);
+      if (customPreviewImg) {
+        try { URL.revokeObjectURL(customPreviewImg); } catch {}
+      }
+      setCustomPreviewImg(objectUrl);
+
+      // show custom-mode preview in the right E-Ink panel
+      setPreviewMode(modeHint);
+      setPreviewCacheHit(null);
+      const status = (res.headers.get("x-preview-status") || "").toLowerCase();
+      const llmRequiredHeader = (res.headers.get("x-llm-required") || "").toLowerCase();
+      if (status === "no_llm_required" || llmRequiredHeader === "0" || llmRequiredHeader === "false") {
+        setPreviewLlmStatus(isEn ? "This mode does not require LLM" : "该模式无需调用大模型");
+      } else if (status === "model_generated") {
+        setPreviewLlmStatus(isEn ? "Model call succeeded" : "大模型调用成功");
+      } else if (status === "fallback_used") {
+        setPreviewLlmStatus(isEn ? "Model call failed, using fallback content" : "大模型调用失败，使用默认内容");
+      } else {
+        setPreviewLlmStatus(null);
+      }
+      replacePreviewImg(objectUrl);
     } catch (e) {
       showToast(`预览失败: ${e instanceof Error ? e.message : ""}`, "error");
     } finally {
       setCustomPreviewLoading(false);
-    }
-  };
-
-  const handleApplyCustomPreviewToScreen = async () => {
-    if (!mac || !customPreviewImg) return;
-    setCustomApplyToScreenLoading(true);
-    try {
-      const stateRes = await fetch(`/api/device/${encodeURIComponent(mac)}/state`, { cache: "no-store", headers: authHeaders() });
-      if (!stateRes.ok) {
-        showToast("无法确认设备状态，已阻止发送", "error");
-        return;
-      }
-      const stateData = await stateRes.json();
-      const mode = stateData?.runtime_mode;
-      if (mode === "active" || mode === "interval") {
-        setRuntimeMode(mode);
-      }
-      if (mode !== "active") {
-        showToast("设备处于间歇状态，不可发送", "error");
-        return;
-      }
-
-      const previewResponse = await fetch(customPreviewImg);
-      if (!previewResponse.ok) throw new Error("preview image unavailable");
-      const previewBlob = await previewResponse.blob();
-
-      let modeHint = "CUSTOM_PREVIEW";
-      try {
-        const def = JSON.parse(customJson);
-        if (customModeName.trim()) {
-          modeHint = customModeName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-        } else if (typeof def?.mode_id === "string" && def.mode_id.trim()) {
-          modeHint = def.mode_id.trim().toUpperCase();
-        }
-      } catch {}
-
-      const qs = new URLSearchParams();
-      qs.set("mode", modeHint);
-      const res = await fetch(`/api/device/${encodeURIComponent(mac)}/apply-preview?${qs.toString()}`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "image/png" }),
-        body: previewBlob,
-      });
-      if (!res.ok) throw new Error("apply-preview failed");
-      setCurrentMode(modeHint);
-      await loadRuntimeMode();
-      showToast("已下发到墨水屏", "success");
-    } catch {
-      showToast("下发失败", "error");
-    } finally {
-      setCustomApplyToScreenLoading(false);
+      setPreviewLoading(false);
     }
   };
 
@@ -1446,7 +1415,11 @@ function ConfigPageInner() {
         setCustomJson("");
         setCustomDesc("");
         setCustomModeName("");
+        if (customPreviewImg) {
+          try { URL.revokeObjectURL(customPreviewImg); } catch {}
+        }
         setCustomPreviewImg(null);
+        setCustomEditorSource(null);
       } else {
         throw new Error(data.error || "保存失败");
       }
@@ -1455,14 +1428,14 @@ function ConfigPageInner() {
     }
   };
 
-  const toggleMode = (modeId: string) => {
+  const toggleMode = useCallback((modeId: string) => {
     setSelectedModes((prev) => {
       const next = new Set(prev);
       if (next.has(modeId)) next.delete(modeId);
       else next.add(modeId);
       return next;
     });
-  };
+  }, []);
 
   const handleModePreview = (m: string) => {
     const modeId = (m || "").toUpperCase();
@@ -1587,74 +1560,11 @@ function ConfigPageInner() {
     }
   };
 
-  const handleModeFavorite = async (m: string) => {
-    const wasFavorited = favoritedModes.has(m);
-    setFavoritedModes((prev) => {
-      const next = new Set(prev);
-      if (next.has(m)) next.delete(m); else next.add(m);
-      return next;
-    });
-    if (mac && !wasFavorited) {
-      try {
-        await fetch(`/api/device/${encodeURIComponent(mac)}/favorite`, {
-          method: "POST",
-          headers: authHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ mode: m }),
-        });
-        await loadFavorites(true);
-      } catch {}
-    }
-    showToast(wasFavorited ? "已取消收藏" : "已收藏", "success");
-  };
-
   const handleAddCustomPersona = () => {
     const v = customPersonaTone.trim();
     if (!v) return;
     setCharacterTones((prev) => (prev.includes(v) ? prev : [...prev, v]));
     setCustomPersonaTone("");
-  };
-
-  const handleDeleteCustomMode = async (modeId: string) => {
-    const modeName = customModeMeta[modeId]?.name || modeId;
-    if (!window.confirm(`确定删除自定义模式「${modeName}」吗？`)) return;
-    if (!mac) {
-      showToast("请先选择设备", "error");
-      return;
-    }
-    try {
-      const params = new URLSearchParams();
-      params.append("mac", mac);
-      const res = await fetch(`/api/modes/custom/${encodeURIComponent(modeId)}?${params.toString()}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      if (!res.ok) throw new Error("delete failed");
-      refreshCatalog();
-      setSelectedModes((prev) => {
-        const next = new Set(prev);
-        next.delete(modeId);
-        return next;
-      });
-      setFavoritedModes((prev) => {
-        const next = new Set(prev);
-        next.delete(modeId);
-        return next;
-      });
-      if (previewMode === modeId) {
-        setPreviewMode("");
-        replacePreviewImg(null);
-        setPreviewCacheHit(null);
-      }
-      if (currentMode === modeId) {
-        setCurrentMode("");
-      }
-      if (settingsMode === modeId) {
-        setSettingsMode(null);
-      }
-      showToast(`已删除模式 ${modeName}`, "success");
-    } catch {
-      showToast("删除模式失败", "error");
-    }
   };
 
   const modeMeta = useMemo(() => {
@@ -1702,25 +1612,6 @@ function ConfigPageInner() {
   const currentDeviceMembership = userDevices.find((d) => d.mac.toUpperCase() === mac.toUpperCase()) || null;
   const denyByMembership = Boolean(mac && currentUser && !devicesLoading && !currentDeviceMembership);
   const currentUserRole = currentDeviceMembership?.role || "";
-  const ownerUsername = deviceMembers.find((member) => member.role === "owner")?.username || "";
-  const formatPreviewUsageText = useCallback((usageSource?: string) => {
-    switch (usageSource) {
-      case "current_user_api_key":
-        return tr("当前使用你的 API key", "Using your API key");
-      case "owner_api_key":
-        return ownerUsername
-          ? tr(`当前使用 owner（${ownerUsername}）的 API key`, `Using ${ownerUsername}'s API key`)
-          : tr("当前使用 owner 的 API key", "Using owner's API key");
-      case "owner_free_quota":
-        return ownerUsername
-          ? tr(`当前消耗 owner（${ownerUsername}）的免费额度`, `Using ${ownerUsername}'s free quota`)
-          : tr("当前消耗 owner 的免费额度", "Using owner's free quota");
-      case "current_user_free_quota":
-        return tr("当前消耗你的免费额度", "Using your free quota");
-      default:
-        return "";
-    }
-  }, [ownerUsername, tr]);
   const formatPreviewConfirmText = useCallback((usageSource?: string) => {
     switch (usageSource) {
       case "current_user_api_key":
@@ -2037,46 +1928,27 @@ function ConfigPageInner() {
                   <ModeSelector
                     tr={tr}
                     selectedModes={selectedModes}
-                    favoritedModes={favoritedModes}
                     customModes={customModes}
                     customModeMeta={customModeMeta}
                     modeMeta={modeMeta}
                     coreModes={coreModes}
                     extraModes={extraModes}
-                    modeTemplates={MODE_TEMPLATES}
-                    handlePreview={handlePreview}
                     handleModePreview={handleModePreview}
                     handleModeApply={handleModeApply}
-                    handleModeFavorite={handleModeFavorite}
-                    setSettingsMode={setSettingsMode}
-                    handleDeleteCustomMode={handleDeleteCustomMode}
-                    editingCustomMode={editingCustomMode}
                     setEditingCustomMode={setEditingCustomMode}
-                    editorTab={editorTab}
-                    setEditorTab={setEditorTab}
-                    customDesc={customDesc}
                     setCustomDesc={setCustomDesc}
-                    customModeName={customModeName}
                     setCustomModeName={setCustomModeName}
-                    customJson={customJson}
                     setCustomJson={setCustomJson}
-                    customGenerating={customGenerating}
-                    customPreviewImg={customPreviewImg}
-                    customPreviewLoading={customPreviewLoading}
-                    customApplyToScreenLoading={customApplyToScreenLoading}
-                    handleGenerateMode={handleGenerateMode}
-                    handleCustomPreview={handleCustomPreview}
-                    handleApplyCustomPreviewToScreen={handleApplyCustomPreviewToScreen}
-                    handleSaveCustomMode={handleSaveCustomMode}
-                    mac={mac}
                   />
 
+                  <div ref={previewPanelRef}>
                   <EInkPreviewPanel
                     tr={tr}
                     previewModeLabel={
-                      previewMode
-                        ? `${tr("模式", "Mode")}: ${modeMeta[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode}`
-                        : tr("请选择模式", "Select a mode")
+                      previewModeLabelOverride ||
+                      (previewMode
+                        ? (modeMeta[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode)
+                        : tr("请选择模式", "Select a mode"))
                     }
                     previewLoading={previewLoading}
                     previewStatusText={previewStatusText}
@@ -2087,8 +1959,97 @@ function ConfigPageInner() {
                     applyToScreenLoading={applyToScreenLoading}
                     onRegenerate={() => handlePreview(previewMode, true)}
                     onApplyToScreen={handleApplyPreviewToScreen}
+                    rightActions={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSaveCustomMode}
+                        disabled={!(customEditorSource === "ai" && Boolean(customJson.trim()))}
+                        className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
+                      >
+                        {tr("保存模式", "Save Mode")}
+                      </Button>
+                    }
                   />
+                  </div>
                 </div>
+
+                <Dialog
+                  open={editingCustomMode}
+                  onClose={() => {
+                    setEditingCustomMode(false);
+                  }}
+                >
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader
+                      onClose={() => {
+                        setEditingCustomMode(false);
+                      }}
+                    >
+                      <div>
+                        <DialogTitle>{tr("创建自定义模式", "Create Custom Mode")}</DialogTitle>
+                        <DialogDescription>
+                          {tr(
+                            "用一句话描述你想要的模式，点击 AI 生成预览，右侧水墨屏会显示效果。",
+                            "Describe the mode you want, click AI Generate Preview, and the right E-Ink panel will show the result.",
+                          )}
+                        </DialogDescription>
+                      </div>
+                    </DialogHeader>
+
+                    <div className="space-y-3">
+                      {customGenerating ? (
+                        <div className="rounded-sm border border-ink/10 bg-paper px-3 py-3 text-sm text-ink-light flex items-center gap-2">
+                          <Loader2 size={16} className="animate-spin" />
+                          {tr("模式生成中...", "Generating mode...")}
+                        </div>
+                      ) : null}
+                      <textarea
+                        value={customDesc}
+                        onChange={(e) => {
+                          setCustomDesc(e.target.value);
+                          setCustomEditorSource("manual");
+                        }}
+                        rows={3}
+                        maxLength={2000}
+                        placeholder={tr(
+                          "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中",
+                          "Describe your mode, e.g. show one English word and definition daily with a large centered font",
+                        )}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y bg-white"
+                        disabled={customGenerating}
+                      />
+
+                      <input
+                        value={customModeName}
+                        onChange={(e) => {
+                          setCustomModeName(e.target.value);
+                          setCustomEditorSource((v) => v || "manual");
+                        }}
+                        placeholder={tr("模式名称（例如：今日英语）", "Mode name (e.g. Daily English)")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                        disabled={customGenerating}
+                      />
+
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          // Keep the dialog open while generating; it will auto-close after generation finishes.
+                          void handleGenerateMode();
+                        }}
+                        disabled={customGenerating || !customDesc.trim()}
+                      >
+                        {tr("AI 生成预览", "AI Generate Preview")}
+                      </Button>
+
+                      {customEditorSource === "ai" ? (
+                        <div className="text-[11px] text-ink-light">
+                          {tr("AI 生成的模式可在右侧预览后直接保存。", "AI-generated modes can be saved from the right preview panel.")}
+                        </div>
+                      ) : null}
+                    </div>
+                  </DialogContent>
+                </Dialog>
 
               </div>
             )}

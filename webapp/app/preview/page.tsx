@@ -5,7 +5,8 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, Eye, Loader2, Sparkles, LayoutGrid } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
@@ -21,43 +22,6 @@ type ModeCatalogItem = {
   };
 };
 
-// 自定义模式模板（与配置页使用的模板保持一致的最小子集）
-type ModeTemplateDef = {
-  mode_id: string;
-  display_name: string;
-  cacheable?: boolean;
-  content?: Record<string, unknown>;
-  layout?: Record<string, unknown>;
-};
-
-const MODE_TEMPLATES: Record<string, { label: string; def: ModeTemplateDef }> = {
-  STOIC: {
-    label: "Stoic Quote (JSON)",
-    def: {
-      mode_id: "STOIC_CUSTOM",
-      display_name: "Stoic Quote",
-      cacheable: true,
-      content: {
-        type: "llm_json",
-        prompt_template:
-          "生成一条斯多葛风格的简短语录（不超过50字），并给出作者和一句话解释，返回 JSON。",
-        output_schema: {
-          quote: { type: "string", default: "阻碍行动的障碍，本身就是行动的路。" },
-          author: { type: "string", default: "马可·奥勒留" },
-          explanation: { type: "string", default: "面对阻碍时，转而把它当作前进的道路本身。" },
-        },
-      },
-      layout: {
-        body: [
-          { type: "text", field: "quote", variant: "large" },
-          { type: "text", field: "author", variant: "small" },
-          { type: "text", field: "explanation", variant: "small" },
-        ],
-      },
-    },
-  },
-};
-
 function ModeSection({
   title,
   modes,
@@ -65,6 +29,7 @@ function ModeSection({
   onPreview,
   collapsible,
   customMeta,
+  tailItem,
   locale,
 }: {
   title: string;
@@ -73,6 +38,7 @@ function ModeSection({
   onPreview: (m: string) => void;
   collapsible?: boolean;
   customMeta?: Record<string, { name: string; tip: string }>;
+  tailItem?: React.ReactNode;
   locale: string;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -122,6 +88,7 @@ function ModeSection({
               </div>
             );
           })}
+          {tailItem ? tailItem : null}
         </div>
       )}
     </div>
@@ -140,11 +107,10 @@ export default function ExperiencePage() {
   const [modesError, setModesError] = useState<string | null>(null);
   // do not preselect any mode
   const [previewMode, setPreviewMode] = useState("");
+  const [previewModeNameOverride, setPreviewModeNameOverride] = useState<string | null>(null);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [city, setCity] = useState("杭州");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [memoText, setMemoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
+  const [city] = useState("杭州");
+  const [memoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
 
   const [previewLoading, setPreviewLoading] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -186,7 +152,6 @@ export default function ExperiencePage() {
   const [customModeName, setCustomModeName] = useState("");
   const [customJson, setCustomJson] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
-  const [customEditorTab, setCustomEditorTab] = useState<"ai" | "template">("ai");
 
   const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -275,6 +240,7 @@ export default function ExperiencePage() {
   );
 
   const previewModeName =
+    previewModeNameOverride ||
     modeMeta[previewMode]?.name ||
     previewMode ||
     t(locale, "preview.unknown_mode", "Unknown");
@@ -459,52 +425,28 @@ export default function ExperiencePage() {
       return;
     }
 
+    setPreviewModeNameOverride(null);
     setPreviewMode(modeId);
     await handlePreview(modeId);
   };
 
-  const handleGenerateCustomMode = async () => {
-    if (!customDesc.trim()) {
-      showToast(
-        locale === "zh" ? "请输入模式描述" : "Please enter a description for the mode",
-        "error",
-      );
-      return;
-    }
-    setCustomGenerating(true);
-    try {
-      const res = await fetch("/api/modes/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: customDesc }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Generate failed");
-      setCustomJson(JSON.stringify(data.mode_def, null, 2));
-      setCustomModeName((data.mode_def?.display_name || "").toString());
-      showToast(
-        locale === "zh" ? "模式生成成功" : "Mode generated successfully",
-        "success",
-      );
-    } catch (e) {
-      showToast(
-        (locale === "zh" ? "生成失败: " : "Generate failed: ") +
-          (e instanceof Error ? e.message : "Unknown error"),
-        "error",
-      );
-    } finally {
-      setCustomGenerating(false);
-    }
-  };
-
-  const handleCustomModePreview = async () => {
-    if (!customJson.trim()) return;
+  const handleCustomModePreview = async (defOverride?: unknown) => {
+    if (!defOverride && !customJson.trim()) return;
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewLlmStatus(null);
-    setShowCustomModeModal(false);
     try {
-      const def = JSON.parse(customJson);
+      const def = defOverride ? (defOverride as Record<string, unknown>) : (JSON.parse(customJson) as Record<string, unknown>);
+      const nameFromInput = customModeName.trim();
+      const displayNameRaw = (def as Record<string, unknown>)["display_name"];
+      const modeIdRaw = (def as Record<string, unknown>)["mode_id"];
+      const nameFromDef =
+        (typeof displayNameRaw === "string" && displayNameRaw.trim()) ||
+        (typeof modeIdRaw === "string" && modeIdRaw.trim()) ||
+        "";
+      const displayName = nameFromInput || nameFromDef || (locale === "zh" ? "自定义模式" : "Custom Mode");
+      setPreviewModeNameOverride(displayName);
+      setPreviewMode(displayName.toUpperCase().replace(/[^A-Z0-9_]/g, "_"));
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -554,7 +496,37 @@ export default function ExperiencePage() {
     }
   };
 
-  // Removed unused reset function
+  const handleGenerateCustomModeAndPreview = async () => {
+    if (!customDesc.trim()) {
+      showToast(locale === "zh" ? "请输入模式描述" : "Please enter a description for the mode", "error");
+      return;
+    }
+    setCustomGenerating(true);
+    try {
+      const res = await fetch("/api/modes/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: customDesc }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Generate failed");
+      setCustomJson(JSON.stringify(data.mode_def, null, 2));
+      if (!customModeName.trim()) {
+        setCustomModeName((data.mode_def?.display_name || "").toString());
+      }
+      // generation complete -> close dialog -> preview on main panel
+      setShowCustomModeModal(false);
+      await handleCustomModePreview(data.mode_def);
+    } catch (e) {
+      showToast(
+        (locale === "zh" ? "生成失败: " : "Generate failed: ") + (e instanceof Error ? e.message : "Unknown error"),
+        "error",
+      );
+    } finally {
+      setCustomGenerating(false);
+    }
+  };
+  // (removed) reset(): unused
 
   useEffect(() => {
     setModesError(null);
@@ -668,6 +640,22 @@ export default function ExperiencePage() {
                   onPreview={applyModeAndPreview}
                   collapsible
                   customMeta={modeMeta}
+                  tailItem={
+                    <button
+                      onClick={() => {
+                        setShowCustomModeModal(true);
+                        setCustomDesc("");
+                        setCustomModeName("");
+                        setCustomJson("");
+                        setCustomGenerating(false);
+                      }}
+                      className="rounded-sm border border-dashed border-ink/20 bg-white px-3 py-2 min-h-[64px] flex flex-col items-center justify-center text-ink-light hover:border-ink/40 hover:bg-paper-dark transition-colors"
+                      title={locale === "zh" ? "新建自定义模式" : "Create custom mode"}
+                    >
+                      <Plus size={18} className="mb-1" />
+                      <div className="text-[11px]">{locale === "zh" ? "新建" : "New"}</div>
+                    </button>
+                  }
                   locale={locale}
                 />
               ) : null}
@@ -685,7 +673,7 @@ export default function ExperiencePage() {
                 </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="h-[calc(100vh-220px)] flex flex-col p-0">
+            <CardContent className="h-[calc(80vh-220px)] flex flex-col p-0">
               <div className="border border-ink/10 rounded-sm bg-paper flex flex-col items-center justify-center flex-1 w-full">
                 {previewLoading ? (
                   <div className="flex items-center justify-center w-full">
@@ -1108,143 +1096,59 @@ export default function ExperiencePage() {
           </div>
         </div>
       ) : null}
-      {showCustomModeModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setShowCustomModeModal(false)}
-          />
-          <div className="relative w-[min(720px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-80px))] rounded-sm border border-ink/15 bg-white shadow-xl flex flex-col">
-            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
-              <div className="text-sm font-semibold text-ink">
-                {locale === "zh" ? "创建自定义模式" : "Create Custom Mode"}
-              </div>
-              <button
-                className="text-ink-light hover:text-ink"
-                onClick={() => setShowCustomModeModal(false)}
-              >
-                ✕
-              </button>
+      <Dialog open={showCustomModeModal} onClose={() => setShowCustomModeModal(false)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader onClose={() => setShowCustomModeModal(false)}>
+            <div>
+              <DialogTitle>{locale === "zh" ? "创建自定义模式" : "Create Custom Mode"}</DialogTitle>
+              <DialogDescription>
+                {locale === "zh"
+                  ? "用一句话描述你想要的模式，点击 AI 生成预览即可。"
+                  : "Describe the mode you want, then click AI Generate Preview."}
+              </DialogDescription>
             </div>
-            <div className="px-4 py-4 space-y-4 overflow-auto">
-              <div className="flex gap-1 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setCustomEditorTab("ai")}
-                  className={`px-3 py-1.5 rounded-sm text-xs flex items-center gap-1 transition-colors ${
-                    customEditorTab === "ai"
-                      ? "bg-ink text-white"
-                      : "bg-paper-dark text-ink-light hover:text-ink"
-                  }`}
-                >
-                  <Sparkles size={12} />
-                  {locale === "zh" ? "AI 生成" : "AI Generate"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomEditorTab("template")}
-                  className={`px-3 py-1.5 rounded-sm text-xs flex items-center gap-1 transition-colors ${
-                    customEditorTab === "template"
-                      ? "bg-ink text-white"
-                      : "bg-paper-dark text-ink-light hover:text-ink"
-                  }`}
-                >
-                  <LayoutGrid size={12} />
-                  {locale === "zh" ? "从模板" : "From Template"}
-                </button>
-              </div>
+          </DialogHeader>
 
-              {customEditorTab === "ai" ? (
-                <div className="space-y-3">
-                  <textarea
-                    value={customDesc}
-                    onChange={(e) => setCustomDesc(e.target.value)}
-                    rows={3}
-                    maxLength={2000}
-                    placeholder={
-                      locale === "zh"
-                        ? "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中"
-                        : "Describe your mode, e.g. show one English word and definition daily with a large centered font"
-                    }
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateCustomMode}
-                    disabled={customGenerating || !customDesc.trim()}
-                  >
-                    {customGenerating ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin mr-1" />
-                        {locale === "zh" ? "生成中..." : "Generating..."}
-                      </>
-                    ) : (
-                      locale === "zh" ? "AI 生成模式" : "Generate Mode with AI"
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <select
-                    onChange={(e) => {
-                      const template = MODE_TEMPLATES[e.target.value];
-                      if (!template) return;
-                      setCustomJson(JSON.stringify(template.def, null, 2));
-                      setCustomModeName((template.def?.display_name || "").toString());
-                    }}
-                    defaultValue=""
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="" disabled>
-                      {locale === "zh" ? "选择模板..." : "Select template..."}
-                    </option>
-                    {Object.entries(MODE_TEMPLATES).map(([key, template]) => (
-                      <option key={key} value={key}>
-                        {template.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="space-y-3 mt-1">
-                <input
-                  value={customModeName}
-                  onChange={(e) => setCustomModeName(e.target.value)}
-                  placeholder={
-                    locale === "zh"
-                      ? "模式名称（例如：今日英语）"
-                      : "Mode name (e.g. Daily English)"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                />
-                <textarea
-                  value={customJson}
-                  onChange={(e) => setCustomJson(e.target.value)}
-                  rows={12}
-                  spellCheck={false}
-                  placeholder={
-                    locale === "zh"
-                      ? "模式 JSON 定义"
-                      : "Mode JSON definition"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-xs font-mono resize-y bg-ink text-green-400"
-                />
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCustomModePreview}
-                    disabled={!customJson.trim() || previewLoading}
-                  >
-                    {locale === "zh" ? "预览到右侧水墨屏" : "Preview on E-ink display"}
-                  </Button>
-                </div>
+          <div className="space-y-3">
+            {customGenerating ? (
+              <div className="rounded-sm border border-ink/10 bg-paper px-3 py-3 text-sm text-ink-light flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                {locale === "zh" ? "模式生成中..." : "Generating mode..."}
               </div>
-            </div>
+            ) : null}
+
+            <textarea
+              value={customDesc}
+              onChange={(e) => setCustomDesc(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder={
+                locale === "zh"
+                  ? "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中"
+                  : "Describe your mode, e.g. show one English word and definition daily with a large centered font"
+              }
+              className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y bg-white"
+              disabled={customGenerating}
+            />
+
+            <input
+              value={customModeName}
+              onChange={(e) => setCustomModeName(e.target.value)}
+              placeholder={locale === "zh" ? "模式名称（例如：今日英语）" : "Mode name (e.g. Daily English)"}
+              className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+              disabled={customGenerating}
+            />
+
+            <Button
+              size="sm"
+              onClick={() => void handleGenerateCustomModeAndPreview()}
+              disabled={customGenerating || !customDesc.trim()}
+            >
+              {locale === "zh" ? "AI 生成预览" : "AI Generate Preview"}
+            </Button>
           </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
       {/* 邀请码输入弹窗 */}
       {showInviteModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
