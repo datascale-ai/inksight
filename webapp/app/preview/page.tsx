@@ -260,7 +260,7 @@ export default function ExperiencePage() {
     if (!override) {
       if (targetMode === "WEATHER") {
         setModal({ type: "weather", modeId: targetMode });
-        setWeatherDraftLocation({ city });
+        setWeatherDraftLocation({});
         return;
       }
       if (targetMode === "MEMO") {
@@ -416,7 +416,7 @@ export default function ExperiencePage() {
     }
     if (modeId === "WEATHER") {
       setPreviewMode(modeId);
-      setWeatherDraftLocation({ city });
+      setWeatherDraftLocation({});
       setModal({ type: "weather", modeId });
       return;
     }
@@ -819,9 +819,7 @@ export default function ExperiencePage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <Button
                       onClick={async () => {
-                        setModal(null);
-                        // 使用默认城市
-                        await handlePreview(modal.modeId);
+                        setWeatherDraftLocation({ city: "杭州" });
                       }}
                       disabled={previewLoading}
                       variant="outline"

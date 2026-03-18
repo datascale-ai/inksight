@@ -579,6 +579,10 @@ function ConfigPageInner() {
     () => buildLocationValue(city, locationMeta),
     [city, locationMeta],
   );
+  const defaultWeatherLocation = useMemo(
+    () => (currentLocation.city ? cleanLocationValue(currentLocation) : buildLocationValue("杭州")),
+    [currentLocation],
+  );
 
   const applyGlobalLocation = useCallback((next: Partial<LocationValue> | null | undefined) => {
     const cleaned = cleanLocationValue(next);
@@ -786,13 +790,7 @@ function ConfigPageInner() {
   const openParamModal = useCallback((modeId: string, action: "preview" | "apply") => {
     const m = (modeId || "").toUpperCase();
     if (m === "WEATHER") {
-      setWeatherDraftLocation(
-        cleanLocationValue(
-          modeOverrides[m]?.city
-            ? extractLocationValue(modeOverrides[m] as Record<string, unknown>)
-            : currentLocation,
-        ),
-      );
+      setWeatherDraftLocation({});
       setParamModal({ type: "weather", mode: m, action });
       return;
     }
@@ -820,7 +818,7 @@ function ConfigPageInner() {
       setParamModal({ type: "lifebar", mode: m, action });
       return;
     }
-  }, [currentLocation, memoText, modeOverrides]);
+  }, [memoText, modeOverrides]);
 
   const clearModeOverride = useCallback((modeId: string) => {
     setModeOverrides((prev) => {
@@ -2804,7 +2802,7 @@ function ConfigPageInner() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <Button
                       variant="outline"
-                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      onClick={() => setWeatherDraftLocation(defaultWeatherLocation)}
                       disabled={previewLoading}
                     >
                       {tr("使用默认城市", "Use default city")}
