@@ -141,7 +141,9 @@ export default function ExperiencePage() {
   // do not preselect any mode
   const [previewMode, setPreviewMode] = useState("");
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [city, setCity] = useState("杭州");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [memoText, setMemoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
 
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -157,7 +159,8 @@ export default function ExperiencePage() {
   const toastTimerRef = useRef<number | null>(null);
 
   const [modal, setModal] = useState<null | { type: "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar"; modeId: string }>(null);
-  const [imageUploadLoading, setImageUploadLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_imageUploadLoading, setImageUploadLoading] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
   const [cityDraft, setCityDraft] = useState("");
@@ -502,11 +505,6 @@ export default function ExperiencePage() {
     setShowCustomModeModal(false);
     try {
       const def = JSON.parse(customJson);
-      const nameFromInput = customModeName.trim();
-      const nameFromDef =
-        (typeof def.display_name === "string" && def.display_name.trim()) ||
-        (typeof def.mode_id === "string" && def.mode_id.trim()) ||
-        "";
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -556,13 +554,7 @@ export default function ExperiencePage() {
     }
   };
 
-  const reset = () => {
-    setCity("杭州");
-    setMemoText(t(locale, "preview.memo.default", "写点什么吧…"));
-    setPreviewMode("DAILY");
-    setPreviewError(null);
-    showToast(t(locale, "preview.toast.reset", "Reset to defaults"), "info");
-  };
+  // Removed unused reset function
 
   useEffect(() => {
     setModesError(null);
@@ -590,7 +582,6 @@ export default function ExperiencePage() {
   useEffect(() => {
     if (!authChecked) return;
     // no auto-preview on enter; user must pick a mode
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authChecked]);
 
   useEffect(() => {

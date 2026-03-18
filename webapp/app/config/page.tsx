@@ -271,7 +271,7 @@ function ConfigPageInner() {
   const pathname = usePathname();
   const locale = localeFromPathname(pathname || "/");
   const isEn = locale === "en";
-  const tr = (zh: string, en: string) => (isEn ? en : zh);
+  const tr = useCallback((zh: string, en: string) => (isEn ? en : zh), [isEn]);
   const searchParams = useSearchParams();
   const mac = searchParams.get("mac") || "";
   const preferMac = searchParams.get("prefer_mac") || "";

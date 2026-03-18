@@ -11,6 +11,7 @@ from core.auth import require_user, validate_mac_param
 from core.config_store import (
     approve_access_request,
     bind_device,
+    delete_user_llm_config,
     get_device_members,
     get_device_owner,
     get_pending_requests_for_owner,
@@ -153,6 +154,7 @@ async def get_user_profile(user_id: int = Depends(require_user)):
 @router.put("/user/profile/llm")
 async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_user)):
     """保存用户级别的 LLM 配置。"""
+    llm_access_mode = (body.get("llm_access_mode") or "preset").strip().lower()
     provider = (body.get("provider") or "deepseek").strip()
     model = (body.get("model") or "").strip()
     api_key = (body.get("api_key") or "").strip()
@@ -160,12 +162,71 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
     image_provider = (body.get("image_provider") or "aliyun").strip()
     image_model = (body.get("image_model") or "").strip()
     image_api_key = (body.get("image_api_key") or "").strip()
+
+    # 表单校验：
+    # - preset：provider/model/api_key 必填，base_url 可空
+    # - custom_openai：model/api_key/base_url 必填，provider 忽略（统一存为 openai_compat）
+    # 图像配置保持原样：必填（image_provider/image_model/image_api_key）
+    allowed_modes = {"preset", "custom_openai"}
+    if llm_access_mode not in allowed_modes:
+        return JSONResponse({"error": f"llm_access_mode 无效：{llm_access_mode}"}, status_code=400)
+
+    missing: list[str] = []
+    if llm_access_mode == "preset":
+        if not provider:
+            missing.append("provider")
+        if not model:
+            missing.append("model")
+        if not api_key:
+            missing.append("api_key")
+        # base_url 可为空
+    else:
+        # custom_openai
+        if not model:
+            missing.append("model")
+        if not api_key:
+            missing.append("api_key")
+        if not base_url:
+            missing.append("base_url")
+        provider = "openai_compat"
+
+    if not image_provider:
+        missing.append("image_provider")
+    if not image_model:
+        missing.append("image_model")
+    if not image_api_key:
+        missing.append("image_api_key")
+    if missing:
+        extra = "（base_url 可为空）" if llm_access_mode == "preset" else ""
+        return JSONResponse({"error": f"缺少必填字段：{', '.join(missing)}{extra}"}, status_code=400)
+
+    # minimal URL sanity check for custom base_url
+    if llm_access_mode == "custom_openai" and not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return JSONResponse({"error": "base_url 必须以 http:// 或 https:// 开头"}, status_code=400)
     
-    ok = await save_user_llm_config(user_id, provider, model, api_key, base_url, image_provider, image_model, image_api_key)
+    ok = await save_user_llm_config(
+        user_id,
+        llm_access_mode,
+        provider,
+        model,
+        api_key,
+        base_url,
+        image_provider,
+        image_model,
+        image_api_key,
+    )
     if not ok:
         return JSONResponse({"error": "保存配置失败"}, status_code=500)
     
     return {"ok": True, "message": "配置已保存"}
+
+
+@router.delete("/user/profile/llm")
+async def delete_user_llm_config_route(user_id: int = Depends(require_user)):
+    """删除用户级别的 LLM 配置（BYOK）。"""
+    deleted = await delete_user_llm_config(user_id)
+    # 幂等：即使本来就没有配置，也返回 ok，避免前端交互分叉
+    return {"ok": True, "deleted": bool(deleted), "message": "配置已删除"}
 
 
 @router.post("/user/redeem")

@@ -31,6 +31,16 @@ _LLM_RECOVERABLE_ERRORS = (
     ValueError,
 )
 
+
+def _extract_llm_base_url(ctx) -> str | None:
+    """Extract optional LLM base_url from various ctx shapes (dict / ContentContext / None)."""
+    if ctx is None:
+        return None
+    if isinstance(ctx, dict):
+        v = (ctx.get("llm_base_url") or "").strip()
+        return v or None
+    return getattr(ctx, "llm_base_url", None)
+
 try:
     import dashscope
     from dashscope import MultiModalConversation
@@ -62,6 +72,11 @@ LLM_CONFIGS = {
             "moonshot-v1-32k": {"name": "Kimi K1.5 32K", "max_tokens": 1024},
             "kimi-k2-turbo-preview": {"name": "Kimi K2 Turbo", "max_tokens": 1024},
         },
+    },
+    # Custom OpenAI-compatible provider: base_url must be provided at call-time.
+    "openai_compat": {
+        "base_url": "",
+        "models": {},
     },
 }
 
@@ -151,10 +166,16 @@ def _build_style_instructions(
 def _get_client(
     provider: str = "deepseek", model: str = "deepseek-chat",
     api_key: str | None = None,
+    base_url: str | None = None,
 ) -> tuple[AsyncOpenAI, int]:
     """Get OpenAI client for specified provider and return max_tokens"""
     user_provided_key = api_key is not None  # 记录用户是否提供了 api_key（即使是空字符串）
     
+    # openai_compat 必须显式提供 api_key/base_url，严禁回退到环境变量（防止越权使用平台 Key）
+    if provider == "openai_compat" and api_key is None:
+        user_provided_key = True
+        api_key = ""
+
     if api_key is None:
         # 用户没有传递 api_key，从环境变量获取
         api_key_map = {
@@ -177,20 +198,25 @@ def _get_client(
             )
 
     config = LLM_CONFIGS.get(provider, LLM_CONFIGS["deepseek"])
-    base_url = config["base_url"]
+    resolved_base_url = config["base_url"]
+    # Custom OpenAI-compatible gateway: base_url must come from user config.
+    if provider == "openai_compat":
+        resolved_base_url = (base_url or "").strip()
+        if not resolved_base_url:
+            raise LLMKeyMissingError("Missing base_url for openai_compat provider.")
     model_config = config["models"].get(model, {"max_tokens": 120})
     max_tokens = model_config["max_tokens"]
 
-    return AsyncOpenAI(api_key=api_key, base_url=base_url), max_tokens
+    return AsyncOpenAI(api_key=api_key, base_url=resolved_base_url), max_tokens
 
 
 class LLMClient:
     """Unified LLM client with retry, timeout, and logging."""
 
-    def __init__(self, provider: str = "deepseek", model: str = "deepseek-chat", api_key: str | None = None):
+    def __init__(self, provider: str = "deepseek", model: str = "deepseek-chat", api_key: str | None = None, base_url: str | None = None):
         self.provider = provider
         self.model = model
-        self._client, self._max_tokens = _get_client(provider, model, api_key=api_key)
+        self._client, self._max_tokens = _get_client(provider, model, api_key=api_key, base_url=base_url)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -248,13 +274,14 @@ async def _call_llm(
     temperature: float = 0.8,
     max_tokens: int | None = None,
     api_key: str | None = None,
+    base_url: str | None = None,
 ) -> str:
     """Unified LLM call: create client, call API, return response text.
 
     Retries up to 3 times with exponential backoff for transient errors.
     Raises ValueError when the API key is missing (no retry).
     """
-    client, default_max_tokens = _get_client(provider, model, api_key=api_key)
+    client, default_max_tokens = _get_client(provider, model, api_key=api_key, base_url=base_url)
     response = await client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
@@ -291,6 +318,7 @@ async def generate_content(
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
     api_key: str | None = None,
+    llm_base_url: str | None = None,
 ) -> dict:
     context = _build_context_str(
         date_str,
@@ -313,7 +341,7 @@ async def generate_content(
     logger.info(f"[LLM] Calling {llm_provider}/{llm_model} for persona={persona}")
 
     try:
-        text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8, api_key=api_key)
+        text = await _call_llm(llm_provider, llm_model, prompt, temperature=0.8, api_key=api_key, base_url=llm_base_url)
     except _LLM_RECOVERABLE_ERRORS as e:
         logger.error(f"[LLM] ✗ FAILED - {type(e).__name__}: {e}")
         return _fallback_content(persona)
@@ -502,6 +530,7 @@ async def generate_briefing_insight(
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
     api_key: str | None = None,
+    llm_base_url: str | None = None,
 ) -> str:
     """使用 LLM 生成行业洞察"""
     hn_summary = "\n".join(
@@ -522,7 +551,7 @@ Hacker News Top 3:
 3. 语言简洁有力，适合晨间阅读"""
 
     try:
-        insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7, api_key=api_key)
+        insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7, api_key=api_key, base_url=llm_base_url)
         logger.info(f"[BRIEFING] Generated insight: {insight[:50]}...")
         return insight
     except _LLM_RECOVERABLE_ERRORS as e:
@@ -536,6 +565,7 @@ async def summarize_briefing_content(
     llm_provider: str = "deepseek",
     llm_model: str = "deepseek-chat",
     api_key: str | None = None,
+    llm_base_url: str | None = None,
 ) -> tuple[list[dict], dict]:
     """使用单次 LLM 调用批量总结 HN stories 和 PH tagline（原先需 3-4 次调用）"""
     try:
@@ -590,7 +620,7 @@ async def summarize_briefing_content(
 
         text = await _call_llm(
             llm_provider, llm_model, batch_prompt,
-            max_tokens=300, temperature=0.5, api_key=api_key,
+            max_tokens=300, temperature=0.5, api_key=api_key, base_url=llm_base_url,
         )
         cleaned = _clean_json_response(text)
         data = json.loads(cleaned)
@@ -648,17 +678,19 @@ async def generate_briefing_content(
         return _fallback_content("BRIEFING")
 
     if summarize:
+        llm_base_url = _extract_llm_base_url(ctx)
         (hn_stories, ph_product), insight = await _asyncio.gather(
             summarize_briefing_content(
-                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key
+                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
             ),
             generate_briefing_insight(
-                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key
+                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
             ),
         )
     else:
+        llm_base_url = _extract_llm_base_url(ctx)
         insight = await generate_briefing_insight(
-            hn_stories, ph_product, llm_provider, llm_model, api_key=api_key
+            hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
         )
 
     result = {
@@ -794,7 +826,13 @@ async def generate_artwall_content(
     artwork_title = title_seed or "墨韵天成"
     try:
         # 标题生成：优先使用用户/上游配置的 LLM provider + model
-        title_text = await _call_llm(llm_provider, llm_model, title_prompt, api_key=api_key)
+        title_text = await _call_llm(
+            llm_provider,
+            llm_model,
+            title_prompt,
+            api_key=api_key,
+            base_url=_extract_llm_base_url(ctx),
+        )
         artwork_title = title_text.strip('"').strip("「」") or artwork_title
         logger.info(f"[ARTWALL] Generated title via {llm_provider}/{llm_model}: {artwork_title}")
     except _LLM_RECOVERABLE_ERRORS as e:
@@ -972,7 +1010,7 @@ async def generate_recipe_content(
 只输出 JSON，不要其他内容。"""
 
     try:
-        text = await _call_llm(llm_provider, llm_model, prompt, api_key=api_key)
+        text = await _call_llm(llm_provider, llm_model, prompt, api_key=api_key, base_url=_extract_llm_base_url(ctx))
         cleaned = _clean_json_response(text)
         data = json.loads(cleaned)
         logger.info("[RECIPE] Generated meal plan")

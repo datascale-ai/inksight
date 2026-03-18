@@ -57,12 +57,16 @@ export function ModeSelector({
   coreModes,
   extraModes,
   modeTemplates,
-  handlePreview,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  handlePreview: _handlePreview,
   handleModePreview,
   handleModeApply,
-  handleModeFavorite,
-  setSettingsMode,
-  handleDeleteCustomMode,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  handleModeFavorite: _handleModeFavorite,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setSettingsMode: _setSettingsMode,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  handleDeleteCustomMode: _handleDeleteCustomMode,
   editingCustomMode,
   setEditingCustomMode,
   editorTab,

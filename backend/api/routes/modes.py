@@ -269,6 +269,8 @@ async def custom_mode_preview(
     user_image_api_key = None
     user_llm_provider = None
     user_llm_model = None
+    user_llm_base_url = None
+    user_llm_access_mode = "preset"
     if user_id is not None:
         try:
             from core.config_store import get_user_llm_config
@@ -278,10 +280,13 @@ async def custom_mode_preview(
             user_cfg = None
             logger.warning("[CUSTOM_PREVIEW] Failed to load user_llm_config for user_id=%s", user_id, exc_info=True)
         if user_cfg:
+            user_llm_access_mode = (user_cfg.get("llm_access_mode") or "preset").strip().lower()
             user_api_key = (user_cfg.get("api_key") or "").strip() or None
             user_image_api_key = (user_cfg.get("image_api_key") or "").strip() or None
             user_llm_provider = (user_cfg.get("provider") or "").strip() or None
             user_llm_model = (user_cfg.get("model") or "").strip() or None
+            if user_llm_access_mode == "custom_openai":
+                user_llm_base_url = (user_cfg.get("base_url") or "").strip() or None
 
     # 注意：不再从设备配置读取 API key，只使用用户级别的配置（user_llm_config 表）
     device_api_key = None
@@ -370,6 +375,7 @@ async def custom_mode_preview(
             # 自定义模式预览中的 LLM 调用也优先使用用户配置的 provider + API key
             llm_provider=user_llm_provider,
             llm_model=user_llm_model,
+            llm_base_url=user_llm_base_url,
             api_key=effective_api_key,
             image_api_key=effective_image_api_key,
         )
@@ -566,6 +572,8 @@ async def generate_mode(
     user_api_key = None
     user_llm_provider = None
     user_llm_model = None
+    user_llm_base_url = None
+    user_llm_access_mode = "preset"
     if user_id is not None:
         try:
             from core.config_store import get_user_llm_config
@@ -575,11 +583,14 @@ async def generate_mode(
             user_cfg = None
             logger.warning("[MODE_GEN] Failed to load user_llm_config for user_id=%s", user_id, exc_info=True)
         if user_cfg:
+            user_llm_access_mode = (user_cfg.get("llm_access_mode") or "preset").strip().lower()
             user_api_key = (user_cfg.get("api_key") or "").strip() or None
             user_llm_provider = (user_cfg.get("provider") or "").strip() or None
             # 这里不再根据 provider 推默认模型，而是尊重用户在 profile 中配置的 model；
             # 如果用户没有配置 model，则在后面通过 base_model 统一回退到默认。
             user_llm_model = (user_cfg.get("model") or "").strip() or None
+            if user_llm_access_mode == "custom_openai":
+                user_llm_base_url = (user_cfg.get("base_url") or "").strip() or None
 
     # 注意：不再从设备配置读取 API key，只使用用户级别的配置（user_llm_config 表）
     effective_api_key = user_api_key
@@ -614,12 +625,17 @@ async def generate_mode(
         provider_from_body = (body.get("provider") or "").strip() or None
         model_from_body = (body.get("model") or "").strip() or None
 
-        # provider：用户配置 > body > 默认 "deepseek"
-        effective_provider = user_llm_provider or provider_from_body or "deepseek"
+        # provider：custom_openai 固定走 openai_compat；否则 用户配置 > body > 默认 "deepseek"
+        if user_llm_access_mode == "custom_openai":
+            effective_provider = "openai_compat"
+        else:
+            effective_provider = user_llm_provider or provider_from_body or "deepseek"
 
         # model：用户配置 > body > 根据最终 provider 选择默认模型
         base_model = get_default_llm_model_for_provider(effective_provider)
         effective_model = user_llm_model or model_from_body or base_model
+        if effective_provider == "openai_compat" and not (effective_model or "").strip():
+            return JSONResponse({"error": "自定义 OpenAI 模式下 model 必填"}, status_code=400)
 
         # 临时调试日志：查看实际使用的 provider/model 以及 user_cfg
         logger.info(
@@ -640,6 +656,7 @@ async def generate_mode(
             provider=effective_provider,
             model=effective_model,
             api_key=effective_api_key,
+            base_url=(user_llm_base_url if user_llm_access_mode == "custom_openai" else None),
         )
         # 成功后扣费（仅平台 Key，root 用户豁免）
         if _billing_enabled() and quota_user_id is not None and not using_user_key:
