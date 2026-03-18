@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
 from core.auth import clear_session_cookie, create_session_token, require_user, set_session_cookie
-from core.config_store import authenticate_user, _hash_password, get_user_api_quota
+from core.config_store import (
+    DEFAULT_FREE_LLM_QUOTA,
+    INVITE_CODE_BONUS_QUOTA,
+    _hash_password,
+    authenticate_user,
+    ensure_user_api_quota,
+)
 from core.db import get_main_db
 
 router = APIRouter(tags=["auth"])
@@ -20,13 +26,6 @@ _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 @router.post("/auth/register")
 async def auth_register(body: dict, response: Response):
-    """
-    用户注册接口。
-
-    说明：
-    - 注册时不再支持输入邀请码，邀请码仅通过单独的兑换接口使用（/api/user/redeem）
-    - 新用户注册后统一获得 50 次免费 LLM 调用额度
-    """
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     phone = (body.get("phone") or "").strip()
@@ -53,30 +52,30 @@ async def auth_register(body: dict, response: Response):
         # 显式开启事务，确保「创建用户 -> 初始化额度」原子完成
         await db.execute("BEGIN")
 
-        # 1) 创建用户记录（用户名 + 手机/邮箱）
+        # 注册默认发放平台免费额度，邀请码仅在登录后单独兑换，避免注册时误消耗。
         cursor = await db.execute(
             """
-            INSERT INTO users (username, password_hash, phone, email, role, created_at)
-            VALUES (?, ?, ?, ?, 'user', ?)
+            INSERT INTO users (username, password_hash, phone, email, role, invite_code, created_at)
+            VALUES (?, ?, ?, ?, 'user', ?, ?)
             """,
             (
                 username,
                 pw_hash,
                 phone or None,
                 email or None,
+                "",
                 now,
             ),
         )
         user_id = cursor.lastrowid
 
-        # 2) 初始化 API 调用额度（统一给 50 次）
-        initial_quota = 50
+        # 新用户默认获得 50 次平台免费 LLM 调用额度。
         await db.execute(
             """
             INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
             VALUES (?, 0, ?)
             """,
-            (user_id, initial_quota),
+            (user_id, DEFAULT_FREE_LLM_QUOTA),
         )
 
         await db.commit()
@@ -100,6 +99,7 @@ async def auth_login(body: dict, response: Response):
     user = await authenticate_user(username, password)
     if not user:
         return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
+    await ensure_user_api_quota(user["id"])
     token = create_session_token(user["id"], user["username"])
     set_session_cookie(response, token)
     return {"ok": True, "user_id": user["id"], "username": user["username"], "token": token}
@@ -114,6 +114,7 @@ async def auth_me(user_id: int = Depends(require_user)):
     row = await cursor.fetchone()
     if not row:
         return JSONResponse({"error": "用户不存在"}, status_code=404)
+    await ensure_user_api_quota(user_id)
     return {"user_id": row[0], "username": row[1], "created_at": row[2]}
 
 
@@ -130,6 +131,8 @@ async def auth_redeem_invite_code(body: dict, user_id: int = Depends(require_use
     
     if not invite_code:
         return JSONResponse({"error": "邀请码不能为空"}, status_code=400)
+
+    await ensure_user_api_quota(user_id)
     
     db = await get_main_db()
     
@@ -173,19 +176,19 @@ async def auth_redeem_invite_code(body: dict, user_id: int = Depends(require_use
         await db.execute(
             """
             UPDATE api_quotas
-            SET free_quota_remaining = free_quota_remaining + 50
+            SET free_quota_remaining = free_quota_remaining + ?
             WHERE user_id = ?
             """,
-            (user_id,),
+            (INVITE_CODE_BONUS_QUOTA, user_id),
         )
         
         await db.commit()
         
         # 获取更新后的额度信息
-        quota = await get_user_api_quota(user_id)
+        quota = await ensure_user_api_quota(user_id)
         return {
             "ok": True,
-            "message": "邀请码兑换成功，已获得 50 次免费 LLM 调用额度",
+            "message": f"邀请码兑换成功，已获得 {INVITE_CODE_BONUS_QUOTA} 次免费 LLM 调用额度",
             "free_quota_remaining": quota.get("free_quota_remaining", 0) if quota else 0,
         }
     except aiosqlite.IntegrityError:

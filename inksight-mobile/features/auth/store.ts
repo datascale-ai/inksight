@@ -8,7 +8,12 @@ type AuthState = {
   hydrated: boolean;
   loading: boolean;
   bootstrap: () => Promise<void>;
-  signIn: (username: string, password: string, mode?: 'login' | 'register') => Promise<void>;
+  signIn: (
+    username: string,
+    password: string,
+    mode?: 'login' | 'register',
+    options?: { phone?: string; email?: string },
+  ) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -34,10 +39,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ token: null, user: null, hydrated: true });
     }
   },
-  signIn: async (username, password, mode = 'login') => {
+  signIn: async (username, password, mode = 'login', options) => {
     set({ loading: true });
     try {
-      const result = mode === 'register' ? await register(username, password) : await login(username, password);
+      const result =
+        mode === 'register'
+          ? await register({
+              username,
+              password,
+              phone: options?.phone,
+              email: options?.email,
+            })
+          : await login(username, password);
       await setToken(result.token);
       set({
         token: result.token,

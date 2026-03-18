@@ -26,7 +26,7 @@ export function InkButton({ label, variant = 'primary', block, style, ...props }
 
 const variants = StyleSheet.create({
   primary: {
-    backgroundColor: theme.colors.ink,
+    backgroundColor: theme.colors.accent,
   },
   secondary: {
     backgroundColor: theme.colors.surface,

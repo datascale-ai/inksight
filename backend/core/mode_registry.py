@@ -32,7 +32,6 @@ class ContentContext:
     character_tones: list[str] = field(default_factory=list)
     api_key: str | None = None
     image_api_key: str | None = None
-    llm_base_url: str | None = None
 
 
 ContentFn = Callable[[ContentContext], Awaitable[dict]]
