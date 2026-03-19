@@ -299,7 +299,7 @@ function ModeSection({
             onClick={() => setCollapsed((v) => !v)}
             className="text-xs text-ink-light hover:text-ink flex items-center gap-1 transition-colors"
           >
-            {collapsed ? "展开" : "收起"}
+            {locale === "en" ? (collapsed ? "Expand" : "Collapse") : (collapsed ? "展开" : "收起")}
           </button>
         ) : null}
       </div>

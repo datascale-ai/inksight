@@ -15,7 +15,7 @@ export async function Footer() {
                 {locale === "en" ? "I" : "墨"}
               </div>
               <span className="text-base font-semibold text-ink tracking-tight">
-                InkSight
+                {locale === "en" ? "InkSight" : "墨鱼InkSight"}
               </span>
             </div>
             <p className="text-sm text-ink-light leading-relaxed">
@@ -74,7 +74,7 @@ export async function Footer() {
 
         <div className="mt-10 pt-6 border-t border-ink/10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-ink-light">
-            &copy; {new Date().getFullYear()} InkSight. Released under the MIT License.
+            &copy; {new Date().getFullYear()} {locale === "en" ? "InkSight" : "墨鱼InkSight"}. Released under the MIT License.
           </p>
           <p className="text-xs text-ink-light">
             {t(locale, "footer.tagline")}

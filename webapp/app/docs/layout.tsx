@@ -17,6 +17,7 @@ const sidebarSections = [
   {
     titleKey: "docs.section.usage",
     items: [
+      { labelKey: "docs.item.website", href: "/docs/website" },
       { labelKey: "docs.item.flash", href: "/docs/flash" },
       { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
       { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
@@ -26,6 +27,7 @@ const sidebarSections = [
   {
     titleKey: "docs.section.advanced",
     items: [
+      { labelKey: "docs.item.deploy", href: "/docs/deploy" },
       { labelKey: "docs.item.pluginDev", href: "/docs/plugin-dev" },
       { labelKey: "docs.item.apiReference", href: "/docs/api-reference" },
       { labelKey: "docs.item.faq", href: "/docs/faq" },

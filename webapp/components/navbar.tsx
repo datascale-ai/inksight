@@ -58,7 +58,7 @@ export function Navbar() {
             {locale === "en" ? "I" : "墨"}
           </div>
           <span className="text-lg font-semibold text-ink tracking-tight">
-            InkSight
+            {locale === "en" ? "InkSight" : "墨鱼InkSight"}
           </span>
         </Link>
 

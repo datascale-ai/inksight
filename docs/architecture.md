@@ -1,112 +1,160 @@
-# InkSight 系统架构文档
+# InkSight 系统架构
 
-## 系统概览
+本文档以当前仓库代码为准，说明 InkSight 的三层结构、核心渲染链路、模式系统与配置存储方式。
 
-```
-graph TD
-    User[用户环境] -->|WiFi| ESP32[ESP32-C3 终端]
-    ESP32 -->|HTTP GET / 电量 & Mac地址| Cloud[Vercel Serverless]
-    
-    subgraph Cloud Backend
-        Cloud -->|API Call| Weather[Open-Meteo API]
-        Cloud -->|API Call| LLM[DeepSeek / 阿里百炼 / 月之暗面]
-        Cloud -->|Image Processing| Renderer[Python Pillow]
-    end
-    
-    Renderer -->|生成 BMP| Cloud
-    Cloud -->|返回二进制流| ESP32
-    ESP32 -->|SPI 驱动| Screen[4.2寸 E-Ink 屏幕]
-```
+## 1. 总体结构
 
-## 固件端 (Firmware)
+InkSight 当前由三部分组成：
 
-- **开发框架:** PlatformIO (C++ / Arduino Framework)
-- **核心库:** `GxEPD2` (显示驱动), `WiFiManager` (配网), `HTTPClient` (网络)
+- **Firmware**：ESP32 固件，负责联网、拉取内容、驱动墨水屏、深度休眠
+- **Backend**：FastAPI 服务，负责配置、天气、模式内容生成、图像渲染、缓存与统计
+- **WebApp**：Next.js 应用，负责官网、文档、在线刷机、登录、设备配置与预览
 
-### 工作流状态机
+## 2. 核心数据流
 
-1. **BOOT:** 初始化 SPI，读取电池电压。
-2. **CONNECT:** 尝试连接 WiFi。若失败则开启 AP 模式等待配置。
-3. **REQUEST:** 向后端发送 GET 请求（携带电压参数）。
-4. **STREAM:** 逐字节读取 Response Body，直接写入屏幕缓冲区。
-5. **DISPLAY:** 触发全屏/局部刷新更新。
-6. **SLEEP:** 开启 Deep Sleep 定时器，切断所有外设电源，系统休眠。
+典型链路如下：
 
-### 配网流程 (Captive Portal)
+1. 设备联网后向后端请求渲染内容
+2. 后端读取设备配置、地点、时间等上下文
+3. 后端按模式决定使用静态内容、外部数据、规则计算或大模型生成
+4. 渲染器把结果绘制为适合电子墨水屏的黑白位图
+5. 设备接收图像并刷新显示
 
-1. 首次启动或长按 BOOT 按钮 2 秒以上，进入配网模式。
-2. ESP32 开启 AP 热点 `InkSight-XXXXX`。
-3. 用户连接后自动弹出配置页面。
-4. 选择 WiFi 并输入密码，配置完成后设备自动连接。
+除了设备请求，WebApp 也会通过 API 完成：
 
-## 后端服务 (Backend)
+- 设备配置保存
+- 模式预览
+- 固件版本查询
+- 设备状态与统计展示
 
-- **部署平台:** Vercel (Python Runtime)
-- **框架:** FastAPI
-- **核心依赖:** Pillow (图像渲染), httpx (HTTP 客户端), openai (LLM SDK)
+## 3. 后端架构
 
-## 前端形态 (Frontend)
+后端入口位于：
 
-InkSight 当前统一采用 `webapp/`（Next.js）作为前端形态，负责：
+- `backend/api/index.py`
 
-- 官网展示与文档导航
+它同时负责：
+
+- FastAPI API
+- 兼容静态页面
+- 生命周期初始化
+
+### 核心渲染流程
+
+设备调用 `/api/render` 或 Web 端调用 `/api/preview` 时，主要流程是：
+
+1. `api/index.py` 接收请求
+2. `core/cache.py` 检查缓存
+3. 若未命中，则进入 `core/pipeline.py:generate_and_render()`
+4. `core/mode_registry.py` 判断当前模式属于内置模式还是 JSON 模式
+5. 内容生成完成后，由 `core/renderer.py` 或 `core/json_renderer.py` 输出图像
+
+### 模式系统
+
+当前内置模式已经统一迁移到 JSON 模式系统，内置定义位于：
+
+- `backend/core/modes/builtin/`
+
+同时也支持：
+
+- `backend/core/modes/custom/` 中的自定义 JSON 模式
+
+当前仓库中内置 **24 个 JSON 模式**。
+
+### 内容来源
+
+模式内容可以来自多种来源：
+
+- 静态内容
+- 规则计算内容
+- 外部数据（如天气）
+- 文本大模型
+- 图像模型
+- 组合型内容
+
+天气相关上下文主要由：
+
+- `backend/core/context.py`
+
+负责获取与整理。
+
+### 配置与缓存
+
+当前后端使用两个 SQLite 数据库：
+
+- `inksight.db`：设备配置、配置历史、设备状态
+- `cache.db`：渲染缓存
+
+缓存 TTL 采用与刷新频率、模式数量相关的计算方式，用来减少重复生成带来的延迟和成本。
+
+## 4. WebApp 架构
+
+当前主前端位于：
+
+- `webapp/`
+
+主要职责：
+
+- 官网展示
+- 文档中心
 - Web 在线刷机
-- 设备在线配置（`/config`）
+- 登录与个人信息
+- 设备配置页
+- 个人信息页
+- 在线预览
 
-在线刷机 API 由后端统一提供（`/api/firmware/`*）。`webapp` 支持两种接入方式：
+当前产品结构中：
 
-1. 浏览器直连后端：配置 `NEXT_PUBLIC_FIRMWARE_API_BASE`。
-2. 同域代理：使用 Next.js API Route 转发到 `INKSIGHT_BACKEND_API_BASE`。
+- 设备配置页管理设备行为与模式配置
+- 个人信息页管理模型、API Key、额度与访问模式
 
-### 图像渲染管线 (Rendering Pipeline)
+如果单看配置流，这是一个很重要的职责划分。
 
-1. **Input:** 接收 HTTP 请求，解析参数（电压、MAC 地址）。
-2. **Context:** 并行获取外部数据（时间、天气、电池电量）。
-3. **Intelligence:** 根据内容模式构造 Prompt，调用 LLM API 获取文本。
-4. **Rasterization (核心):**
-  - 创建 400x300 画布 (Mode '1', 1-bit 黑白)。
-  - 加载字体文件（Noto Serif）。
-  - 执行 Text Wrap 算法计算多行布局。
-  - 绘制 UI 元素（线条、图标、电量指示）。
-5. **Output:** 将 Image 对象转换为 BMP 字节流返回。
+## 5. 固件架构
 
-### 内容模式概况
+固件位于：
 
-| 名称 | 说明 |
-| ---- | ---- |
-| DAILY（每日推荐） | 语录、书籍推荐、冷知识、节气 |
-| WEATHER（天气） | 实时天气和未来趋势看板 |
-| POETRY（每日诗词） | 精选古典诗词，感受文字之美 |
-| ARTWALL（AI 画廊） | 黑白版画风格的 AI 艺术作品 |
-| ALMANAC（老黄历） | 农历、节气、宜忌信息 |
-| BRIEFING（AI 简报） | HN/PH 热榜 + AI 行业洞察 |
-| 更多模式 | STOIC（斯多葛哲学）、RECIPE（每日食谱）、COUNTDOWN（倒计时）、MEMO（便签）、HABIT（打卡）、FITNESS（健身）、LETTER（慢信）…… 更多模式，由你定义！ |
+- `firmware/`
 
+主要模块包括：
 
-### 智能缓存系统
+- `src/main.cpp`：主循环、按键逻辑、睡眠与唤醒
+- `src/network.cpp`：Wi-Fi、HTTP 请求、时间同步
+- `src/display.cpp`：墨水屏显示封装
+- `src/portal.cpp`：配网 Portal
+- `src/storage.cpp`：设备本地状态持久化
 
-- **批量预生成:** 首次请求时并行生成所有用户选择的模式。
-- **智能 TTL:** Cache 过期时间 = 刷新间隔 x 模式数量 x 1.1。
-- **Cache Hit 优化:** 缓存命中时响应时间 < 1 秒。
+当前仓库内置多个屏幕尺寸与板型 profile，默认环境是：
 
-### 配置管理
+- `epd_42_c3`
 
-- 基于 SQLite 数据库，按 MAC 地址存储用户配置。
-- 自动保存最近 5 次配置历史，支持查看、编辑、激活。
-- 配置项包括：昵称、内容模式、刷新策略、语言偏好、内容调性、地理位置、LLM 提供商/模型。
+## 6. 外部依赖
 
-## 数据交互协议
+当前常见外部依赖包括：
 
-设备与后端之间通过 HTTP 通信，详见 [API 文档](api.md)。
+- 天气接口
+- 文本大模型接口
+- 图像模型接口
 
-## 性能指标
+LLM 调用由 OpenAI 兼容方式统一封装，图像模式则根据配置使用对应服务。
 
+## 7. 为什么会有缓存与预生成
 
-| 指标              | 数值                |
-| --------------- | ----------------- |
-| Cache Hit 响应时间  | < 1 秒             |
-| Cache Miss 响应时间 | 15-20 秒 (多模式并行生成) |
-| Cache Hit 率     | > 95%             |
-| 设备唤醒到显示完成       | < 15 秒 (取决于网络)    |
+InkSight 的内容生成不总是即时且廉价的，尤其在以下场景：
 
+- 需要访问外部天气数据
+- 需要调用大模型
+- 需要渲染多个模式预览
 
+因此系统使用缓存与批量预生成来降低：
+
+- 设备等待时间
+- API 调用次数
+- 重复渲染成本
+
+## 8. 相关文档
+
+- 硬件：[`hardware.md`](hardware.md)
+- 刷机：[`flash.md`](flash.md)
+- 配置：[`config.md`](config.md)
+- API：[`api.md`](api.md)

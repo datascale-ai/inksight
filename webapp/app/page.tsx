@@ -187,13 +187,13 @@ const specs = [
   },
   {
     icon: Monitor,
-    label: '4.2" E-Paper',
-    desc: "400x300 分辨率，类纸质感，不发光",
+    label: "4.2寸墨水屏",
+    desc: "类纸质感，不发光，适合桌面常驻显示",
   },
   {
     icon: Battery,
-    label: "续航 6 个月",
-    desc: "LiFePO4 电池 + Deep Sleep 模式",
+    label: "锂电池续航",
+    desc: "LiFePO4 锂电池 + Deep Sleep 模式",
   },
   {
     icon: DollarSign,
@@ -243,8 +243,8 @@ export default async function Home() {
   const specsLocalized = isEn
     ? [
         { icon: Cpu, label: "ESP32-C3", desc: "RISC-V architecture, WiFi, low power" },
-        { icon: Monitor, label: '4.2" E-Paper', desc: "400x300 resolution, paper-like and glare-free" },
-        { icon: Battery, label: "6-Month Battery", desc: "LiFePO4 battery + Deep Sleep mode" },
+        { icon: Monitor, label: "4.2-inch E-Paper", desc: "Paper-like, glare-free, and designed for calm desk display" },
+        { icon: Battery, label: "Lithium Battery", desc: "LiFePO4 lithium battery + Deep Sleep mode" },
         { icon: DollarSign, label: "BOM < CNY 220", desc: "Open hardware for everyone" },
       ]
     : specs;
@@ -261,7 +261,7 @@ export default async function Home() {
                 Open Source &middot; ESP32-C3 &middot; E-Ink
               </p>
               <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-ink leading-tight mb-6">
-                {isEn ? "InkSight E-Ink" : "InkSight 墨水屏"}
+                {isEn ? "InkSight" : "墨鱼AI墨水屏"}
                 <br />
                 <span className="text-ink-muted text-3xl md:text-4xl lg:text-5xl">
                   {isEn ? "Your Multi-Scenario AI Companion on Desk" : "桌面上的多场景AI搭档"}
@@ -269,8 +269,8 @@ export default async function Home() {
               </h1>
               <p className="text-lg text-ink-light leading-relaxed mb-8 max-w-lg">
                 {isEn
-                  ? "A minimalist smart E-Ink desktop device. InkSight uses LLMs to generate warm, slow information for your daily desk flow."
-                  : "一款极简主义的智能电子墨水屏桌面摆件，通过 LLM 生成有温度的「慢信息」。数十种内容模式，从每日推荐到 AI 简报，为你的桌面带来有温度的智能陪伴。"}
+                  ? "InkSight is an AI e-ink desk companion with one website for flashing, configuration, preview, and discovering new modes."
+                  : "墨鱼AI墨水屏是一款支持在线刷机、设备配置、无设备预览与模式广场的 AI 电子墨水屏桌面伴侣。"}
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link href={withLocalePath(locale, "/flash")}>
@@ -290,7 +290,7 @@ export default async function Home() {
               <div className="relative w-full max-w-md aspect-[4/3] rounded-sm border border-ink/10 overflow-hidden">
                 <Image
                   src="/images/intro.jpg"
-                  alt={isEn ? "InkSight product preview" : "InkSight 展示图"}
+                  alt={isEn ? "InkSight product preview" : "墨鱼AI墨水屏展示图"}
                   fill
                   className="object-cover"
                   priority
@@ -318,17 +318,17 @@ export default async function Home() {
               {
                 icon: Brain,
                 title: isEn ? "AI Powered" : "AI 驱动",
-                desc: isEn ? "Connect DeepSeek / Qwen / Kimi to generate contextual content in real time." : "接入 DeepSeek / 通义千问 / Kimi，根据天气、时间、节气实时生成个性化内容。",
+                desc: isEn ? "Connect DeepSeek / Qwen / Kimi to generate contextual content in real time." : "接入 DeepSeek / 通义千问 / Kimi，根据天气、时间与场景生成个性化内容。",
               },
               {
                 icon: Layers,
                 title: isEn ? "E-Ink Experience" : "电子墨水",
-                desc: isEn ? '4.2" E-Paper display with paper-like feeling, glare-free and distraction-free.' : "4.2 英寸 E-Paper 显示屏，类纸质感，不发光，专注不打扰，单次充电续航 6 个月。",
+                desc: isEn ? "4.2-inch e-paper display with a paper-like, glare-free reading experience." : "4.2寸 E-Paper 显示屏，类纸质感，不发光，专注不打扰。",
               },
               {
                 icon: LayoutGrid,
-                title: isEn ? "Highly Extensible" : "无限扩展",
-                desc: isEn ? "Multiple content modes and refresh strategies, from philosophy to market snapshots." : "支持 10 种内容模式和 4 种刷新策略，从哲学语录到股票行情，满足一切需求。",
+                title: isEn ? "Mode Ecosystem" : "模式生态",
+                desc: isEn ? "24 built-in modes, custom creation, and a community mode plaza for sharing ideas." : "24 个内置模式，支持自定义创建，也支持在模式广场发现和分享创意。",
               },
             ].map((feature) => (
               <Card key={feature.title} className="p-8 text-center group hover:border-ink/20 transition-colors">
@@ -485,7 +485,7 @@ export default async function Home() {
         <div className="mx-auto max-w-6xl px-6 py-20 text-center">
           <Sparkles size={28} className="mx-auto text-ink-light mb-4" />
           <h2 className="font-serif text-3xl font-bold text-ink mb-4">
-            {isEn ? "Start Your InkSight Journey" : "开始你的 InkSight 之旅"}
+            {isEn ? "Start Your InkSight Journey" : "开始体验墨鱼AI墨水屏"}
           </h2>
           <p className="text-ink-light mb-8 max-w-md mx-auto">
             {isEn ? "No coding required. Flash firmware directly in browser with an ESP32 and E-Ink panel." : "无需编程基础，通过浏览器即可完成固件烧录。"}

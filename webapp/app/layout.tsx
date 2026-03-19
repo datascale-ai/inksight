@@ -18,9 +18,9 @@ const notoSerifSc = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  title: "InkSight",
-  description: "InkSight E-Ink AI desktop companion.",
-  keywords: ["InkSight", "墨见", "电子墨水屏", "E-Ink", "ESP32", "LLM", "桌面摆件"],
+  title: "墨鱼AI墨水屏 | InkSight",
+  description: "墨鱼AI墨水屏（InkSight），一款支持在线刷机、模式配置与模式广场的 AI 电子墨水屏桌面伴侣。",
+  keywords: ["InkSight", "墨鱼AI墨水屏", "墨鱼", "电子墨水屏", "E-Ink", "ESP32", "LLM", "桌面摆件"],
   manifest: "/manifest.json",
   other: {
     "apple-mobile-web-app-capable": "yes",

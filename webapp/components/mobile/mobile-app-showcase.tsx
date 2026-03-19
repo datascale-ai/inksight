@@ -206,17 +206,17 @@ const appTabs: TabDefinition[] = [
     ],
     screens: [
       { name: "DeviceListScreen", detail: { zh: "多设备列表与在线状态。", en: "A list of devices with online status." }, api: ["GET /user/devices", "GET /device/{mac}/state"] },
-      { name: "DeviceDetailScreen", detail: { zh: "仪表盘聚合电量、模式和内容预览。", en: "A dashboard with battery, mode, and current content preview." }, api: ["GET /device/{mac}/state", "GET /config/{mac}"] },
+      { name: "DeviceDetailScreen", detail: { zh: "仪表盘聚合锂电池电量、模式和内容预览。", en: "A dashboard with lithium battery level, mode, and current content preview." }, api: ["GET /device/{mac}/state", "GET /config/{mac}"] },
       { name: "ProvisioningScreen", detail: { zh: "蓝牙 4 步向导完成认领与 Wi-Fi 配置。", en: "A four-step BLE wizard for claiming and Wi-Fi setup." }, api: ["POST /device/{mac}/claim-token"] },
     ],
     interactions: [
-      { zh: "状态卡片优先显示电池、在线、当前模式，降低认知切换。", en: "Status cards foreground battery, connectivity, and active mode for quick scanning." },
+      { zh: "状态卡片优先显示锂电池、在线、当前模式，降低认知切换。", en: "Status cards foreground lithium battery level, connectivity, and active mode for quick scanning." },
       { zh: "BLE 配网提供 QR 降级路径，避免固件尚未支持时卡死。", en: "BLE provisioning includes a QR fallback path for firmware gaps." },
       { zh: "固件和成员管理保持列表式信息架构，贴近 iOS 设置层级。", en: "Firmware and member management keep a settings-style list hierarchy." },
     ],
     apis: [
       { method: "GET", path: "/user/devices", note: { zh: "读取当前用户全部设备。", en: "Load all devices for the current user." }, isNew: true },
-      { method: "GET", path: "/device/{mac}/state", note: { zh: "设备状态、电池与模式概览。", en: "Device state with battery and mode metadata." } },
+      { method: "GET", path: "/device/{mac}/state", note: { zh: "设备状态、锂电池与模式概览。", en: "Device state with lithium battery and mode metadata." } },
       { method: "GET", path: "/firmware/releases/latest", note: { zh: "查询最新固件版本。", en: "Fetch the latest firmware release." } },
     ],
   },
@@ -659,7 +659,7 @@ function DevicePhone({ locale }: { locale: Locale }) {
       <div className="grid grid-cols-3 rounded-[22px] border border-black/5 bg-white px-4 py-5 text-center shadow-[0_8px_18px_-24px_rgba(26,26,26,0.5)]">
         <div>
           <p className="text-2xl font-light text-[#1A1A1A]">85%</p>
-          <p className="mt-1 text-[11px] text-[#8E8E93]">{locale === "en" ? "Battery" : "电池"}</p>
+          <p className="mt-1 text-[11px] text-[#8E8E93]">{locale === "en" ? "Lithium Battery" : "锂电池"}</p>
         </div>
         <div className="border-x border-[#E5E5EA]">
           <p className="text-2xl font-light text-[#34C759]">●</p>
