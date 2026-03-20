@@ -163,45 +163,21 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
     image_model = (body.get("image_model") or "").strip()
     image_api_key = (body.get("image_api_key") or "").strip()
 
-    # 表单校验：
-    # - preset：provider/model/api_key 必填，base_url 可空
-    # - custom_openai：model/api_key/base_url 必填，provider 忽略（统一存为 openai_compat）
-    # 图像配置保持原样：必填（image_provider/image_model/image_api_key）
     allowed_modes = {"preset", "custom_openai"}
     if llm_access_mode not in allowed_modes:
         return JSONResponse({"error": f"llm_access_mode 无效：{llm_access_mode}"}, status_code=400)
 
-    missing: list[str] = []
-    if llm_access_mode == "preset":
-        if not provider:
-            missing.append("provider")
-        if not model:
-            missing.append("model")
-        if not api_key:
-            missing.append("api_key")
-        # base_url 可为空
-    else:
-        # custom_openai
-        if not model:
-            missing.append("model")
-        if not api_key:
-            missing.append("api_key")
-        if not base_url:
-            missing.append("base_url")
+    if llm_access_mode == "custom_openai":
         provider = "openai_compat"
+    elif not provider:
+        provider = "deepseek"
 
-    if not image_provider:
-        missing.append("image_provider")
-    if not image_model:
-        missing.append("image_model")
-    if not image_api_key:
-        missing.append("image_api_key")
-    if missing:
-        extra = "（base_url 可为空）" if llm_access_mode == "preset" else ""
-        return JSONResponse({"error": f"缺少必填字段：{', '.join(missing)}{extra}"}, status_code=400)
-
-    # minimal URL sanity check for custom base_url
-    if llm_access_mode == "custom_openai" and not (base_url.startswith("http://") or base_url.startswith("https://")):
+    # 允许部分保存；仅在用户填写了 custom_openai 的 base_url 时做最小 URL 校验。
+    if (
+        llm_access_mode == "custom_openai"
+        and base_url
+        and not (base_url.startswith("http://") or base_url.startswith("https://"))
+    ):
         return JSONResponse({"error": "base_url 必须以 http:// 或 https:// 开头"}, status_code=400)
     
     ok = await save_user_llm_config(

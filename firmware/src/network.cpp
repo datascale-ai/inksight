@@ -259,6 +259,117 @@ bool ensureDeviceToken() {
     return false;
 }
 
+bool fetchFocusListeningFlag(bool *outEnabled) {
+    if (!outEnabled) return false;
+    *outEnabled = false;
+    if (WiFi.status() != WL_CONNECTED) return false;
+    if (!ensureDeviceToken()) return false;
+
+    String mac = WiFi.macAddress();
+    String url = cfgServer + "/api/config/" + mac;
+    bool useSSL = cfgServer.startsWith("https://");
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.setTimeout(HTTP_TIMEOUT);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
+
+        int code = http.GET();
+        if (code != 200) {
+            http.end();
+            if (!recoverDeviceTokenIfUnauthorized(code)) return false;
+            continue;
+        }
+
+        String body = http.getString();
+        http.end();
+        bool enabled =
+            body.indexOf("\"is_focus_listening\":true") >= 0 ||
+            body.indexOf("\"is_focus_listening\": true") >= 0 ||
+            body.indexOf("\"focus_listening\":1") >= 0 ||
+            body.indexOf("\"focus_listening\": 1") >= 0;
+        *outEnabled = enabled;
+        Serial.printf("[FOCUS] is_focus_listening=%s\n", enabled ? "true" : "false");
+        return true;
+    }
+    return false;
+}
+
+bool fetchFocusAlertBMP() {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    if (!ensureDeviceToken()) return false;
+    String mac = WiFi.macAddress();
+    String url = cfgServer + "/api/device/" + mac + "/alert-bmp"
+               + "?w=" + String(W) + "&h=" + String(H);
+    bool useSSL = cfgServer.startsWith("https://");
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.setTimeout(HTTP_TIMEOUT);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
+
+        int code = http.GET();
+        Serial.printf("[FOCUS] alert-bmp HTTP code: %d\n", code);
+        if (code == 204) {
+            http.end();
+            return false;
+        }
+        if (code != 200) {
+            http.end();
+            if (!recoverDeviceTokenIfUnauthorized(code)) return false;
+            continue;
+        }
+
+        WiFiClient *stream = http.getStreamPtr();
+        uint8_t fileHeader[14];
+        if (!readExact(stream, fileHeader, 14)) {
+            http.end();
+            return false;
+        }
+        uint32_t pixelOffset = fileHeader[10]
+                             | ((uint32_t)fileHeader[11] << 8)
+                             | ((uint32_t)fileHeader[12] << 16)
+                             | ((uint32_t)fileHeader[13] << 24);
+        int toSkip = (int)pixelOffset - 14;
+        while (toSkip > 0 && stream->connected()) {
+            if (stream->available()) { stream->read(); toSkip--; }
+        }
+
+        uint8_t rowBuf[ROW_STRIDE];
+        for (int bmpY = 0; bmpY < H; bmpY++) {
+            if (!readExact(stream, rowBuf, ROW_STRIDE)) {
+                http.end();
+                return false;
+            }
+            int dispY = H - 1 - bmpY;
+            memcpy(imgBuf + dispY * ROW_BYTES, rowBuf, ROW_BYTES);
+        }
+        http.end();
+        return true;
+    }
+    return false;
+}
+
 // ── Fetch BMP from backend ──────────────────────────────────
 
 bool fetchBMP(bool nextMode, bool *isFallback) {

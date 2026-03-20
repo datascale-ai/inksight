@@ -85,6 +85,10 @@ class ConfigRequest(BaseModel):
         default_factory=dict,
         description="按模式覆盖配置，key 为 mode_id，value 可包含 city/llm_provider/llm_model 及其他模式设置项",
     )
+    is_focus_listening: bool = Field(
+        default=False,
+        description="是否开启专注监听（Focus Mode）",
+    )
 
     @field_validator("mac")
     @classmethod
@@ -100,7 +104,8 @@ class ConfigRequest(BaseModel):
         cleaned = []
         for mode in v:
             m = mode.upper().strip()
-            if m not in supported:
+            # 允许 CUSTOM_* / MY_* 透传，避免误判导致 422/500
+            if not (m.startswith("CUSTOM_") or m.startswith("MY_") or m in supported):
                 raise ValueError(f"不支持的模式: {mode}，可选: {supported}")
             cleaned.append(m)
         return cleaned

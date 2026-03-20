@@ -1,5 +1,5 @@
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 
 from api.index import app
@@ -7,7 +7,14 @@ from api.index import app
 
 @pytest.mark.asyncio
 async def test_location_search_api_returns_candidates():
-    transport = ASGITransport(app=app)
+    # httpx compatibility wrapper for different versions
+    try:
+        from httpx import ASGITransport  # type: ignore
+
+        transport = ASGITransport(app=app)
+        make_client = lambda **kw: AsyncClient(transport=transport, base_url="http://test", **kw)
+    except Exception:
+        make_client = lambda **kw: AsyncClient(app=app, base_url="http://test", **kw)
     with patch("api.routes.locations.search_locations", new_callable=AsyncMock) as mock_search:
         mock_search.return_value = [
             {
@@ -20,7 +27,7 @@ async def test_location_search_api_returns_candidates():
                 "timezone": "Asia/Shanghai",
             }
         ]
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with make_client() as client:
             resp = await client.get("/api/locations/search", params={"q": "平阳", "scope": "global"})
 
     assert resp.status_code == 200

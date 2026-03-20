@@ -4,6 +4,8 @@
 
 static Preferences prefs;
 static const char *LIVE_BOOT_MARKER = __DATE__ " " __TIME__;
+static const char *KEY_LIVE_BOOT_MARKER_NEW = "live_boot_mk";     // <= 15 chars
+static const char *KEY_LIVE_BOOT_MARKER_OLD = "live_boot_marker"; // old invalid key, read-compat only
 
 // Config version — bump when NVS schema changes
 static const int CONFIG_VERSION = 1;
@@ -76,14 +78,17 @@ void resetRetryCount() {
 
 bool isFirstInstallLiveModePending() {
     prefs.begin("inksight", true);
-    String marker = prefs.getString("live_boot_marker", "");
+    String marker = prefs.getString(KEY_LIVE_BOOT_MARKER_NEW, "");
+    if (marker.length() == 0) {
+        marker = prefs.getString(KEY_LIVE_BOOT_MARKER_OLD, "");
+    }
     prefs.end();
     return marker != String(LIVE_BOOT_MARKER);
 }
 
 void markFirstInstallLiveModeDone() {
     prefs.begin("inksight", false);
-    prefs.putString("live_boot_marker", LIVE_BOOT_MARKER);
+    prefs.putString(KEY_LIVE_BOOT_MARKER_NEW, LIVE_BOOT_MARKER);
     prefs.end();
 }
 

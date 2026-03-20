@@ -46,6 +46,7 @@ struct DeviceContext {
 };
 
 static DeviceContext ctx;
+static bool focusListening = false;
 
 // Content dedup — skip display refresh when content unchanged
 static uint32_t lastContentChecksum = 0;
@@ -168,6 +169,14 @@ void setup() {
         return;
     }
 
+    // Best-effort fetch focus flag from backend
+    bool focusFlag = false;
+    if (fetchFocusListeningFlag(&focusFlag)) {
+        focusListening = focusFlag;
+    } else {
+        focusListening = false;
+    }
+
     Serial.println("Fetching image...");
     ledFeedback("downloading");
     bool gotFallback = false;
@@ -203,8 +212,12 @@ void setup() {
         Serial.println("[LIVE] First install: default to active mode");
     } else {
         postRuntimeMode("interval");
-        WiFi.disconnect(true);
-        WiFi.mode(WIFI_OFF);
+        if (focusListening) {
+            Serial.println("[FOCUS] Focus listening enabled, keeping WiFi connected in interval mode");
+        } else {
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+        }
     }
 
     ctx.state = DeviceState::DISPLAYING;
@@ -267,7 +280,7 @@ void loop() {
         ctx.lastClockTick += 1000UL;
         timeChanged = true;
     }
-    if (timeChanged && cfgSleepMin > 180) {
+    if (timeChanged && cfgSleepMin > 180 && !focusListening) {
         int currentPeriod = currentPeriodIndex();
         if (currentPeriod != lastRenderedPeriod) {
             updateTimeDisplay();
@@ -297,12 +310,53 @@ void loop() {
         postHeartbeat();
     }
 
+    // Focus Mode: 10s poll alert-bmp and show full-screen alert for 30s
+    static unsigned long lastAlertPollAt = 0;
+    static bool alertVisible = false;
+    static unsigned long alertShownAt = 0;
+    static uint8_t alertBackupBuf[IMG_BUF_LEN];
+    static bool hasAlertBackup = false;
+
+    if (focusListening) {
+        unsigned long nowMs = millis();
+        if (!alertVisible) {
+            const unsigned long ALERT_INTERVAL_MS = 10000UL;
+            if (lastAlertPollAt == 0 || nowMs - lastAlertPollAt >= ALERT_INTERVAL_MS) {
+                lastAlertPollAt = nowMs;
+                memcpy(alertBackupBuf, imgBuf, IMG_BUF_LEN);
+                hasAlertBackup = true;
+                if (fetchFocusAlertBMP()) {
+                    epdDisplayFast(imgBuf);
+                    alertVisible = true;
+                    alertShownAt = nowMs;
+                } else {
+                    if (hasAlertBackup) memcpy(imgBuf, alertBackupBuf, IMG_BUF_LEN);
+                    hasAlertBackup = false;
+                }
+            }
+        } else {
+            const unsigned long ALERT_DISPLAY_MS = 30000UL;
+            if (nowMs - alertShownAt >= ALERT_DISPLAY_MS) {
+                if (hasAlertBackup) {
+                    memcpy(imgBuf, alertBackupBuf, IMG_BUF_LEN);
+                    epdDisplayFast(imgBuf);
+                }
+                hasAlertBackup = false;
+                alertVisible = false;
+            }
+        }
+    }
+
     delay(50);
 }
 
 // ── Deep sleep helper ───────────────────────────────────────
 
 static void enterDeepSleep(int minutes) {
+    if (focusListening) {
+        Serial.println("[FOCUS] Focus listening enabled, skipping deep sleep");
+        return;
+    }
     epdSleep();
     Serial.printf("Deep sleep for %d min (~%duA)\n", minutes, 5);
     Serial.flush();
@@ -365,6 +419,12 @@ static void handleFailure(const char *reason) {
     } else {
         Serial.println("Max retries reached, entering deep sleep");
         resetRetryCount();
+        if (focusListening) {
+            Serial.println("[FOCUS] Focus listening enabled, not entering deep sleep");
+            ctx.state = DeviceState::DISPLAYING;
+            ctx.setupDoneAt = millis();
+            return;
+        }
         esp_sleep_enable_timer_wakeup((uint64_t)cfgSleepMin * 60ULL * 1000000ULL);
         esp_deep_sleep_start();
     }

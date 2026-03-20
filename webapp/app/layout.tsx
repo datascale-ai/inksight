@@ -17,7 +17,7 @@ const notoSerifSc = Noto_Serif_SC({
   variable: "--font-noto-serif-sc",
 });
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = {
   title: "墨鱼AI墨水屏 | InkSight",
   description: "墨鱼AI墨水屏（InkSight），一款支持在线刷机、模式配置与模式广场的 AI 电子墨水屏桌面伴侣。",
   keywords: ["InkSight", "墨鱼AI墨水屏", "墨鱼", "电子墨水屏", "E-Ink", "ESP32", "LLM", "桌面摆件"],
@@ -29,22 +29,25 @@ export const metadata: Metadata = {
   },
 };
 
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  return {
+    ...baseMetadata,
+    title: t(locale, "meta.title"),
+    description: t(locale, "meta.description"),
+  };
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
-  const title = t(locale, "meta.title");
-  const description = t(locale, "meta.description");
   const lang = locale === "en" ? "en-US" : "zh-CN";
 
   return (
     <html lang={lang}>
-      <head>
-        <title>{title}</title>
-        <meta name="description" content={description} />
-      </head>
       <body className={`${inter.variable} ${notoSerifSc.variable} antialiased`}>
         <Navbar />
         <main className="min-h-screen">{children}</main>

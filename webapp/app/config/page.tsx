@@ -9,9 +9,9 @@ import { ModeSelector } from "@/components/config/mode-selector";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Settings,
   Sliders,
@@ -187,6 +187,8 @@ interface DeviceConfig {
   memo_text?: string;
   mode_overrides?: Record<string, ModeOverride>;
   modeOverrides?: Record<string, ModeOverride>;
+  is_focus_listening?: boolean;
+  focus_listening?: number;
 }
 
 interface ModeOverride {
@@ -556,6 +558,10 @@ function ConfigPageInner() {
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("unknown");
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
+  const [isFocusListening, setIsFocusListening] = useState(false);
+  const [focusToggleLoading, setFocusToggleLoading] = useState(false);
+  const [focusAlertToken, setFocusAlertToken] = useState<string>("");
+  const [showFocusTokenModal, setShowFocusTokenModal] = useState(false);
 
   const [customDesc, setCustomDesc] = useState("");
   const [customModeName, setCustomModeName] = useState("");
@@ -712,6 +718,7 @@ function ConfigPageInner() {
         if (cfg.characterTones || cfg.character_tones) setCharacterTones((cfg.characterTones || cfg.character_tones) as string[]);
         if (cfg.mode_overrides) setModeOverrides(cfg.mode_overrides);
         else if (cfg.modeOverrides) setModeOverrides(cfg.modeOverrides);
+        setIsFocusListening(Boolean(cfg.is_focus_listening ?? Number(cfg.focus_listening || 0) === 1));
         const loadedOverrides = ((cfg.mode_overrides || cfg.modeOverrides || {}) as Record<string, ModeOverride>);
         const memoFromOverride = loadedOverrides?.MEMO?.memo_text;
         if (typeof memoFromOverride === "string" && memoFromOverride.trim()) {
@@ -894,6 +901,7 @@ function ConfigPageInner() {
         characterTones: characterTones,
         modeOverrides: normalizedModeOverrides,
         memoText: memoText,
+        is_focus_listening: isFocusListening,
       };
       const res = await fetch("/api/config", {
         method: "POST",
@@ -927,6 +935,38 @@ function ConfigPageInner() {
       setSaving(false);
     }
   };
+
+  const handleToggleFocusListening = useCallback(async () => {
+    if (!mac) return;
+    const next = !isFocusListening;
+    setFocusToggleLoading(true);
+    try {
+      const res = await fetch(
+        `/api/config/${encodeURIComponent(mac)}/focus-listening?enabled=${next}`,
+        { method: "PATCH", headers: authHeaders() },
+      );
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        console.error("[FOCUS] Toggle failed:", res.status, errorText);
+        throw new Error("focus-toggle-failed");
+      }
+      const data = (await res.json().catch(() => ({}))) as { alert_token?: string | null };
+      setIsFocusListening(next);
+      if (next && data?.alert_token) {
+        setFocusAlertToken(data.alert_token);
+        setShowFocusTokenModal(true);
+      }
+      showToast(
+        next ? "Focus 专注模式就绪，OpenCLAW 守护中" : "专注监听已关闭，设备将按原计划轮播内容",
+        "success",
+      );
+    } catch (err) {
+      console.error("[FOCUS] Toggle error:", err);
+      showToast("切换专注监听失败，请稍后重试", "error");
+    } finally {
+      setFocusToggleLoading(false);
+    }
+  }, [authHeaders, isFocusListening, mac, showToast]);
 
   const buildPreviewParams = useCallback((mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
     const m = mode || previewMode;
@@ -1777,6 +1817,9 @@ function ConfigPageInner() {
             isEn={isEn}
             localeConfigPath={withLocalePath(locale, "/config")}
             tr={tr}
+            isFocusListening={isFocusListening}
+            onToggleFocus={handleToggleFocusListening}
+            focusToggleLoading={focusToggleLoading}
           />
         ) : (
           <div className="space-y-4">
@@ -2543,6 +2586,68 @@ function ConfigPageInner() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={showFocusTokenModal}
+        onClose={() => {
+          setShowFocusTokenModal(false);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader
+            onClose={() => {
+              setShowFocusTokenModal(false);
+            }}
+          >
+            <div>
+              <DialogTitle>{tr("设备告警 Token 已生成", "Alert Token Generated")}</DialogTitle>
+              <DialogDescription>
+                {tr(
+                  "将下面的 Token 配置到你的 OpenCLAW（或自建 Agent）里，用于向该设备发送紧急告警。",
+                  "Copy this token into your OpenCLAW (or custom agent) to send urgent alerts to this device.",
+                )}
+              </DialogDescription>
+              <div className="mt-2 text-[11px] text-ink-light">
+                {tr(
+                  "提示：开启专注监听后，设备端通常需要重启/重新进入启动流程，才会开始 10 秒轮询告警并在屏幕显示内容。",
+                  "Tip: after enabling Focus Listening, the device usually needs a restart / re-enter startup flow before it starts 10s alert polling and displaying messages.",
+                )}
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-sm border border-ink/20 bg-white px-3 py-2 text-xs font-mono break-all">
+              {focusAlertToken || tr("（空）", "(empty)")}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(focusAlertToken);
+                    showToast(tr("已复制 Token", "Token copied"), "success");
+                  } catch {
+                    showToast(tr("复制失败，请手动选中复制", "Copy failed, please copy manually"), "error");
+                  }
+                }}
+                disabled={!focusAlertToken}
+              >
+                {tr("复制 Token", "Copy Token")}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setShowFocusTokenModal(false);
+                }}
+              >
+                {tr("关闭", "Close")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Mobile save button */}
       {mac && (

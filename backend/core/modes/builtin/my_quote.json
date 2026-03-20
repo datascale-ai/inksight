@@ -1,0 +1,75 @@
+{
+  "mode_id": "MY_QUOTE",
+  "display_name": "自定义语录",
+  "icon": "quote",
+  "cacheable": false,
+  "description": "随机生成一条有力量的语录，或使用你输入的语录内容",
+
+  "content": {
+    "type": "llm_json",
+    "prompt_template": "你是一位擅长写短句的格言作者。请输出一句简短有力量的语录（中英文均可），并给出作者署名（可虚构但要像真实作者名）。\n用 JSON 输出：\n{{\"quote\": \"语录（60字以内）\", \"author\": \"作者（20字以内，可留空）\"}}\n要求：\n1. 不要鸡汤泛泛之谈，要具体、克制、有锋芒\n2. 避免政治敏感与人身攻击\n3. 只输出 JSON，不要其他文字\n环境：{context}",
+    "output_schema": {
+      "quote": { "type": "string", "default": "把今天过好，就是对未来最好的投资。" },
+      "author": { "type": "string", "default": "InkSight" }
+    },
+    "temperature": 0.85,
+    "fallback": {
+      "quote": "把今天过好，就是对未来最好的投资。",
+      "author": "InkSight"
+    },
+    "fallback_pool": [
+      { "quote": "把今天过好，就是对未来最好的投资。", "author": "InkSight" },
+      { "quote": "你不需要更快，你需要更稳。", "author": "InkSight" },
+      { "quote": "别等灵感，先把第一步做完。", "author": "InkSight" },
+      { "quote": "把难事拆小，把小事做完。", "author": "InkSight" },
+      { "quote": "减少选择，增加执行。", "author": "InkSight" }
+    ]
+  },
+
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "quote",
+        "font_name": "NotoSerifSC-Light.ttf",
+        "font_size": 20,
+        "max_width_ratio": 0.9,
+        "vertical_center": true
+      }
+    ],
+    "footer": {
+      "label": "MY_QUOTE",
+      "attribution_template": "— {author}"
+    }
+  },
+
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 14,
+          "max_width_ratio": 0.92,
+          "vertical_center": true
+        }
+      ],
+      "footer": { "label": "MY_QUOTE", "attribution_template": "— {author}", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 30,
+          "max_width_ratio": 0.82,
+          "vertical_center": true
+        }
+      ]
+    }
+  }
+}
+

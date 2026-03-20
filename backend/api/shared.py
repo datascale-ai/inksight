@@ -360,6 +360,22 @@ async def build_image(
         if owner_user_id:
             await registry.load_user_custom_modes(owner_user_id, mac)
             logger.debug(f"[BUILD_IMAGE] Loaded custom modes for device owner {owner_user_id} (device {mac})")
+        # Fallback: configured persona may reference a deleted/missing custom mode.
+        if not registry.is_supported(persona, mac):
+            cfg_modes = config.get("modes", []) if isinstance(config, dict) else []
+            fallback_persona = None
+            if isinstance(cfg_modes, list):
+                for m in cfg_modes:
+                    cand = str(m).upper().strip()
+                    if registry.is_supported(cand, mac):
+                        fallback_persona = cand
+                        break
+            persona = fallback_persona or "STOIC"
+            logger.warning(
+                "[BUILD_IMAGE] Unsupported persona for %s, fallback to %s",
+                mac,
+                persona,
+            )
     
     # For Web preview without mac: load all custom modes for the current user
     # Note: This may cause conflicts if user has same mode_id on different devices

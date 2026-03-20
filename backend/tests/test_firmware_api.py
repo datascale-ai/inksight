@@ -1,5 +1,5 @@
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from api import shared as shared_api
 from api.index import app
@@ -13,9 +13,16 @@ def anyio_backend():
 
 @pytest.fixture
 async def client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
+    # httpx compatibility wrapper for different versions
+    try:
+        from httpx import ASGITransport  # type: ignore
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c
+    except Exception:
+        async with AsyncClient(app=app, base_url="http://test") as c:
+            yield c
 
 
 def _sample_payload() -> dict:

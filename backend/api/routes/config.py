@@ -10,9 +10,11 @@ from core.auth import is_admin_authorized, require_admin, validate_mac_param
 from core.config_store import (
     activate_config,
     get_active_config,
+    get_or_create_alert_token,
     get_config_history,
     save_config,
     set_pending_refresh,
+    update_focus_listening,
     update_device_state,
 )
 from core.schemas import ConfigRequest, ConfigSaveResponse
@@ -113,3 +115,34 @@ async def activate_config_route(
     if not ok:
         return JSONResponse({"error": "config not found"}, status_code=404)
     return {"ok": True}
+
+
+@router.patch("/config/{mac}/focus-listening")
+async def patch_focus_listening(
+    mac: str,
+    request: Request,
+    enabled: bool = True,
+    x_device_token: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    ink_session: Optional[str] = Cookie(default=None),
+):
+    """轻量级端点：仅更新 focus_listening；开启时如无 alert_token 则自动生成并返回。"""
+    mac = validate_mac_param(mac)
+    if not is_admin_authorized(authorization):
+        await ensure_web_or_device_access(
+            request,
+            mac,
+            x_device_token,
+            ink_session,
+            allow_device_token=True,
+        )
+
+    ok = await update_focus_listening(mac, bool(enabled))
+    if not ok:
+        return JSONResponse({"error": "no_active_config"}, status_code=404)
+
+    token = None
+    if enabled:
+        token = await get_or_create_alert_token(mac, regenerate=False)
+
+    return {"ok": True, "is_focus_listening": bool(enabled), "alert_token": token}

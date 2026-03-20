@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -28,9 +29,13 @@ from core.config_store import (
     generate_device_token,
     get_active_config,
     get_device_state,
+    get_or_create_alert_token,
+    is_device_owner,
     set_pending_refresh,
     update_device_state,
+    validate_alert_token,
 )
+from core.patterns.utils import apply_text_fontmode, load_font
 from core.renderer import image_to_bmp_bytes, image_to_png_bytes
 from core.schemas import DeviceHeartbeatRequest, OkResponse
 from core.stats_store import (
@@ -45,6 +50,10 @@ from core.stats_store import (
 )
 
 router = APIRouter(tags=["device"])
+
+_ALERT_TTL_SECONDS = 60
+_device_alerts: dict[str, dict] = {}
+_device_alerts_lock = asyncio.Lock()
 
 
 @router.post("/device/{mac}/refresh")
@@ -135,6 +144,185 @@ async def post_device_heartbeat(
     await require_device_token(mac, x_device_token)
     await log_heartbeat(mac, body.battery_voltage or 3.3, body.wifi_rssi)
     return OkResponse(ok=True)
+
+
+@router.post("/device/{mac}/alert-token")
+async def provision_device_alert_token(
+    mac: str,
+    regenerate: bool = Query(default=False, description="是否强制重新生成 token"),
+    user_id: int = Depends(require_user),
+):
+    mac = validate_mac_param(mac)
+    if not await is_device_owner(mac, user_id):
+        return JSONResponse({"error": "owner_required"}, status_code=403)
+    token = await get_or_create_alert_token(mac, regenerate=regenerate)
+    return {"ok": True, "token": token, "regenerated": regenerate}
+
+
+@router.post("/device/{mac}/alert")
+async def push_device_alert(
+    mac: str,
+    request: Request,
+    x_agent_token: Optional[str] = Header(default=None, alias="X-Agent-Token"),
+):
+    mac = validate_mac_param(mac)
+    token = (x_agent_token or "").strip()
+    if not token:
+        return JSONResponse({"error": "missing_agent_token"}, status_code=401)
+    if not await validate_alert_token(mac, token):
+        return JSONResponse({"error": "invalid_agent_token"}, status_code=403)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid_json"}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "invalid_payload"}, status_code=400)
+
+    sender = str(payload.get("sender") or "").strip()
+    message = str(payload.get("message") or "").strip()
+    level = str(payload.get("level") or "info").strip()
+    if not sender or not message:
+        return JSONResponse({"error": "sender_and_message_required"}, status_code=400)
+
+    now = datetime.now()
+    async with _device_alerts_lock:
+        _device_alerts[mac] = {
+            "sender": sender,
+            "message": message,
+            "level": level or "info",
+            "expires_at": now + timedelta(seconds=_ALERT_TTL_SECONDS),
+        }
+
+    logger.info("[ALERT] Stored alert for %s (level=%s, ttl=%ss)", mac, level or "info", _ALERT_TTL_SECONDS)
+    return {"ok": True}
+
+
+@router.get("/device/{mac}/check_alert")
+async def check_device_alert(
+    mac: str,
+    x_device_token: Optional[str] = Header(default=None, alias="X-Device-Token"),
+):
+    mac = validate_mac_param(mac)
+    await require_device_token(mac, x_device_token)
+
+    now = datetime.now()
+    alert_payload: Optional[dict] = None
+    async with _device_alerts_lock:
+        existing = _device_alerts.get(mac)
+        if existing:
+            expires_at = existing.get("expires_at")
+            if isinstance(expires_at, datetime) and expires_at < now:
+                _device_alerts.pop(mac, None)
+            else:
+                alert_payload = {
+                    "sender": existing.get("sender") or "",
+                    "message": existing.get("message") or "",
+                    "level": existing.get("level") or "info",
+                }
+                _device_alerts.pop(mac, None)
+    if not alert_payload:
+        return {"has_alert": False}
+    return {"has_alert": True, "alert": alert_payload}
+
+
+def _wrap_text_by_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]:
+    lines: list[str] = []
+    if not text:
+        return lines
+    cur = ""
+    for ch in text:
+        if ch == "\n":
+            lines.append(cur)
+            cur = ""
+            continue
+        test = cur + ch
+        try:
+            w = draw.textlength(test, font=font)
+        except Exception:
+            bbox = draw.textbbox((0, 0), test, font=font)
+            w = bbox[2] - bbox[0]
+        if w <= max_width:
+            cur = test
+        else:
+            if cur:
+                lines.append(cur)
+            cur = ch
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+@router.get("/device/{mac}/alert-bmp")
+async def alert_bmp(
+    mac: str,
+    w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600),
+    h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
+    x_device_token: Optional[str] = Header(default=None, alias="X-Device-Token"),
+):
+    mac = validate_mac_param(mac)
+    await require_device_token(mac, x_device_token)
+
+    now = datetime.now()
+    alert_payload: Optional[dict] = None
+    async with _device_alerts_lock:
+        existing = _device_alerts.get(mac)
+        if existing:
+            expires_at = existing.get("expires_at")
+            if isinstance(expires_at, datetime) and expires_at < now:
+                _device_alerts.pop(mac, None)
+            else:
+                alert_payload = {
+                    "sender": existing.get("sender") or "",
+                    "message": existing.get("message") or "",
+                    "level": existing.get("level") or "info",
+                }
+                _device_alerts.pop(mac, None)
+
+    if not alert_payload:
+        return Response(status_code=204)
+
+    sender = str(alert_payload.get("sender") or "").strip()
+    message = str(alert_payload.get("message") or "").strip()
+    level = str(alert_payload.get("level") or "info").strip().lower()
+
+    img = Image.new("1", (w, h), 1)
+    draw = ImageDraw.Draw(img)
+    apply_text_fontmode(draw)
+
+    scale = min(w / float(SCREEN_WIDTH), h / float(SCREEN_HEIGHT))
+    title_font = load_font("noto_serif_bold", max(14, int(26 * scale)))
+    sender_font = load_font("noto_serif_regular", max(12, int(20 * scale)))
+    body_font = load_font("noto_serif_regular", max(10, int(18 * scale)))
+
+    margin_x = max(8, int(w * 0.06))
+    top_pad = max(8, int(h * 0.08))
+    max_width = w - 2 * margin_x
+
+    label = "FOCUS ALERT" if level != "critical" else "紧急告警"
+    title_w = draw.textlength(label, font=title_font)
+    draw.text((max(margin_x, int((w - title_w) / 2)), top_pad), label, fill=0, font=title_font)
+
+    y = top_pad + int((title_font.size if hasattr(title_font, "size") else 20) * 1.3) + 4
+    if sender:
+        draw.text((margin_x, y), f"[{sender}]", fill=0, font=sender_font)
+        y += int((sender_font.size if hasattr(sender_font, "size") else 16) * 1.3) + 6
+
+    line_height = int((body_font.size if hasattr(body_font, "size") else 14) * 1.3) + 2
+    lines = _wrap_text_by_pixels(draw, message, body_font, max_width)
+    max_lines = max(1, (h - y - 10) // max(line_height, 1))
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        if lines:
+            lines[-1] = lines[-1][: max(0, len(lines[-1]) - 1)] + "…"
+    for i, line in enumerate(lines):
+        yy = y + i * line_height
+        if yy > h - 6:
+            break
+        if line:
+            draw.text((margin_x, yy), line, fill=0, font=body_font)
+
+    return Response(content=image_to_bmp_bytes(img), media_type="image/bmp")
 
 
 @router.post("/device/{mac}/apply-preview")

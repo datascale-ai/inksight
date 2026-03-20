@@ -4,7 +4,7 @@ Discover (模式分享广场) 功能的集成测试
 import json
 import pytest
 from unittest.mock import patch, AsyncMock
-from httpx import AsyncClient, ASGITransport
+from httpx import AsyncClient
 
 from api.index import app
 from core.config_store import get_main_db, init_db, upsert_device_membership
@@ -35,9 +35,16 @@ async def client(tmp_path):
         await init_stats_db()
         await init_cache_db()
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            yield c
+        # httpx compatibility wrapper for different versions
+        try:
+            from httpx import ASGITransport  # type: ignore
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as c:
+                yield c
+        except Exception:
+            async with AsyncClient(app=app, base_url="http://test") as c:
+                yield c
 
         # Clean up connections after each test
         await db_mod.close_all()
@@ -374,9 +381,12 @@ class TestDiscoverAPI:
         """测试发布需要认证"""
         # 确保没有认证信息（不传 headers，也不传 cookies）
         # 创建一个新的客户端实例，确保没有之前的 cookies
-        from httpx import ASGITransport
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test", cookies={}) as clean_client:
+        try:
+            from httpx import ASGITransport  # type: ignore
+            _clean_ctx = AsyncClient(transport=ASGITransport(app=app), base_url="http://test", cookies={})
+        except Exception:
+            _clean_ctx = AsyncClient(app=app, base_url="http://test", cookies={})
+        async with _clean_ctx as clean_client:
             resp = await clean_client.post(
                 "/api/discover/modes/publish",
                 headers={},  # 明确指定空的 headers
@@ -653,9 +663,12 @@ class TestDiscoverAPI:
             shared_mode_id = resp.json()["id"]
             
             # 尝试不认证安装 - 创建新的客户端实例，确保没有之前的 cookies
-            from httpx import ASGITransport
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test", cookies={}) as clean_client:
+            try:
+                from httpx import ASGITransport  # type: ignore
+                _clean_ctx = AsyncClient(transport=ASGITransport(app=app), base_url="http://test", cookies={})
+            except Exception:
+                _clean_ctx = AsyncClient(app=app, base_url="http://test", cookies={})
+            async with _clean_ctx as clean_client:
                 resp = await clean_client.post(
                     f"/api/discover/modes/{shared_mode_id}/install",
                     headers={},  # 明确指定空的 headers

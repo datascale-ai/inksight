@@ -30,6 +30,10 @@ void postConfigToBackend();
 bool ensureDeviceToken();
 bool postHeartbeat(bool force = false);
 
+// ── Focus listening helpers ─────────────────────────────────
+bool fetchFocusListeningFlag(bool *outEnabled);
+bool fetchFocusAlertBMP();
+
 // ── Battery ─────────────────────────────────────────────────
 
 // Read battery voltage via ADC (returns volts)

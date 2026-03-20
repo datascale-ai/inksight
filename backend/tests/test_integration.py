@@ -9,12 +9,13 @@ import json
 import pytest
 from PIL import Image
 from unittest.mock import patch, AsyncMock, MagicMock
-from httpx import AsyncClient, ASGITransport
+from httpx import AsyncClient
 
 from api.index import app
 from api import shared as shared_api
 from core.cache import content_cache
 from core.config_store import init_db
+from core.config_store import validate_alert_token
 from core.db import get_main_db
 from core.mode_registry import reset_registry
 from core.stats_store import init_stats_db
@@ -47,9 +48,16 @@ async def client(tmp_path):
         await init_stats_db()
         await init_cache_db()
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            yield c
+        # httpx compatibility wrapper for different versions
+        try:
+            from httpx import ASGITransport  # type: ignore
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as c:
+                yield c
+        except Exception:
+            async with AsyncClient(app=app, base_url="http://test") as c:
+                yield c
 
         # Clean up connections after each test
         await db_mod.close_all()
@@ -382,6 +390,74 @@ async def test_config_history_and_activate_flow(client, monkeypatch):
     assert active["modes"] == ["STOIC"]
 
 
+@pytest.mark.asyncio
+async def test_focus_listening_patch_generates_and_reuses_alert_token(client):
+    mac = "AA:BB:CC:DD:EE:FE"
+    headers = await provision_device_headers(client, mac)
+
+    config_data = {
+        "mac": mac,
+        "modes": ["STOIC", "ZEN", "DAILY"],
+        "refreshInterval": 60,
+        "llmProvider": "deepseek",
+        "llmModel": "deepseek-chat",
+    }
+    resp = await client.post("/api/config", json=config_data, headers=headers)
+    assert resp.status_code == 200
+
+    enable_resp = await client.patch(f"/api/config/{mac}/focus-listening", params={"enabled": True}, headers=headers)
+    assert enable_resp.status_code == 200
+    body = enable_resp.json()
+    assert body["ok"] is True
+    assert body["is_focus_listening"] is True
+    assert isinstance(body.get("alert_token"), str)
+    token1 = body["alert_token"]
+    assert await validate_alert_token(mac, token1) is True
+
+    enable_resp2 = await client.patch(f"/api/config/{mac}/focus-listening", params={"enabled": True}, headers=headers)
+    assert enable_resp2.status_code == 200
+    body2 = enable_resp2.json()
+    assert body2["alert_token"] == token1
+
+    disable_resp = await client.patch(f"/api/config/{mac}/focus-listening", params={"enabled": False}, headers=headers)
+    assert disable_resp.status_code == 200
+    body3 = disable_resp.json()
+    assert body3["is_focus_listening"] is False
+    assert body3.get("alert_token") is None
+
+
+@pytest.mark.asyncio
+async def test_focus_alert_bmp_renders_and_consumes_alert(client):
+    mac = "AA:BB:CC:DD:EE:FD"
+    headers = await provision_device_headers(client, mac)
+    cfg = {
+        "mac": mac,
+        "modes": ["STOIC"],
+        "refreshInterval": 60,
+        "llmProvider": "deepseek",
+        "llmModel": "deepseek-chat",
+    }
+    resp = await client.post("/api/config", json=cfg, headers=headers)
+    assert resp.status_code == 200
+    enable = await client.patch(f"/api/config/{mac}/focus-listening", params={"enabled": True}, headers=headers)
+    assert enable.status_code == 200
+    token = enable.json()["alert_token"]
+
+    push = await client.post(
+        f"/api/device/{mac}/alert",
+        json={"sender": "老板", "message": "服务器宕机，速看！", "level": "critical"},
+        headers={"X-Agent-Token": token},
+    )
+    assert push.status_code == 200
+
+    bmp_resp = await client.get(f"/api/device/{mac}/alert-bmp", params={"w": 400, "h": 300}, headers=headers)
+    assert bmp_resp.status_code == 200
+    assert bmp_resp.content[:2] == b"BM"
+
+    bmp_resp2 = await client.get(f"/api/device/{mac}/alert-bmp", params={"w": 400, "h": 300}, headers=headers)
+    assert bmp_resp2.status_code == 204
+
+
 # ---------------------------------------------------------------------------
 # Habit workflow
 # ---------------------------------------------------------------------------
@@ -666,7 +742,13 @@ async def test_auth_claim_and_membership_approval_flow(client):
     devices = devices_resp.json()["devices"]
     assert any(device["mac"] == mac for device in devices)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as member_client:
+    # httpx compatibility wrapper inside test for nested client
+    try:
+        from httpx import ASGITransport  # type: ignore
+        _member_client_ctx = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    except Exception:
+        _member_client_ctx = AsyncClient(app=app, base_url="http://test")
+    async with _member_client_ctx as member_client:
         member = await register_user(member_client, "member_user")
 
         bind_resp = await member_client.post("/api/user/devices", json={"mac": mac, "nickname": "Shared"})
