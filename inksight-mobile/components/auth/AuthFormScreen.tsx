@@ -18,8 +18,6 @@ type FormErrors = {
   username?: string;
   password?: string;
   confirm?: string;
-  phone?: string;
-  email?: string;
 };
 
 export function AuthFormScreen({ initialMode = 'login' }: Props) {
@@ -27,8 +25,6 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
@@ -48,24 +44,8 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     if (password.length < 6) {
       errs.password = t('auth.errorPasswordMin');
     }
-    if (mode === 'register') {
-      const trimmedPhone = phone.trim();
-      const trimmedEmail = email.trim();
-
-      if (!trimmedPhone && !trimmedEmail) {
-        errs.phone = t('auth.errorContactRequired');
-      } else {
-        if (trimmedPhone && !/^1[3-9]\d{9}$/.test(trimmedPhone)) {
-          errs.phone = t('auth.errorPhoneFormat');
-        }
-        if (trimmedEmail && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(trimmedEmail)) {
-          errs.email = t('auth.errorEmailFormat');
-        }
-      }
-
-      if (password !== confirmPassword) {
-        errs.confirm = t('auth.errorPasswordMatch');
-      }
+    if (mode === 'register' && password !== confirmPassword) {
+      errs.confirm = t('auth.errorPasswordMatch');
     }
     return Object.keys(errs).length > 0 ? errs : null;
   }
@@ -78,10 +58,7 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     }
     setErrors({});
     try {
-      await signIn(username.trim(), password, mode, {
-        phone: phone.trim(),
-        email: email.trim(),
-      });
+      await signIn(username.trim(), password, mode);
       router.replace('/(tabs)/me');
     } catch (error) {
       Alert.alert(mode === 'login' ? t('auth.loginError') : t('auth.registerError'), error instanceof Error ? error.message : t('common.loading'));
@@ -92,8 +69,6 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     setMode((current) => (current === 'login' ? 'register' : 'login'));
     setErrors({});
     setConfirmPassword('');
-    setPhone('');
-    setEmail('');
   }
 
   return (
@@ -135,31 +110,6 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
 
         {mode === 'register' ? (
           <>
-            <TextInput
-              value={phone}
-              onChangeText={(text) => {
-                setPhone(text);
-                if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
-              }}
-              placeholder={t('auth.phone')}
-              style={[styles.input, errors.phone ? styles.inputError : null]}
-              keyboardType="phone-pad"
-            />
-            {errors.phone ? <InkText style={styles.errorText}>{errors.phone}</InkText> : null}
-
-            <TextInput
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
-              }}
-              placeholder={t('auth.email')}
-              style={[styles.input, errors.email ? styles.inputError : null]}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            {errors.email ? <InkText style={styles.errorText}>{errors.email}</InkText> : null}
-
             <View style={styles.passwordWrap}>
               <TextInput
                 value={confirmPassword}

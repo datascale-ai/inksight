@@ -44,7 +44,7 @@ function LoginForm() {
     setSuccessMsg("");
     setLoading(true);
     try {
-      // 基础前端校验：注册时强制要求手机号/邮箱。
+      // 基础前端校验：注册时强制要求手机号/邮箱（邀请码可选）
       if (mode === "register") {
         if (!phone.trim() && !email.trim()) {
           setError(locale === "en" ? "Please enter phone or email" : "手机号或邮箱至少填写一个");

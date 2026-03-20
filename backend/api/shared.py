@@ -64,6 +64,7 @@ from core.config import (
     DEFAULT_CITY,
     DEFAULT_MODES,
     DEFAULT_REFRESH_INTERVAL,
+    get_default_llm_model_for_provider,
 )
 from core.config_store import (
     get_active_config,
@@ -71,14 +72,14 @@ from core.config_store import (
     get_device_membership,
     get_device_state,
     get_quota_owner_for_mac,
+    get_user_api_quota,
     get_user_role,
     init_db,
     set_cycle_index,
     update_device_state,
     consume_user_free_quota,
-    ensure_user_api_quota,
 )
-from core.context import calc_battery_pct, get_date_context, get_weather
+from core.context import calc_battery_pct, extract_location_settings, get_date_context, get_weather
 from core.pipeline import generate_and_render, get_effective_mode_config
 from core.renderer import image_to_bmp_bytes
 from core.stats_store import (
@@ -333,25 +334,32 @@ async def build_image(
     preview_memo_text: Optional[str] = None,
     current_user_id: Optional[int] = None,
     user_api_key: Optional[str] = None,
+    intent_only: bool = False,
 ):
     from core.mode_registry import get_registry
 
     battery_pct = calc_battery_pct(v)
     config = await get_active_config(mac) if mac else None
     persona = await resolve_mode(mac, config, persona_override, force_next=force_next)
+    owner_user_id: int | None = None
+    if mac:
+        from core.config_store import get_device_owner
+
+        owner = await get_device_owner(mac)
+        if owner:
+            try:
+                owner_user_id = int(owner.get("user_id"))
+            except (TypeError, ValueError):
+                owner_user_id = None
 
     registry = get_registry()
     
     # Load device owner's custom modes if needed (for device rendering)
     # Only load modes for the specific device to avoid loading modes from other devices
     if mac and not registry.is_supported(persona, mac):
-        from core.config_store import get_device_owner
-        owner = await get_device_owner(mac)
-        if owner:
-            user_id = owner.get("user_id")
-            if user_id:
-                await registry.load_user_custom_modes(user_id, mac)
-                logger.debug(f"[BUILD_IMAGE] Loaded custom modes for device owner {user_id} (device {mac})")
+        if owner_user_id:
+            await registry.load_user_custom_modes(owner_user_id, mac)
+            logger.debug(f"[BUILD_IMAGE] Loaded custom modes for device owner {owner_user_id} (device {mac})")
     
     # For Web preview without mac: load all custom modes for the current user
     # Note: This may cause conflicts if user has same mode_id on different devices
@@ -363,47 +371,94 @@ async def build_image(
     mode_info = registry.get_mode_info(persona)
     is_mode_cacheable = bool(mode_info.cacheable) if mode_info else True
 
-    # ── Web 相关请求：合入用户级别的 LLM / 图像 API 配置 ─────────────────────────────
-    # 只要存在 current_user_id（无论是否带 mac），都尝试读取用户在个人信息页中配置的 API key。
-    # 这些配置通过 user_api_key / user_image_api_key 字段下发到 pipeline，
-    # 同时也用于后续的额度豁免判断（user_provided_api_key）。
-    if current_user_id is not None:
-        config = dict(config or {})  # 不污染设备端 config
-        
-        # 如果前端传递了 API key（来自 x-inksight-llm-api-key 头），优先使用
-        if user_api_key and user_api_key.strip():
-            config["user_api_key"] = user_api_key.strip()
-            logger.debug("[BUILD_IMAGE] Using user_api_key from request header for user_id=%s", current_user_id)
-        else:
-            # 否则从数据库读取用户配置的 API key
-            try:
-                from core.config_store import get_user_llm_config
+    # ── 合入用户级别的 LLM / 图像 API 配置 ─────────────────────────────
+    selected_config_user_id: int | None = None
+    usage_source = "server_api_key"
+    current_user_llm_cfg = None
+    owner_user_llm_cfg = None
 
-                user_llm_cfg = await get_user_llm_config(current_user_id)
-            except Exception:
-                user_llm_cfg = None
-                logger.warning(
-                    "[QUOTA] Failed to load user_llm_config for user_id=%s in Web preview",
-                    current_user_id,
-                    exc_info=True,
-                )
-            if user_llm_cfg:
-                # 文本 LLM 提供商与 API key（解密后的明文）
-                provider = (user_llm_cfg.get("provider") or "").strip()
-                api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
-                if provider:
-                    # 仅在 config 中未显式指定时应用用户提供的 provider，避免覆盖模式级别的特殊配置
-                    config.setdefault("llm_provider", provider)
-                if api_key_plain:
-                    # 使用专门的字段，避免与设备加密字段 llm_api_key 混淆
-                    config["user_api_key"] = api_key_plain
-                # 图像生成的提供商与 API key
-                image_provider = (user_llm_cfg.get("image_provider") or "").strip()
-                image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
-                if image_provider:
-                    config.setdefault("image_provider", image_provider)
-                if image_api_key_plain:
-                    config["user_image_api_key"] = image_api_key_plain
+    if current_user_id is not None:
+        try:
+            from core.config_store import get_user_llm_config
+
+            current_user_llm_cfg = await get_user_llm_config(current_user_id)
+        except Exception:
+            current_user_llm_cfg = None
+            logger.warning(
+                "[BUILD_IMAGE] Failed to load user_llm_config for current_user_id=%s (mac=%s)",
+                current_user_id,
+                mac,
+                exc_info=True,
+            )
+
+    if owner_user_id is not None and owner_user_id != current_user_id:
+        try:
+            from core.config_store import get_user_llm_config
+
+            owner_user_llm_cfg = await get_user_llm_config(owner_user_id)
+        except Exception:
+            owner_user_llm_cfg = None
+            logger.warning(
+                "[BUILD_IMAGE] Failed to load user_llm_config for owner_user_id=%s (mac=%s)",
+                owner_user_id,
+                mac,
+                exc_info=True,
+            )
+    elif owner_user_id is not None:
+        owner_user_llm_cfg = current_user_llm_cfg
+
+    def apply_user_llm_cfg(user_llm_cfg: dict) -> None:
+        llm_access_mode = (user_llm_cfg.get("llm_access_mode") or "preset").strip().lower()
+        provider = (user_llm_cfg.get("provider") or "").strip()
+        model = (user_llm_cfg.get("model") or "").strip()
+        api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
+        base_url = (user_llm_cfg.get("base_url") or "").strip()
+        image_provider = (user_llm_cfg.get("image_provider") or "").strip()
+        image_model = (user_llm_cfg.get("image_model") or "").strip()
+        image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
+        config["llm_access_mode"] = llm_access_mode
+        if provider:
+            config["llm_provider"] = provider
+            if model:
+                config["llm_model"] = model
+        if api_key_plain:
+            config["user_api_key"] = api_key_plain
+        # base_url only matters for custom_openai. Keep it isolated to avoid affecting preset providers.
+        if llm_access_mode == "custom_openai" and base_url:
+            config["llm_base_url"] = base_url
+        if image_provider:
+            config["image_provider"] = image_provider
+        if image_model:
+            config["image_model"] = image_model
+        if image_api_key_plain:
+            config["user_image_api_key"] = image_api_key_plain
+
+    if (
+        user_api_key and user_api_key.strip()
+    ) or (
+        current_user_llm_cfg and (current_user_llm_cfg.get("api_key") or "").strip()
+    ) or (
+        owner_user_llm_cfg and (owner_user_llm_cfg.get("api_key") or "").strip()
+    ):
+        config = dict(config or {})
+
+    if user_api_key and user_api_key.strip():
+        config["user_api_key"] = user_api_key.strip()
+        selected_config_user_id = current_user_id
+        usage_source = "current_user_api_key"
+        logger.debug("[BUILD_IMAGE] Using user_api_key from request header for user_id=%s", selected_config_user_id)
+    elif current_user_id is not None and current_user_llm_cfg and (current_user_llm_cfg.get("api_key") or "").strip():
+        apply_user_llm_cfg(current_user_llm_cfg)
+        selected_config_user_id = current_user_id
+        usage_source = "current_user_api_key"
+    elif owner_user_llm_cfg and (owner_user_llm_cfg.get("api_key") or "").strip():
+        apply_user_llm_cfg(owner_user_llm_cfg)
+        selected_config_user_id = owner_user_id
+        usage_source = "owner_api_key"
+    elif not mac and current_user_id is not None:
+        usage_source = "current_user_free_quota"
+    elif mac:
+        usage_source = "owner_free_quota"
 
     # 是否为需要 LLM 的 JSON 模式（需要额度管控的类型）
     # 需要检查顶层 content 类型，以及 composite 模式中的 steps
@@ -485,24 +540,26 @@ async def build_image(
         logger.debug("[QUOTA DEBUG] Mode %s does NOT require quota", persona)
 
     # 检查用户是否提供了自己的 API key（如果提供了，则无需额度检查）
+    # 注意：API key 现在只从用户级别配置（user_llm_config 表）获取，不再从设备配置读取
     user_provided_api_key = False
     if config:
-        # 设备级别加密存储的 llm_api_key
-        encrypted_llm_key = config.get("llm_api_key", "")
-        if encrypted_llm_key:
-            from core.crypto import decrypt_api_key
-            decrypted_key = decrypt_api_key(encrypted_llm_key)
-            if decrypted_key and decrypted_key.strip():
-                user_provided_api_key = True
-                logger.debug("[QUOTA] User provided API key via device config, skipping quota check for mac=%s", mac)
-        # Web 预览场景下，个人信息页配置的明文 user_api_key
+        # BYOK 有效性判定：
+        # - preset：必须有 user_api_key
+        # - custom_openai：必须有 user_api_key + llm_base_url
+        llm_access_mode = (config.get("llm_access_mode") or "preset").strip().lower()
         override_key = config.get("user_api_key")
-        if isinstance(override_key, str) and override_key.strip():
+        base_url = config.get("llm_base_url")
+        has_key = isinstance(override_key, str) and override_key.strip()
+        has_base = isinstance(base_url, str) and base_url.strip()
+        if (llm_access_mode == "custom_openai" and has_key and has_base) or (
+            llm_access_mode != "custom_openai" and has_key
+        ):
             user_provided_api_key = True
             logger.debug(
-                "[QUOTA] User provided API key via profile config, skipping quota check (mac=%s, user_id=%s)",
+                "[QUOTA] BYOK active (mode=%s), skipping quota check (mac=%s, user_id=%s)",
+                llm_access_mode,
                 mac,
-                current_user_id,
+                selected_config_user_id,
             )
 
     # 当前设备对应的计费用户（策略：owner）
@@ -547,8 +604,16 @@ async def build_image(
 
     cache_hit = False
     quota_exhausted = False
+    billing_enabled = os.getenv("INKSIGHT_BILLING_ENABLED", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
     if mac and config and is_mode_cacheable and not skip_cache:
-        await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h)
+        if not intent_only:
+            await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h)
         cached_img = await content_cache.get(
             mac,
             persona,
@@ -564,7 +629,8 @@ async def build_image(
             # Root 用户无需检查额度
             # 如果用户提供了自己的 API key，也无需检查额度
             if (
-                quota_user_id is not None
+                billing_enabled
+                and quota_user_id is not None
                 and llm_mode_requires_quota
                 and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
                 and not user_provided_api_key  # 用户提供了自己的 API key，无需检查额度
@@ -578,7 +644,7 @@ async def build_image(
                             quota_user_id,
                         )
                     else:
-                        quota = await ensure_user_api_quota(quota_user_id)
+                        quota = await get_user_api_quota(quota_user_id)
                         if quota is None:
                             logger.warning(
                                 "[QUOTA] Quota query returned None for user_id=%s (mac=%s, mode=%s) on cache hit, treating as exhausted",
@@ -595,9 +661,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                                return img, persona, False, True, quota_exhausted, False, False, usage_source
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                            return None, persona, False, True, quota_exhausted, False, False, usage_source
                         if int(quota.get("free_quota_remaining") or 0) <= 0:
                             quota_exhausted = True
                             logger.info(
@@ -614,9 +680,9 @@ async def build_image(
                                     last_persona=persona,
                                     last_refresh_at=datetime.now().isoformat(),
                                 )
-                                return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                                return img, persona, False, True, quota_exhausted, False, False, usage_source
                             # Web 预览：不返回图片，让接口返回 JSON 响应
-                            return None, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                            return None, persona, False, True, quota_exhausted, False, False, usage_source
                 except Exception:
                     logger.warning(
                         "[QUOTA] Failed to check quota on cache hit for user_id=%s (mac=%s, mode=%s), allowing cache",
@@ -653,7 +719,8 @@ async def build_image(
     # Root 用户无需检查额度
     # 如果用户提供了自己的 API key，也无需检查额度
     if (
-        not cache_hit
+        billing_enabled
+        and not cache_hit
         and quota_user_id is not None
         and llm_mode_requires_quota
         and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要检查
@@ -668,7 +735,7 @@ async def build_image(
                     quota_user_id,
                 )
             else:
-                quota = await ensure_user_api_quota(quota_user_id)
+                quota = await get_user_api_quota(quota_user_id)
                 if quota is None:
                     logger.warning(
                         "[QUOTA] Quota query returned None for user_id=%s (mac=%s, mode=%s), treating as exhausted",
@@ -683,7 +750,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                    return img, persona, False, True, quota_exhausted, False, False, usage_source
                 if int(quota.get("free_quota_remaining") or 0) <= 0:
                     quota_exhausted = True
                     logger.info(
@@ -695,6 +762,14 @@ async def build_image(
                     # 对于设备端，仍然返回1-bit兜底图（设备无法显示弹窗）
                     # 对于Web端，会在 preview 接口中检测并返回 JSON 响应
                     img = _render_quota_exhausted_image(screen_w, screen_h)
+                    if mac:
+                        await update_device_state(
+                            mac,
+                            last_persona=persona,
+                            last_refresh_at=datetime.now().isoformat(),
+                        )
+                        return img, persona, False, True, quota_exhausted, False, False, usage_source
+                    return None, persona, False, True, quota_exhausted, False, False, usage_source
         except Exception:
             quota = None
             logger.warning(
@@ -721,7 +796,7 @@ async def build_image(
                         last_persona=persona,
                         last_refresh_at=datetime.now().isoformat(),
                     )
-                    return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                    return img, persona, False, True, quota_exhausted, False, False, usage_source
             except Exception:
                 # 如果连 role 都查不到，为了安全起见，也视为额度耗尽
                 logger.warning(
@@ -737,21 +812,24 @@ async def build_image(
                     last_persona=persona,
                     last_refresh_at=datetime.now().isoformat(),
                 )
-                return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+                return img, persona, False, True, quota_exhausted, False, False, usage_source
             # 更新设备状态，但不写入内容缓存，避免后续充值后仍命中"额度耗尽"图片
             await update_device_state(
                 mac,
                 last_persona=persona,
                 last_refresh_at=datetime.now().isoformat(),
             )
-            return img, persona, False, True, quota_exhausted, False, False, user_provided_api_key
+            return img, persona, False, True, quota_exhausted, False, False, usage_source
+
+    if intent_only:
+        return img, persona, cache_hit, content_fallback, quota_exhausted, False, llm_mode_requires_quota, usage_source
 
     if not cache_hit:
         effective_cfg = get_effective_mode_config(config, persona)
-        city = effective_cfg.get("city", DEFAULT_CITY) if effective_cfg else None
+        location_args = extract_location_settings(effective_cfg, fallback_city=DEFAULT_CITY)
         date_ctx, weather = await asyncio.gather(
             get_date_context(),
-            get_weather(city=city),
+            get_weather(**location_args),
         )
         img, content_data = await generate_and_render(
             persona,
@@ -801,7 +879,8 @@ async def build_image(
     # Root 用户无需扣费
     # 如果用户提供了自己的 API key，也无需扣费
     if (
-        not cache_hit
+        billing_enabled
+        and not cache_hit
         and quota_user_id is not None
         and (mac or current_user_id is not None)  # 设备端或 Web 预览都需要扣费
         and isinstance(content_data, dict)
@@ -839,18 +918,11 @@ async def build_image(
     api_key_invalid = False
     if isinstance(content_data, dict) and content_data.get("_api_key_invalid") is True:
         api_key_invalid = True
-        if user_provided_api_key:
-            logger.warning(
-                "[API_KEY] User-provided API key is invalid or expired for mac=%s, mode=%s",
-                mac,
-                persona,
-            )
-        else:
-            logger.warning(
-                "[API_KEY] Platform default API key is invalid or expired for mac=%s, mode=%s",
-                mac,
-                persona,
-            )
+        logger.warning(
+            "[API_KEY] User provided API key is invalid or expired for mac=%s, mode=%s",
+            mac,
+            persona,
+        )
         # 对于设备端，返回提示图片；对于 Web 预览，返回 api_key_invalid 标志让接口处理
         if mac:
             img = _render_api_key_invalid_image(screen_w, screen_h)
@@ -860,7 +932,7 @@ async def build_image(
                 last_refresh_at=datetime.now().isoformat(),
             )
 
-    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, user_provided_api_key
+    return img, persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source
 
 
 async def log_render_stats(
@@ -1118,4 +1190,49 @@ def _render_quota_exhausted_image(screen_w: int, screen_h: int) -> Image.Image:
         draw.text((x, y), message, fill=0, font=font)
     except Exception:
         logger.warning("[RENDER] Failed to render quota exhausted message", exc_info=True)
+    return img
+
+
+def _render_device_unbound_image(screen_w: int, screen_h: int, pair_code: str) -> Image.Image:
+    img = Image.new("1", (screen_w, screen_h), 1)
+    draw = ImageDraw.Draw(img)
+    title = "欢迎使用 InkSight"
+    pair_line = f"配对码：{pair_code}" if pair_code else "正在生成配对码..."
+    hint = "请在设备配置页输入配对码完成绑定"
+    try:
+        title_font = load_font("noto_serif_regular", 20)
+        body_font = load_font("noto_serif_regular", 14)
+    except Exception:
+        title_font = None
+        body_font = None
+    try:
+        if title_font:
+            title_bbox = draw.textbbox((0, 0), title, font=title_font)
+            title_w = title_bbox[2] - title_bbox[0]
+            title_h = title_bbox[3] - title_bbox[1]
+        else:
+            title_w = len(title) * 10
+            title_h = 18
+        if body_font:
+            pair_bbox = draw.textbbox((0, 0), pair_line, font=body_font)
+            hint_bbox = draw.textbbox((0, 0), hint, font=body_font)
+            pair_w = pair_bbox[2] - pair_bbox[0]
+            pair_h = pair_bbox[3] - pair_bbox[1]
+            hint_w = hint_bbox[2] - hint_bbox[0]
+            hint_h = hint_bbox[3] - hint_bbox[1]
+        else:
+            pair_w = len(pair_line) * 7
+            pair_h = 12
+            hint_w = len(hint) * 7
+            hint_h = 12
+        spacing = 18
+        total_h = title_h + pair_h + hint_h + spacing * 2
+        y = max(16, (screen_h - total_h) // 2)
+        draw.text((max(0, (screen_w - title_w) // 2), y), title, fill=0, font=title_font)
+        y += title_h + spacing
+        draw.text((max(0, (screen_w - pair_w) // 2), y), pair_line, fill=0, font=body_font)
+        y += pair_h + spacing
+        draw.text((max(0, (screen_w - hint_w) // 2), y), hint, fill=0, font=body_font)
+    except Exception:
+        logger.warning("[RENDER] Failed to render device unbound message", exc_info=True)
     return img

@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   bar: {
     height: 72,
     paddingTop: 4,
-    backgroundColor: 'rgba(250, 250, 248, 0.98)',
+    backgroundColor: 'rgba(250, 250, 248, 0.96)',
     borderTopColor: theme.colors.border,
   },
   tabButton: {
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   centerTabButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -10,
+    marginTop: -18,
   },
   iconWrap: {
     alignItems: 'center',
@@ -97,17 +97,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   centerButton: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     borderRadius: 999,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   label: {
     fontSize: 11,

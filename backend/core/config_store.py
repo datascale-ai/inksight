@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 PAIR_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-DEFAULT_FREE_LLM_QUOTA = 50
-INVITE_CODE_BONUS_QUOTA = 50
 
 from migrations import run_main_db_migrations
 from .db import get_main_db
@@ -45,6 +43,11 @@ async def init_db():
                 language TEXT DEFAULT 'zh',
                 content_tone TEXT DEFAULT 'neutral',
                 city TEXT DEFAULT '杭州',
+                latitude REAL,
+                longitude REAL,
+                timezone TEXT DEFAULT '',
+                admin1 TEXT DEFAULT '',
+                country TEXT DEFAULT '',
                 refresh_interval INTEGER DEFAULT 60,
                 llm_provider TEXT DEFAULT 'deepseek',
                 llm_model TEXT DEFAULT 'deepseek-chat',
@@ -53,8 +56,6 @@ async def init_db():
                 countdown_events TEXT DEFAULT '[]',
                 time_slot_rules TEXT DEFAULT '[]',
                 memo_text TEXT DEFAULT '',
-                llm_api_key TEXT DEFAULT '',
-                image_api_key TEXT DEFAULT '',
                 mode_overrides TEXT DEFAULT '{}',
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL
@@ -62,6 +63,72 @@ async def init_db():
         """)
 
         await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_mac ON configs(mac)")
+
+        # 迁移旧版本中可能仍包含 llm_api_key / image_api_key 列的 configs 表：
+        # 在新结构中彻底移除这两个字段。
+        try:
+            cursor = await db.execute("PRAGMA table_info(configs)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            if "llm_api_key" in column_names or "image_api_key" in column_names:
+                logger.info("[MIGRATION] Migrating configs table to drop llm_api_key/image_api_key columns")
+                # 创建新表（目标结构与上面的 CREATE TABLE 保持一致）
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS configs_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        mac TEXT NOT NULL,
+                        nickname TEXT DEFAULT '',
+                        modes TEXT DEFAULT 'STOIC,ROAST,ZEN,DAILY',
+                        refresh_strategy TEXT DEFAULT 'random',
+                        character_tones TEXT DEFAULT '',
+                        language TEXT DEFAULT 'zh',
+                        content_tone TEXT DEFAULT 'neutral',
+                        city TEXT DEFAULT '杭州',
+                        latitude REAL,
+                        longitude REAL,
+                        timezone TEXT DEFAULT '',
+                        admin1 TEXT DEFAULT '',
+                        country TEXT DEFAULT '',
+                        refresh_interval INTEGER DEFAULT 60,
+                        llm_provider TEXT DEFAULT 'deepseek',
+                        llm_model TEXT DEFAULT 'deepseek-chat',
+                        image_provider TEXT DEFAULT 'aliyun',
+                        image_model TEXT DEFAULT 'qwen-image-max',
+                        countdown_events TEXT DEFAULT '[]',
+                        time_slot_rules TEXT DEFAULT '[]',
+                        memo_text TEXT DEFAULT '',
+                        mode_overrides TEXT DEFAULT '{}',
+                        is_active INTEGER DEFAULT 1,
+                        created_at TEXT NOT NULL
+                    )
+                """)
+                # 从旧表拷贝数据（忽略 llm_api_key / image_api_key）
+                await db.execute("""
+                    INSERT INTO configs_new (
+                        id, mac, nickname, modes, refresh_strategy,
+                        character_tones, language, content_tone, city, latitude, longitude, timezone, admin1, country,
+                        refresh_interval, llm_provider, llm_model,
+                        image_provider, image_model,
+                        countdown_events, time_slot_rules, memo_text,
+                        mode_overrides, is_active, created_at
+                    )
+                    SELECT
+                        id, mac, nickname, modes, refresh_strategy,
+                        character_tones, language, content_tone, city, NULL, NULL, '', '', '',
+                        refresh_interval, llm_provider, llm_model,
+                        image_provider, image_model,
+                        countdown_events, time_slot_rules, memo_text,
+                        mode_overrides, is_active, created_at
+                    FROM configs
+                """)
+                await db.execute("DROP TABLE configs")
+                await db.execute("ALTER TABLE configs_new RENAME TO configs")
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_configs_mac ON configs(mac)")
+                await db.commit()
+                logger.info("[MIGRATION] configs table migration completed")
+        except Exception as e:
+            logger.warning(f"[MIGRATION] Failed to migrate configs table: {e}", exc_info=True)
+            await db.rollback()
 
         # Device state table for persisting runtime state (cycle_index, etc.)
         await db.execute("""
@@ -190,7 +257,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS api_quotas (
                 user_id INTEGER PRIMARY KEY,
                 total_calls_made INTEGER DEFAULT 0,
-                free_quota_remaining INTEGER DEFAULT 50,
+                free_quota_remaining INTEGER DEFAULT 5,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
@@ -198,6 +265,7 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS user_llm_config (
                 user_id INTEGER PRIMARY KEY,
+                llm_access_mode TEXT DEFAULT 'preset',
                 provider TEXT DEFAULT 'deepseek',
                 api_key TEXT DEFAULT '',
                 base_url TEXT DEFAULT '',
@@ -607,10 +675,10 @@ async def get_user_role(user_id: int) -> str | None:
 # ── API quota & invitation helpers ────────────────────────────
 
 
-async def init_user_api_quota(user_id: int, *, free_quota: int = DEFAULT_FREE_LLM_QUOTA) -> None:
+async def init_user_api_quota(user_id: int, *, free_quota: int = 5) -> None:
     """为新用户初始化 API 调用额度（幂等）。
 
-    默认 50 次免费额度，可通过 free_quota 参数调整。
+    默认 5 次免费额度，可通过 free_quota 参数调整。
     """
     db = await get_main_db()
     await db.execute(
@@ -621,54 +689,6 @@ async def init_user_api_quota(user_id: int, *, free_quota: int = DEFAULT_FREE_LL
         (user_id, free_quota),
     )
     await db.commit()
-
-
-async def ensure_user_api_quota(
-    user_id: int,
-    *,
-    free_quota: int = DEFAULT_FREE_LLM_QUOTA,
-) -> dict | None:
-    """确保用户存在可用额度记录，并补齐历史错误初始化的账号。"""
-    db = await get_main_db()
-    cursor = await db.execute("SELECT id FROM users WHERE id = ? LIMIT 1", (user_id,))
-    if not await cursor.fetchone():
-        return None
-
-    quota = await get_user_api_quota(user_id)
-    if quota is None:
-        await db.execute(
-            """
-            INSERT OR IGNORE INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
-            VALUES (?, 0, ?)
-            """,
-            (user_id, free_quota),
-        )
-        await db.commit()
-        return {
-            "user_id": user_id,
-            "total_calls_made": 0,
-            "free_quota_remaining": free_quota,
-        }
-
-    total_calls_made = int(quota.get("total_calls_made") or 0)
-    free_quota_remaining = int(quota.get("free_quota_remaining") or 0)
-
-    # 修复历史错误：此前部分账号会被初始化为 0 或 5 次，但实际上应默认有 50 次。
-    if total_calls_made == 0 and free_quota_remaining < free_quota:
-        await db.execute(
-            """
-            UPDATE api_quotas
-            SET free_quota_remaining = ?
-            WHERE user_id = ?
-              AND total_calls_made = 0
-              AND free_quota_remaining < ?
-            """,
-            (free_quota, user_id, free_quota),
-        )
-        await db.commit()
-        quota["free_quota_remaining"] = free_quota
-
-    return quota
 
 
 async def get_user_api_quota(user_id: int) -> dict | None:
@@ -933,6 +953,36 @@ async def create_claim_token(
         "pair_code": pair_code,
         "expires_at": (now + timedelta(minutes=ttl_minutes)).isoformat(),
     }
+
+
+async def get_or_create_claim_token(
+    mac: str,
+    source: str = "portal",
+    ttl_minutes: int = 10,
+) -> dict:
+    now_iso = datetime.now().isoformat()
+    db = await get_main_db()
+    cursor = await db.execute(
+        """SELECT pair_code, expires_at
+           FROM device_claim_tokens
+           WHERE mac = ?
+             AND used_at = ''
+             AND expires_at > ?
+           ORDER BY created_at DESC
+           LIMIT 1""",
+        (mac.upper(), now_iso),
+    )
+    row = await cursor.fetchone()
+    if row:
+        return {
+            "token": "",
+            "pair_code": row[0],
+            "expires_at": row[1],
+        }
+    created = await create_claim_token(mac, source=source, ttl_minutes=ttl_minutes)
+    if created is None:
+        raise RuntimeError("failed to create claim token")
+    return created
 
 
 async def get_pending_access_request(mac: str, requester_user_id: int) -> dict | None:
@@ -1281,36 +1331,15 @@ async def save_config(mac: str, data: dict) -> int:
     mode_overrides_json = json.dumps(
         data.get("modeOverrides", {}), ensure_ascii=False
     )
-    from .crypto import encrypt_api_key
-    # 检查字段是否存在，以区分"用户未修改"和"用户清空"
-    # 如果字段存在但值为空字符串，视为用户明确清空，设置为空字符串
-    # 如果字段不存在，保留旧值（用户未修改）
-    if "llmApiKey" in data:
-        raw_llm_key = data.get("llmApiKey", "")
-        if raw_llm_key and raw_llm_key.strip():
-            llm_api_key = encrypt_api_key(raw_llm_key)
-        else:
-            # 用户明确清空了 API key，设置为空字符串
-            llm_api_key = ""
-    else:
-        # 用户未修改 API key，保留旧值
-        llm_api_key = (prev.get("llm_api_key") or "") if prev else ""
-    if "imageApiKey" in data:
-        raw_image_key = data.get("imageApiKey", "")
-        if raw_image_key and raw_image_key.strip():
-            image_api_key = encrypt_api_key(raw_image_key)
-        else:
-            # 用户明确清空了 Image API key，设置为空字符串
-            image_api_key = ""
-    else:
-        # 用户未修改 Image API key，保留旧值
-        image_api_key = (prev.get("image_api_key") or "") if prev else ""
+    # 注意：API key 不再保存到设备配置中，改为使用用户级别的配置（user_llm_config 表）
+    # 这里依赖 configs 表的默认值将 is_active 设为 1，因此不再显式写入该列，避免列数不匹配。
     cursor = await db.execute(
         """INSERT INTO configs
            (mac, nickname, modes, refresh_strategy, character_tones,
-            language, content_tone, city, refresh_interval, llm_provider, llm_model, image_provider, image_model,
-            countdown_events, time_slot_rules, memo_text, llm_api_key, image_api_key, mode_overrides, is_active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+            language, content_tone, city, latitude, longitude, timezone, admin1, country,
+            refresh_interval, llm_provider, llm_model, image_provider, image_model,
+            countdown_events, time_slot_rules, memo_text, mode_overrides, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             mac,
             data.get("nickname", ""),
@@ -1320,6 +1349,11 @@ async def save_config(mac: str, data: dict) -> int:
             data.get("language", DEFAULT_LANGUAGE),
             data.get("contentTone", DEFAULT_CONTENT_TONE),
             data.get("city", DEFAULT_CITY),
+            data.get("latitude"),
+            data.get("longitude"),
+            data.get("timezone", ""),
+            data.get("admin1", ""),
+            data.get("country", ""),
             data.get("refreshInterval", DEFAULT_REFRESH_INTERVAL),
             data.get("llmProvider", DEFAULT_LLM_PROVIDER),
             data.get("llmModel", DEFAULT_LLM_MODEL),
@@ -1328,8 +1362,6 @@ async def save_config(mac: str, data: dict) -> int:
             countdown_events_json,
             time_slot_rules_json,
             memo_text,
-            llm_api_key,
-            image_api_key,
             mode_overrides_json,
             now,
         ),
@@ -1399,9 +1431,9 @@ def _row_to_dict(row, columns) -> dict:
     if "mac" not in d:
         d["mac"] = d.get("mac", "default")
     d["memo_text"] = d.get("memo_text", "")
-    # Keep encrypted key for internal use, add flag for API response
-    d["has_api_key"] = bool(d.get("llm_api_key", ""))
-    d["has_image_api_key"] = bool(d.get("image_api_key", ""))
+    # 设备配置中不再存储 API key，相关标记统一为 False
+    d["has_api_key"] = False
+    d["has_image_api_key"] = False
     return d
 
 
@@ -1798,14 +1830,48 @@ async def validate_device_token(mac: str, token: str) -> bool:
 
 
 async def get_user_llm_config(user_id: int) -> dict | None:
-    """获取用户级别的 LLM 配置。"""
+    """获取用户级别的 LLM 配置（包含可选的自定义模型名）。"""
     db = await get_main_db()
-    # 检查表结构，兼容旧版本（没有 image_provider 和 image_api_key 列）
+    # 检查表结构，兼容旧版本（没有 image / model 相关列）
     cursor = await db.execute("PRAGMA table_info(user_llm_config)")
     columns = [col[1] for col in await cursor.fetchall()]
+    has_access_mode_column = "llm_access_mode" in columns
     has_image_config = "image_provider" in columns and "image_api_key" in columns
+    has_model_column = "model" in columns
+    has_image_model_column = "image_model" in columns
     
-    if has_image_config:
+    # Build SELECT with backward compatibility across schema versions.
+    if has_access_mode_column and has_image_config and has_model_column and has_image_model_column:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key, model, image_model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_access_mode_column and has_image_config and has_model_column:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key, model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_access_mode_column and has_image_config:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_access_mode_column:
+        cursor = await db.execute(
+            "SELECT llm_access_mode, provider, api_key, base_url FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_image_config and has_model_column and has_image_model_column:
+        cursor = await db.execute(
+            "SELECT provider, api_key, base_url, image_provider, image_api_key, model, image_model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_image_config and has_model_column:
+        cursor = await db.execute(
+            "SELECT provider, api_key, base_url, image_provider, image_api_key, model FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+    elif has_image_config:
         cursor = await db.execute(
             "SELECT provider, api_key, base_url, image_provider, image_api_key FROM user_llm_config WHERE user_id = ?",
             (user_id,),
@@ -1819,26 +1885,42 @@ async def get_user_llm_config(user_id: int) -> dict | None:
     if not row:
         return None
     from .crypto import decrypt_api_key
-    result = {
-        "provider": row[0] or "deepseek",
-        "api_key": decrypt_api_key(row[1] or "") if row[1] else "",
-        "base_url": row[2] or "",
+    offset = 0
+    llm_access_mode = "preset"
+    if has_access_mode_column:
+        llm_access_mode = row[0] or "preset"
+        offset = 1
+    result: dict[str, str] = {
+        "llm_access_mode": llm_access_mode,
+        "provider": row[0 + offset] or "deepseek",
+        "api_key": decrypt_api_key(row[1 + offset] or "") if row[1 + offset] else "",
+        "base_url": row[2 + offset] or "",
     }
-    if has_image_config and len(row) > 3:
-        result["image_provider"] = row[3] or "aliyun"
-        result["image_api_key"] = decrypt_api_key(row[4] or "") if row[4] else ""
+    idx = 3 + offset
+    if has_image_config:
+        result["image_provider"] = row[idx] or "aliyun"
+        result["image_api_key"] = decrypt_api_key(row[idx + 1] or "") if row[idx + 1] else ""
+        idx += 2
     else:
         result["image_provider"] = "aliyun"
         result["image_api_key"] = ""
+    if has_model_column and len(row) > idx:
+        result["model"] = row[idx] or ""
+        idx += 1
+    if has_image_model_column and len(row) > idx:
+        result["image_model"] = row[idx] or ""
     return result
 
 
 async def save_user_llm_config(
     user_id: int,
+    llm_access_mode: str = "preset",
     provider: str = "deepseek",
+    model: str = "",
     api_key: str = "",
     base_url: str = "",
     image_provider: str = "aliyun",
+    image_model: str = "",
     image_api_key: str = "",
 ) -> bool:
     """保存用户级别的 LLM 配置。"""
@@ -1853,9 +1935,22 @@ async def save_user_llm_config(
     # 检查表结构，兼容旧版本
     cursor = await db.execute("PRAGMA table_info(user_llm_config)")
     columns = [col[1] for col in await cursor.fetchall()]
+    has_access_mode_column = "llm_access_mode" in columns
     has_image_config = "image_provider" in columns and "image_api_key" in columns
+    has_model_column = "model" in columns
+    has_image_model_column = "image_model" in columns
+
+    # 如果表没有 llm_access_mode 列，先添加
+    if not has_access_mode_column:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN llm_access_mode TEXT DEFAULT 'preset'")
+            await db.commit()
+            has_access_mode_column = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add llm_access_mode column: {e}")
+            await db.rollback()
     
-    # 如果表没有图像配置列，先添加
+    # 如果表没有图像配置 / model 列，先添加
     if not has_image_config:
         try:
             await db.execute("ALTER TABLE user_llm_config ADD COLUMN image_provider TEXT DEFAULT 'aliyun'")
@@ -1865,35 +1960,128 @@ async def save_user_llm_config(
         except Exception as e:
             logger.warning(f"[USER_LLM_CONFIG] Failed to add image columns: {e}")
             await db.rollback()
+    if not has_model_column:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN model TEXT DEFAULT ''")
+            await db.commit()
+            has_model_column = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add model column: {e}")
+            await db.rollback()
+    if not has_image_model_column:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN image_model TEXT DEFAULT ''")
+            await db.commit()
+            has_image_model_column = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add image_model column: {e}")
+            await db.rollback()
     
     try:
-        if has_image_config:
+        if has_access_mode_column and has_image_config and has_image_model_column:
             await db.execute(
-                """INSERT INTO user_llm_config (user_id, provider, api_key, base_url, image_provider, image_api_key, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, image_provider, image_api_key, image_model, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
+                       llm_access_mode = excluded.llm_access_mode,
                        provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       image_model = excluded.image_model,
+                       updated_at = excluded.updated_at""",
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, image_model, now),
+            )
+        elif has_access_mode_column and has_image_config:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, image_provider, image_api_key, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       llm_access_mode = excluded.llm_access_mode,
+                       provider = excluded.provider,
+                       model = excluded.model,
                        api_key = excluded.api_key,
                        base_url = excluded.base_url,
                        image_provider = excluded.image_provider,
                        image_api_key = excluded.image_api_key,
                        updated_at = excluded.updated_at""",
-                (user_id, provider, encrypted_key, base_url, image_provider, encrypted_image_key, now),
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, now),
             )
-        else:
+        elif has_access_mode_column:
             await db.execute(
-                """INSERT INTO user_llm_config (user_id, provider, api_key, base_url, updated_at)
-                   VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
+                       llm_access_mode = excluded.llm_access_mode,
                        provider = excluded.provider,
+                       model = excluded.model,
                        api_key = excluded.api_key,
                        base_url = excluded.base_url,
                        updated_at = excluded.updated_at""",
-                (user_id, provider, encrypted_key, base_url, now),
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, now),
+            )
+        elif has_image_config and has_image_model_column:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, provider, model, api_key, base_url, image_provider, image_api_key, image_model, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       image_model = excluded.image_model,
+                       updated_at = excluded.updated_at""",
+                (user_id, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, image_model, now),
+            )
+        elif has_image_config:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, provider, model, api_key, base_url, image_provider, image_api_key, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       image_provider = excluded.image_provider,
+                       image_api_key = excluded.image_api_key,
+                       updated_at = excluded.updated_at""",
+                (user_id, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, now),
+            )
+        else:
+            await db.execute(
+                """INSERT INTO user_llm_config (user_id, provider, model, api_key, base_url, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       provider = excluded.provider,
+                       model = excluded.model,
+                       api_key = excluded.api_key,
+                       base_url = excluded.base_url,
+                       updated_at = excluded.updated_at""",
+                (user_id, provider, model, encrypted_key, base_url, now),
             )
         await db.commit()
         return True
     except Exception as e:
         logger.error(f"[USER_LLM_CONFIG] Failed to save config for user {user_id}: {e}")
+        await db.rollback()
+        return False
+
+
+async def delete_user_llm_config(user_id: int) -> bool:
+    """删除用户级别的 LLM 配置（BYOK）。删除后将回退到平台默认 key + 额度模式。"""
+    db = await get_main_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM user_llm_config WHERE user_id = ?",
+            (user_id,),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logger.error(f"[USER_LLM_CONFIG] Failed to delete config for user {user_id}: {e}")
         await db.rollback()
         return False

@@ -19,6 +19,7 @@ test("buildReleaseLabel shows version with asset stem", () => {
 
 test("getPreferredBuild returns first build for selected asset", () => {
   const build = getPreferredBuild({
+    version: "0.3",
     manifest: {
       builds: [
         { chipFamily: "ESP32", parts: [{ path: "https://example.com/fw.bin", offset: 0 }] },

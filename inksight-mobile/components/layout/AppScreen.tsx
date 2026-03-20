@@ -40,8 +40,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
     backgroundColor: theme.colors.background,
   },
   scrollContent: {
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   scrollContentWithHeader: {
-    paddingTop: 4,
+    paddingTop: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
     gap: theme.spacing.md,

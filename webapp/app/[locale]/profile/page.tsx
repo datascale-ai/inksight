@@ -18,27 +18,16 @@ interface ProfileData {
   role: string;
   free_quota_remaining: number;
   llm_config: {
+    llm_access_mode?: "preset" | "custom_openai";
     provider: string;
+    model: string;
     api_key: string;
     base_url: string;
     image_provider?: string;
+    image_model?: string;
     image_api_key?: string;
   } | null;
 }
-
-const LLM_MODELS: Record<string, { v: string; n: string }[]> = {
-  deepseek: [{ v: "deepseek-chat", n: "DeepSeek Chat" }],
-  aliyun: [
-    { v: "qwen-max", n: "通义千问 Max" },
-    { v: "qwen-plus", n: "通义千问 Plus" },
-    { v: "qwen-turbo", n: "通义千问 Turbo" },
-    { v: "deepseek-v3", n: "DeepSeek V3" },
-  ],
-  moonshot: [
-    { v: "moonshot-v1-8k", n: "Kimi K1.5" },
-    { v: "moonshot-v1-32k", n: "Kimi K1.5 32K" },
-  ],
-};
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -58,12 +47,17 @@ export default function ProfilePage() {
   const [quotaMode, setQuotaMode] = useState<"platform" | "custom">("platform");
 
   // 自定义 LLM 配置状态
+  const [llmAccessMode, setLlmAccessMode] = useState<"preset" | "custom_openai">("preset");
   const [llmProvider, setLlmProvider] = useState("deepseek");
+  const [llmModel, setLlmModel] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [imageProvider, setImageProvider] = useState("aliyun");
+  const [imageModel, setImageModel] = useState("");
   const [imageApiKey, setImageApiKey] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
@@ -82,11 +76,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const off = onAuthChanged(refreshCurrentUser);
-    const onFocus = () => refreshCurrentUser();
-    window.addEventListener("focus", onFocus);
     return () => {
       off();
-      window.removeEventListener("focus", onFocus);
     };
   }, [refreshCurrentUser]);
 
@@ -113,16 +104,18 @@ export default function ProfilePage() {
 
       // 如果有 LLM 配置，设置到表单中，并切换到自定义模式
       if (data.llm_config && data.llm_config.api_key) {
+        const mode = (data.llm_config.llm_access_mode || "preset") as "preset" | "custom_openai";
+        setLlmAccessMode(mode);
         setLlmProvider(data.llm_config.provider || "deepseek");
+        setLlmModel(data.llm_config.model || "");
         setLlmApiKey(data.llm_config.api_key || "");
         setLlmBaseUrl(data.llm_config.base_url || "");
         setImageProvider(data.llm_config.image_provider || "aliyun");
+        setImageModel(data.llm_config.image_model || "");
         setImageApiKey(data.llm_config.image_api_key || "");
         setQuotaMode("custom");
-      } else {
-        setQuotaMode("platform");
       }
-    } catch (e) {
+    } catch {
       showToast(isEn ? "Failed to load profile" : "加载个人信息失败", "error");
     } finally {
       setLoading(false);
@@ -172,17 +165,64 @@ export default function ProfilePage() {
     }
   };
 
+  // 根据 provider 返回可选文本模型列表
+  const getLlmModelOptions = (provider: string): string[] => {
+    if (provider === "aliyun") {
+      return ["qwen3.5-flash", "deepseek-v3.2", "Moonshot-Kimi-K2-Instruct"];
+    }
+    // 默认 DeepSeek
+    return ["deepseek-chat", "deepseek-reasoner"];
+  };
+
+  // 当切换文本 provider 时，如果当前模型不在合法列表中，则自动重置为第一个选项
+  useEffect(() => {
+    if (llmAccessMode !== "preset") return;
+    const opts = getLlmModelOptions(llmProvider);
+    if (!opts.includes(llmModel)) {
+      setLlmModel(opts[0]);
+    }
+  }, [llmProvider, llmModel, llmAccessMode]);
+
   const handleSaveLlmConfig = async () => {
+    // 除 base_url 外，其余字段均必填
+    const missing: string[] = [];
+    if (llmAccessMode === "preset") {
+      if (!llmProvider.trim()) missing.push(tr("API 服务商", "API Provider"));
+      if (!llmModel.trim()) missing.push(tr("模型名称", "Model Name"));
+      if (!llmApiKey.trim()) missing.push(tr("API Key", "API Key"));
+    } else {
+      if (!llmModel.trim()) missing.push(tr("模型名称", "Model Name"));
+      if (!llmApiKey.trim()) missing.push(tr("API Key", "API Key"));
+      if (!llmBaseUrl.trim()) missing.push(tr("Base URL", "Base URL"));
+    }
+    if (!imageProvider.trim()) missing.push(tr("图像 API 服务商", "Image API Provider"));
+    if (!imageModel.trim()) missing.push(tr("图像模型名称", "Image Model Name"));
+    if (!imageApiKey.trim()) missing.push(tr("图像 API Key", "Image API Key"));
+    if (missing.length > 0) {
+      showToast(
+        llmAccessMode === "preset"
+          ? tr(`请填写必填项：${missing.join("、")}（Base URL 可留空）`, `Please fill required fields: ${missing.join(", ")} (Base URL can be empty)`)
+          : tr(`请填写必填项：${missing.join("、")}`, `Please fill required fields: ${missing.join(", ")}`),
+        "error",
+      );
+      return;
+    }
+
     setSaving(true);
     try {
+      const effectiveProvider = llmAccessMode === "custom_openai" ? "openai_compat" : llmProvider;
+      const effectiveBaseUrl = llmAccessMode === "custom_openai" ? llmBaseUrl.trim() : "";
       const res = await fetch("/api/user/profile/llm", {
         method: "PUT",
         headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
-          provider: llmProvider,
+          llm_access_mode: llmAccessMode,
+          provider: effectiveProvider,
+          model: llmModel.trim(),
           api_key: llmApiKey.trim(),
-          base_url: llmBaseUrl.trim(),
+          base_url: effectiveBaseUrl,
           image_provider: imageProvider,
+          image_model: imageModel.trim(),
           image_api_key: imageApiKey.trim(),
         }),
       });
@@ -199,6 +239,58 @@ export default function ProfilePage() {
       showToast(msg, "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resetLlmForm = useCallback(() => {
+    setLlmAccessMode("preset");
+    setLlmProvider("deepseek");
+    setLlmModel("");
+    setLlmApiKey("");
+    setLlmBaseUrl("");
+    setImageProvider("aliyun");
+    setImageModel("");
+    setImageApiKey("");
+  }, []);
+
+  const isLlmConfigValid = useMemo(() => {
+    const commonImageOk =
+      imageProvider.trim().length > 0 &&
+      imageModel.trim().length > 0 &&
+      imageApiKey.trim().length > 0;
+    if (llmAccessMode === "preset") {
+      return (
+        llmProvider.trim().length > 0 &&
+        llmModel.trim().length > 0 &&
+        llmApiKey.trim().length > 0 &&
+        commonImageOk
+        // base_url 可为空
+      );
+    }
+    // custom_openai: base_url 必填
+    return llmModel.trim().length > 0 && llmApiKey.trim().length > 0 && llmBaseUrl.trim().length > 0 && commonImageOk;
+  }, [llmProvider, llmModel, llmApiKey, llmBaseUrl, imageProvider, imageModel, imageApiKey, llmAccessMode]);
+
+  const handleDeleteLlmConfig = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/user/profile/llm", {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => ({} as { error?: string }));
+      if (!res.ok) {
+        throw new Error(data.error || tr("删除配置失败", "Failed to delete configuration"));
+      }
+      showToast(tr("配置已删除", "Configuration deleted"), "success");
+      resetLlmForm();
+      setDeleteConfirmOpen(false);
+      await loadProfile(); // 确保服务端状态已清空
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr("删除配置失败", "Failed to delete configuration");
+      showToast(msg, "error");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -358,53 +450,139 @@ export default function ProfilePage() {
                     )}
                 </p>
                 </div>
-                <Field label={tr("API 服务商", "API Provider")}>
-                  <select
-                    value={llmProvider}
-                    onChange={(e) => {
-                      const provider = e.target.value;
-                      setLlmProvider(provider);
-                      // 切换服务商时，重置模型为第一个
-                      const defaultModel = LLM_MODELS[provider]?.[0]?.v || "";
+
+                {/* 文本大模型接入模式切换：预设 vs 自定义 OpenAI 格式 */}
+                <div className="flex gap-2 border-b border-ink/10 pb-2">
+                  <button
+                    onClick={() => {
+                      setLlmAccessMode("preset");
+                      // 回到预设模式时，确保 provider 合法并触发 model 自动回退
+                      if (!llmProvider.trim() || llmProvider === "openai_compat") setLlmProvider("deepseek");
+                      // 预设模式不使用 base_url，清空避免误提交
+                      setLlmBaseUrl("");
                     }}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      llmAccessMode === "preset"
+                        ? "text-ink border-b-2 border-ink"
+                        : "text-ink-light hover:text-ink"
+                    }`}
                   >
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
-                    <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
-                  </select>
-                </Field>
-                <Field label={tr("API Key", "API Key")}>
-                  <input
-                    type="password"
-                    value={llmApiKey}
-                    onChange={(e) => setLlmApiKey(e.target.value)}
-                    placeholder={tr("请输入您的 API Key", "Enter your API Key")}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
-                    autoComplete="off"
-                  />
-                </Field>
-                <Field label={tr("Base URL (可选)", "Base URL (Optional)")}>
-                  <input
-                    type="text"
-                    value={llmBaseUrl}
-                    onChange={(e) => setLlmBaseUrl(e.target.value)}
-                    placeholder={tr("留空使用默认地址", "Leave empty to use default")}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  />
-                </Field>
+                    {tr("预设服务商", "Preset")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLlmAccessMode("custom_openai");
+                      setLlmProvider("openai_compat");
+                    }}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      llmAccessMode === "custom_openai"
+                        ? "text-ink border-b-2 border-ink"
+                        : "text-ink-light hover:text-ink"
+                    }`}
+                  >
+                    {tr("自定义 OpenAI 格式", "Custom OpenAI")}
+                  </button>
+                </div>
+
+                {llmAccessMode === "preset" ? (
+                  <>
+                    <Field label={tr("API 服务商", "API Provider")}>
+                      <select
+                        value={llmProvider}
+                        onChange={(e) => setLlmProvider(e.target.value)}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      >
+                        <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
+                        <option value="deepseek">DeepSeek</option>
+                      </select>
+                    </Field>
+                    <Field label={tr("模型名称", "Model Name")}>
+                      <select
+                        value={llmModel}
+                        onChange={(e) => setLlmModel(e.target.value)}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      >
+                        {llmProvider === "aliyun" ? (
+                          <>
+                            <option value="qwen3.5-flash">qwen3.5-flash</option>
+                            <option value="deepseek-v3.2">deepseek-v3.2</option>
+                            <option value="Moonshot-Kimi-K2-Instruct">Moonshot-Kimi-K2-Instruct</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="deepseek-chat">deepseek-chat</option>
+                            <option value="deepseek-reasoner">deepseek-reasoner</option>
+                          </>
+                        )}
+                      </select>
+                    </Field>
+                    <Field label={tr("API Key", "API Key")}>
+                      <input
+                        type="password"
+                        value={llmApiKey}
+                        onChange={(e) => setLlmApiKey(e.target.value)}
+                        placeholder={tr("请输入您的 API Key", "Enter your API Key")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                        autoComplete="off"
+                      />
+                    </Field>
+                  </>
+                ) : (
+                  <>
+                    <Field label={tr("模型名称", "Model Name")}>
+                      <input
+                        type="text"
+                        value={llmModel}
+                        onChange={(e) => setLlmModel(e.target.value)}
+                        placeholder={tr("例如：gpt-4o-mini", "e.g. gpt-4o-mini")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                      />
+                    </Field>
+                    <Field label={tr("API Key", "API Key")}>
+                      <input
+                        type="password"
+                        value={llmApiKey}
+                        onChange={(e) => setLlmApiKey(e.target.value)}
+                        placeholder={tr("请输入您的 API Key", "Enter your API Key")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                        autoComplete="off"
+                      />
+                    </Field>
+                    <Field label={tr("Base URL（必填）", "Base URL (Required)")}>
+                      <input
+                        type="text"
+                        value={llmBaseUrl}
+                        onChange={(e) => setLlmBaseUrl(e.target.value)}
+                        placeholder={tr("例如：https://api.openai.com/v1", "e.g. https://api.openai.com/v1")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                      />
+                    </Field>
+                  </>
+                )}
                 
                 <div className="pt-4 border-t border-ink/10">
                   <p className="text-sm font-medium text-ink mb-3">{tr("图像生成 API 配置", "Image Generation API Configuration")}</p>
                 </div>
                 
                 <Field label={tr("图像 API 服务商", "Image API Provider")}>
-                  <select
+                  <input
+                    type="text"
                     value={imageProvider}
                     onChange={(e) => setImageProvider(e.target.value)}
+                    placeholder={tr("例如 aliyun", "e.g. aliyun")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                  />
+                </Field>
+                <Field label={tr("图像模型名称", "Image Model Name")}>
+                  <select
+                    value={imageModel}
+                    onChange={(e) => setImageModel(e.target.value)}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                   >
-                    <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
+                    <option value="">{tr("请选择图像模型", "Select image model")}</option>
+                    <option value="qwen-image-plus">qwen-image-plus</option>
+                    <option value="qwen-image-2.0">qwen-image-2.0</option>
+                    <option value="qwen-image-max">qwen-image-max</option>
                   </select>
                 </Field>
                 <Field label={tr("图像 API Key", "Image API Key")}>
@@ -419,25 +597,83 @@ export default function ProfilePage() {
                 </Field>
                 
                 <div className="pt-2">
-                  <Button onClick={handleSaveLlmConfig} disabled={saving} className="bg-ink text-white hover:bg-ink/90">
-                    {saving ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin mr-1" />
-                        {tr("保存中...", "Saving...")}
-                      </>
-                    ) : (
-                      <>
-                        <Save size={14} className="mr-1" />
-                        {tr("保存配置", "Save Configuration")}
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={handleSaveLlmConfig}
+                      disabled={saving || deleting || !isLlmConfigValid}
+                      variant="outline"
+                      className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white hover:border-ink active:bg-ink/90"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin mr-1" />
+                          {tr("保存中...", "Saving...")}
+                        </>
+                      ) : (
+                        <>
+                          <Save size={14} className="mr-1" />
+                          {tr("保存配置", "Save Configuration")}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      disabled={saving || deleting}
+                      className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white hover:border-ink active:bg-ink/90"
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin mr-1" />
+                          {tr("删除中...", "Deleting...")}
+                        </>
+                      ) : (
+                        tr("删除配置", "Delete Configuration")
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete confirm modal */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => (deleting ? null : setDeleteConfirmOpen(false))} />
+          <div className="relative z-10 w-[92vw] max-w-md rounded-sm border border-ink/20 bg-white shadow-lg p-4">
+            <div className="text-sm font-medium text-ink mb-2">{tr("确认删除", "Confirm deletion")}</div>
+            <div className="text-sm text-ink-light">
+              {tr("确定要删除自定义配置吗？删除后将使用平台免费额度。", "Are you sure you want to delete the custom configuration? After deletion, platform free quota will be used.")}
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setDeleteConfirmOpen(false)}
+                disabled={deleting}
+              >
+                {tr("取消", "Cancel")}
+              </Button>
+              <Button
+                onClick={handleDeleteLlmConfig}
+                disabled={deleting}
+                className="bg-red-600 text-white hover:bg-red-700 border border-red-600"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin mr-1" />
+                    {tr("删除中...", "Deleting...")}
+                  </>
+                ) : (
+                  tr("确认删除", "Delete")
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

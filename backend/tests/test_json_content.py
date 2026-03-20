@@ -229,6 +229,52 @@ async def test_llm_key_missing_returns_fallback():
     assert result["author"] == "fallback author"
 
 
+@pytest.mark.asyncio
+async def test_weather_external_data_does_not_mark_llm_used():
+    mode_def = {
+        "mode_id": "WEATHER",
+        "content": {
+            "type": "external_data",
+            "provider": "weather_forecast",
+            "fallback": {
+                "city": "",
+                "today_temp": "--",
+                "today_desc": "暂无数据",
+                "today_code": -1,
+                "today_low": "--",
+                "today_high": "--",
+                "today_range": "-- / --",
+                "advice": "注意根据天气添减衣物",
+                "forecast": [],
+            },
+        },
+        "layout": {"body": []},
+    }
+    weather_payload = {
+        "city": "上海",
+        "today_temp": 16,
+        "today_desc": "多云",
+        "today_code": 2,
+        "today_low": 12,
+        "today_high": 19,
+        "today_range": "12°C / 19°C",
+        "advice": "早晚微凉，带件薄外套",
+        "forecast": [],
+    }
+
+    with patch("core.json_content._generate_external_data_content", new_callable=AsyncMock) as mock_external:
+        mock_external.return_value = weather_payload
+        result = await generate_json_mode_content(
+            mode_def,
+            date_str="2025-03-12",
+            weather_str="多云 16°C",
+        )
+
+    assert result["city"] == "上海"
+    assert result["advice"] == "早晚微凉，带件薄外套"
+    assert "_llm_used" not in result
+
+
 if __name__ == "__main__":
     test_parse_text_split_basic()
     test_parse_text_split_missing_fields()

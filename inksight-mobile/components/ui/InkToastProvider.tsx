@@ -12,7 +12,7 @@ export function InkToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
   const queueRef = useRef<ToastConfig[]>([]);
   const activeRef = useRef<boolean>(false);
-  const gapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gapTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Cleanup timer on unmount
   useEffect(() => {

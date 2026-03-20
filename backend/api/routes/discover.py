@@ -23,86 +23,6 @@ from core.config_store import save_custom_mode, get_custom_mode as get_user_cust
 router = APIRouter(tags=["discover"])
 
 
-@router.get("/discover/feed")
-async def discover_feed():
-    registry = get_registry()
-    modes = [
-        {
-            "mode_id": info.mode_id,
-            "display_name": info.display_name,
-            "description": info.description,
-            "icon": info.icon,
-            "source": info.source,
-        }
-        for info in registry.list_modes(None)
-        if info.source != "custom"
-    ]
-
-    def _mode(mode_id: str) -> dict:
-        for item in modes:
-            if item["mode_id"] == mode_id:
-                return item
-        return {
-            "mode_id": mode_id,
-            "display_name": mode_id.title(),
-            "description": "",
-            "icon": "star",
-            "source": "builtin",
-        }
-
-    editorial_sections = [
-        {
-            "id": "desk-rhythm",
-            "title": "编辑精选",
-            "subtitle": "适合第一次打开 InkSight 的三种气质",
-            "items": [
-                dict(_mode("DAILY"), badge="今日起点"),
-                dict(_mode("POETRY"), badge="安静片刻"),
-                dict(_mode("WEATHER"), badge="实用安排"),
-            ],
-        },
-        {
-            "id": "slow-scenes",
-            "title": "慢信息场景",
-            "subtitle": "把内容放进不同的桌面节奏里",
-            "items": [
-                dict(_mode("STOIC"), badge="工作台"),
-                dict(_mode("LETTER"), badge="陪伴感"),
-                dict(_mode("QUESTION"), badge="夜间思考"),
-            ],
-        },
-    ]
-
-    featured_modes = [
-        _mode("DAILY"),
-        _mode("POETRY"),
-        _mode("WEATHER"),
-        _mode("STOIC"),
-        _mode("LETTER"),
-        _mode("QUESTION"),
-    ]
-
-    return {
-        "generated_at": datetime.now().isoformat(),
-        "scene_chips": [
-            {"id": "desk", "label": "适合工作台"},
-            {"id": "gift", "label": "适合送礼"},
-            {"id": "night", "label": "适合夜晚"},
-            {"id": "eink", "label": "适合电子墨水屏"},
-        ],
-        "editorial_sections": editorial_sections,
-        "featured_modes": featured_modes,
-        "cta_links": [
-            {
-                "id": "all-modes",
-                "title": "更多模式",
-                "description": "继续查看完整模式目录，找到更适合你的内容气质。",
-                "route": "/browse/modes",
-            }
-        ],
-    }
-
-
 @router.get("/discover/modes")
 async def list_shared_modes(
     category: Optional[str] = Query(None, description="分类过滤"),
@@ -250,6 +170,32 @@ async def publish_mode(
     try:
         from core.json_content import generate_json_mode_content
         from core.json_renderer import render_json_mode
+        from core.config_store import get_user_llm_config
+
+        # 获取用户的 LLM 配置（用于生成缩略图）
+        user_llm_cfg = await get_user_llm_config(user_id)
+        llm_provider = ""
+        llm_model = ""
+        api_key = ""
+        llm_base_url = ""
+        image_provider = ""
+        image_model = ""
+        image_api_key = ""
+        
+        if user_llm_cfg:
+            llm_access_mode = (user_llm_cfg.get("llm_access_mode") or "preset").strip().lower()
+            llm_provider = (user_llm_cfg.get("provider") or "").strip()
+            llm_model = (user_llm_cfg.get("model") or "").strip()
+            api_key_plain = (user_llm_cfg.get("api_key") or "").strip()
+            if api_key_plain:
+                api_key = api_key_plain
+            if llm_access_mode == "custom_openai":
+                llm_base_url = (user_llm_cfg.get("base_url") or "").strip()
+            image_provider = (user_llm_cfg.get("image_provider") or "").strip()
+            image_model = (user_llm_cfg.get("image_model") or "").strip()
+            image_api_key_plain = (user_llm_cfg.get("image_api_key") or "").strip()
+            if image_api_key_plain:
+                image_api_key = image_api_key_plain
 
         # 获取上下文数据
         date_ctx = await get_date_context()
@@ -271,6 +217,13 @@ async def publish_mode(
                     weather_str=weather["weather_str"],
                     screen_w=SCREEN_WIDTH,
                     screen_h=SCREEN_HEIGHT,
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
+                    llm_base_url=(llm_base_url or None),
+                    api_key=api_key,
+                    image_provider=image_provider,
+                    image_model=image_model,
+                    image_api_key=image_api_key,
                 )
                 
                 image_url = content.get("image_url", "")
@@ -309,6 +262,13 @@ async def publish_mode(
                 weather_str=weather["weather_str"],
                 screen_w=SCREEN_WIDTH,
                 screen_h=SCREEN_HEIGHT,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                llm_base_url=(llm_base_url or None),
+                api_key=api_key,
+                image_provider=image_provider,
+                image_model=image_model,
+                image_api_key=image_api_key,
             )
 
         # 渲染图片

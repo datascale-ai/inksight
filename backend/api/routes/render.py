@@ -7,12 +7,13 @@ from json import JSONDecodeError
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Cookie, Depends, Header, Query, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 
 from api.shared import (
     _preview_push_queue,
     _preview_push_queue_lock,
+    _render_device_unbound_image,
     build_image,
     content_cache,
     ensure_web_or_device_access,
@@ -25,8 +26,15 @@ from api.shared import (
 )
 from core.auth import require_device_token, validate_mac_param
 from core.config import DEFAULT_REFRESH_INTERVAL, SCREEN_HEIGHT, SCREEN_WIDTH
-from core.config_store import consume_pending_refresh, get_active_config, get_device_state, update_device_state
-from core.context import get_date_context, get_weather
+from core.config_store import (
+    consume_pending_refresh,
+    get_active_config,
+    get_device_owner,
+    get_device_state,
+    get_or_create_claim_token,
+    update_device_state,
+)
+from core.context import extract_location_settings, get_date_context, get_weather
 from core.pipeline import generate_and_render
 from core.renderer import image_to_bmp_bytes, image_to_png_bytes, render_error
 from core.schemas import RenderQuery
@@ -52,24 +60,6 @@ def _configured_refresh_minutes(config: Optional[dict]) -> int:
     return refresh_minutes
 
 
-def _api_key_error_payload(user_provided_api_key: bool) -> dict:
-    if user_provided_api_key:
-        return {
-            "error": "api_key_invalid",
-            "message": "您配置的 API key 无效或已过期，请检查个人信息或设备配置中的 AI 配置。",
-        }
-    return {
-        "error": "platform_api_key_invalid",
-        "message": "服务器默认 AI 配置当前不可用。请在个人信息或设备配置中设置自己的 API key，或检查后端 .env 中的默认 API key。",
-    }
-
-
-def _api_key_error_response(user_provided_api_key: bool) -> JSONResponse:
-    payload = _api_key_error_payload(user_provided_api_key)
-    status_code = 400 if user_provided_api_key else 503
-    return JSONResponse(status_code=status_code, content=payload)
-
-
 @router.get("/render")
 @limiter.limit("10/minute")
 async def render(
@@ -80,16 +70,29 @@ async def render(
     mac = params.mac
     cfg: Optional[dict] = None
     configured_refresh_minutes: Optional[int] = None
+    owner = None
     if mac:
         mac = validate_mac_param(mac)
         await require_device_token(mac, x_device_token)
         cfg = await get_active_config(mac, log_load=False)
         configured_refresh_minutes = _configured_refresh_minutes(cfg)
+        owner = await get_device_owner(mac)
 
     start_time = time.time()
     force_next = params.next_mode == 1
 
     try:
+        if mac and owner is None:
+            claim = await get_or_create_claim_token(mac, source="render")
+            img = _render_device_unbound_image(params.w, params.h, claim.get("pair_code", ""))
+            bmp_bytes = image_to_bmp_bytes(img)
+            headers: dict[str, str] = {}
+            if configured_refresh_minutes is not None:
+                headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
+            if await consume_pending_refresh(mac):
+                headers["X-Pending-Refresh"] = "1"
+            return Response(content=bmp_bytes, media_type="image/bmp", headers=headers)
+
         if mac:
             async with _preview_push_queue_lock:
                 pushed_payload = _preview_push_queue.pop(mac, None)
@@ -152,7 +155,7 @@ async def render(
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
-        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, _user_provided_api_key = await build_image(
+        img, resolved_persona, cache_hit, content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, _usage_source = await build_image(
             params.v,
             mac,
             params.persona,
@@ -241,9 +244,9 @@ async def get_widget(
 
     config = await get_active_config(mac) or {}
     persona = mode.upper() if mode else config.get("modes", ["STOIC"])[0] if config.get("modes") else "STOIC"
-    city = config.get("city")
+    location_args = extract_location_settings(config)
     date_ctx = await get_date_context()
-    weather = await get_weather(city=city)
+    weather = await get_weather(**location_args)
     img, _ = await generate_and_render(
         persona,
         config,
@@ -276,6 +279,7 @@ async def preview(
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
+    intent: Optional[int] = Query(default=None),
     x_device_token: Optional[str] = Header(default=None),
     x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
@@ -308,7 +312,7 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
-        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, user_provided_api_key = await build_image(
+        img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source = await build_image(
             effective_v,
             mac,
             persona,
@@ -320,10 +324,31 @@ async def preview(
             preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
             current_user_id=current_user_id,
             user_api_key=x_inksight_llm_api_key,
+            intent_only=(intent == 1),
         )
+        if intent == 1:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "cache_hit": cache_hit,
+                    "usage_source": usage_source,
+                    "persona": resolved_persona,
+                    "requires_invite_code": quota_exhausted,
+                    "llm_mode_requires_quota": llm_mode_requires_quota,
+                },
+            )
         # 如果 API key 无效，返回 JSON 响应，提醒用户
         if api_key_invalid:
-            return _api_key_error_response(user_provided_api_key)
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=400,  # Bad Request
+                content={
+                    "error": "api_key_invalid",
+                    "message": "您提供的 API key 无效或已过期，请检查个人信息或服务器中的 API key 配置",
+                },
+            )
         # 如果额度耗尽，返回 JSON 响应，让前端显示邀请码输入弹窗
         if quota_exhausted:
             from fastapi.responses import JSONResponse
@@ -415,7 +440,7 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
-            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, user_provided_api_key = await build_image(
+            img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source = await build_image(
                 effective_v,
                 mac,
                 persona,
@@ -430,7 +455,10 @@ async def preview_stream(
             )
             # 如果 API key 无效，返回错误事件
             if api_key_invalid:
-                yield _sse_event("error", _api_key_error_payload(user_provided_api_key))
+                yield _sse_event("error", {
+                    "error": "api_key_invalid",
+                    "message": "您提供的 API key 无效或已过期，请检查个人信息或服务器中的 API key 配置",
+                })
                 return
             # 如果额度耗尽，返回错误事件
             if quota_exhausted:
@@ -438,11 +466,18 @@ async def preview_stream(
                     "error": "quota_exhausted",
                     "message": "您的免费额度已用完，请输入邀请码获取更多额度",
                     "requires_invite_code": True,
+                    "usage_source": usage_source,
                 })
                 return
             yield _sse_event("status", {"stage": "rendering", "message": "正在渲染..."})
             png_bytes = image_to_png_bytes(img)
             data_url = f"data:image/png;base64,{base64.b64encode(png_bytes).decode('ascii')}"
+            # Keep SSE result payload aligned with /preview headers for UI.
+            status_msg = (
+                "no_llm_required"
+                if not llm_mode_requires_quota
+                else ("model_generated" if not _content_fallback else "fallback_used")
+            )
             yield _sse_event(
                 "result",
                 {
@@ -450,7 +485,10 @@ async def preview_stream(
                     "message": "完成",
                     "persona": resolved_persona,
                     "cache_hit": cache_hit,
+                    "usage_source": usage_source,
                     "image_url": data_url,
+                    "preview_status": status_msg,
+                    "llm_required": bool(llm_mode_requires_quota),
                 },
             )
         except (OSError, RuntimeError, TypeError, ValueError, UnidentifiedImageError) as exc:

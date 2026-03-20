@@ -21,17 +21,10 @@ export async function login(username: string, password: string) {
   });
 }
 
-type RegisterPayload = {
-  username: string;
-  password: string;
-  phone?: string;
-  email?: string;
-};
-
-export async function register({ username, password, phone, email }: RegisterPayload) {
+export async function register(username: string, password: string) {
   return apiRequest<AuthResponse>('/auth/register', {
     method: 'POST',
-    body: { username, password, phone, email },
+    body: { username, password },
     token: null,
   });
 }

@@ -1,272 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { LocationPicker } from "@/components/config/location-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, Eye, LayoutGrid, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
+import { cleanLocationValue, type LocationValue } from "@/lib/locations";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
 
-// 模式元数据（从设备配置页面复制）
-const MODE_META: Record<string, { name: string; tip: string }> = {
-  DAILY: { name: "每日", tip: "语录、书籍推荐、冷知识的综合日报" },
-  WEATHER: { name: "天气", tip: "实时天气和未来趋势看板" },
-  WORD_OF_THE_DAY: { name: "每日一词", tip: "每日精选一个英语单词，展示其拼写与释义" },
-  ZEN: { name: "禅意", tip: "一个大字表达当下心境" },
-  BRIEFING: { name: "简报", tip: "科技热榜 + AI 洞察简报" },
-  MY_QUOTE: { name: "自定义语录", tip: "可在预览弹窗中随机生成，或输入你自己的语录内容" },
-  STOIC: { name: "斯多葛", tip: "每日一句哲学箴言" },
-  POETRY: { name: "诗词", tip: "古诗词与简短注解" },
-  ARTWALL: { name: "画廊", tip: "根据时令生成黑白艺术画" },
-  ALMANAC: { name: "老黄历", tip: "农历、节气、宜忌信息" },
-  RECIPE: { name: "食谱", tip: "按时段推荐三餐方案" },
-  COUNTDOWN: { name: "倒计时", tip: "重要日程倒计时/正计时" },
-  MEMO: { name: "便签", tip: "展示自定义便签文字" },
-  HABIT: { name: "打卡", tip: "每日习惯完成进度" },
-  ROAST: { name: "毒舌", tip: "轻松幽默的吐槽风格内容" },
-  FITNESS: { name: "健身", tip: "居家健身动作与建议" },
-  LETTER: { name: "慢信", tip: "来自不同时空的一封慢信" },
-  THISDAY: { name: "今日历史", tip: "历史上的今天重大事件" },
-  RIDDLE: { name: "猜谜", tip: "谜题与脑筋急转弯" },
-  QUESTION: { name: "每日一问", tip: "值得思考的开放式问题" },
-  BIAS: { name: "认知偏差", tip: "认知偏差与心理效应" },
-  STORY: { name: "微故事", tip: "可在 30 秒内读完的微故事" },
-  LIFEBAR: { name: "进度条", tip: "年/月/周/人生进度条" },
-  CHALLENGE: { name: "微挑战", tip: "每天一个 5 分钟微挑战" },
-  MY_ADAPTIVE: { name: "自适应照片", tip: "上传本地照片，自适应 4.2\" 墨水屏" },
-};
-
-async function readErrorMessage(res: Response, fallback: string): Promise<string> {
-  const contentType = res.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const data = await res.json().catch(() => null);
-    if (data && typeof data === "object") {
-      const msg = (data as { message?: unknown; error?: unknown }).message;
-      if (typeof msg === "string" && msg.trim()) return msg.trim();
-      const err = (data as { error?: unknown }).error;
-      if (typeof err === "string" && err.trim()) return err.trim();
-    }
-  }
-  const text = await res.text().catch(() => "");
-  if (text.trim()) return text.trim().slice(0, 160);
-  return `${fallback}: HTTP ${res.status}`;
-}
-
-// 英文模式元数据（用于 /en/preview 下显示）
-const MODE_META_EN: Record<string, { name: string; tip: string }> = {
-  DAILY: { name: "Everyday", tip: "A daily digest: quotes, book picks, and fun facts" },
-  WEATHER: { name: "Weather", tip: "Current weather and forecast dashboard" },
-  WORD_OF_THE_DAY: { name: "Word of the Day", tip: "One English word with a short explanation" },
-  MY_QUOTE: { name: "Custom Quote", tip: "Supports custom input or random generation" },
-  MY_ADAPTIVE: { name: "Adaptive Photo", tip: "Upload a local photo and auto-fit it to the 4.2\" e-ink screen" },
-  ADAPTIVE_PHOTO: { name: "Adaptive Photo", tip: "Auto-fit photo mode for the e-ink screen" },
-  PHOTO: { name: "Photo", tip: "Photo mode" },
-  MY_PHOTO: { name: "Custom Photo", tip: "Your own photo mode (JSON-defined)" },
-  ZEN: { name: "Zen", tip: "A single character to reflect your mood" },
-  BRIEFING: { name: "Briefing", tip: "Tech trends + AI insights briefing" },
-  STOIC: { name: "Stoic", tip: "A daily stoic quote" },
-  POETRY: { name: "Poetry", tip: "Classical poetry with a short note" },
-  ARTWALL: { name: "Gallery", tip: "Seasonal black & white generative art" },
-  ALMANAC: { name: "Almanac", tip: "Lunar calendar, solar terms, and daily luck" },
-  RECIPE: { name: "Recipe", tip: "Meal ideas based on time of day" },
-  COUNTDOWN: { name: "Countdown", tip: "Countdown / count-up for important events" },
-  MEMO: { name: "Memo", tip: "Show your custom memo text" },
-  HABIT: { name: "Habits", tip: "Daily habit progress" },
-  ROAST: { name: "Roast", tip: "Lighthearted, sarcastic daily roast" },
-  FITNESS: { name: "Fitness", tip: "At-home workout tips" },
-  LETTER: { name: "Letter", tip: "A slow letter from another time" },
-  THISDAY: { name: "On This Day", tip: "Major events in history today" },
-  RIDDLE: { name: "Riddle", tip: "Riddles and brain teasers" },
-  QUESTION: { name: "Daily Question", tip: "A thought-provoking open question" },
-  BIAS: { name: "Bias", tip: "A cognitive bias or psychological effect" },
-  STORY: { name: "Micro Story", tip: "A complete micro fiction in three parts" },
-  LIFEBAR: { name: "Life Bar", tip: "Progress bars for year / month / week / life" },
-  CHALLENGE: { name: "Challenge", tip: "A 5-minute daily micro challenge" },
-};
-
-const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
-const EXTRA_MODES = Object.keys(MODE_META).filter(
-  (m) => !CORE_MODES.includes(m) && m !== "MY_QUOTE" && m !== "MY_ADAPTIVE",
-);
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const MODE_TEMPLATES: Record<string, { label: string; def: any }> = {
-  quote: {
-    label: "语录模板",
-    def: {
-      mode_id: "MY_QUOTE",
-      display_name: "自定义语录",
-      icon: "book",
-      cacheable: true,
-      description: "自定义语录模式",
-      content: {
-        type: "llm_json",
-        prompt_template: "请生成一条有深度的语录，用 JSON 返回 {quote, author}。{context}",
-        output_schema: { quote: { type: "string" }, author: { type: "string" } },
-        temperature: 0.8,
-        fallback: { quote: "路漫漫其修远兮", author: "屈原" },
-        fallback_pool: [
-          { quote: "路漫漫其修远兮", author: "屈原" },
-          { quote: "知者不惑，仁者不忧", author: "孔子" },
-          { quote: "天行健，君子以自强不息", author: "易经" },
-        ],
-      },
-      layout: {
-        status_bar: { line_width: 1 },
-        body: [
-          {
-            type: "centered_text",
-            field: "quote",
-            font: "NotoSerifSC-Light.ttf",
-            font_size: 18,
-            vertical_center: true,
-          },
-        ],
-        footer: { label: "MY_QUOTE", attribution_template: "— {author}" },
-      },
-    },
-  },
-  list: {
-    label: "列表模板",
-    def: {
-      mode_id: "MY_LIST",
-      display_name: "自定义列表",
-      icon: "list",
-      cacheable: true,
-      description: "列表展示模式",
-      content: {
-        type: "llm_json",
-        prompt_template: "请生成3条科技快讯，JSON 格式 {title, items: [{text}]}。{context}",
-        output_schema: {
-          title: { type: "string" },
-          items: {
-            type: "array",
-            items: { type: "object", properties: { text: { type: "string" } } },
-          },
-        },
-        temperature: 0.7,
-        fallback: { title: "今日快讯", items: [{ text: "暂无内容" }] },
-      },
-      layout: {
-        status_bar: { line_width: 1 },
-        body: [
-          { type: "text", field: "title", font_size: 16, align: "center", bold: true },
-          { type: "spacer", height: 8 },
-          {
-            type: "list",
-            field: "items",
-            item_template: "{text}",
-            max_items: 5,
-            font_size: 12,
-          },
-        ],
-        footer: { label: "MY_LIST" },
-      },
-    },
-  },
-  zen: {
-    label: "禅意模板",
-    def: {
-      mode_id: "MY_ZEN",
-      display_name: "自定义禅",
-      icon: "zen",
-      cacheable: true,
-      description: "单字禅意模式",
-      content: {
-        type: "llm_json",
-        prompt_template:
-          "请给出一个蕴含哲理的汉字，并简短解读。JSON: {word, reading}。{context}",
-        output_schema: { word: { type: "string" }, reading: { type: "string" } },
-        temperature: 0.9,
-        fallback: { word: "道", reading: "万物之始" },
-      },
-      layout: {
-        status_bar: { line_width: 1 },
-        body: [
-          {
-            type: "centered_text",
-            field: "word",
-            font: "NotoSerifSC-Bold.ttf",
-            font_size: 80,
-            vertical_center: true,
-          },
-          { type: "centered_text", field: "reading", font_size: 13 },
-        ],
-        footer: { label: "MY_ZEN" },
-      },
-    },
-  },
-  sections: {
-    label: "综合模板",
-    def: {
-      mode_id: "MY_DAILY",
-      display_name: "自定义综合",
-      icon: "daily",
-      cacheable: true,
-      description: "多栏综合内容",
-      content: {
-        type: "llm_json",
-        prompt_template:
-          "请生成今日内容：一句话语录、一个推荐、一个小贴士。JSON: {quote, recommend, tip}。{context}",
-        output_schema: {
-          quote: { type: "string" },
-          recommend: { type: "string" },
-          tip: { type: "string" },
-        },
-        temperature: 0.8,
-        fallback: {
-          quote: "今天是美好的一天",
-          recommend: "推荐阅读",
-          tip: "记得喝水",
-        },
-      },
-      layout: {
-        status_bar: { line_width: 1 },
-        body: [
-          {
-            type: "section",
-            label: "📖 语录",
-            blocks: [{ type: "text", field: "quote", font_size: 13 }],
-          },
-          { type: "separator", dashed: true },
-          {
-            type: "section",
-            label: "💡 推荐",
-            blocks: [{ type: "text", field: "recommend", font_size: 12 }],
-          },
-          { type: "separator", dashed: true },
-          {
-            type: "section",
-            label: "🌟 小贴士",
-            blocks: [{ type: "text", field: "tip", font_size: 12 }],
-          },
-        ],
-        footer: { label: "MY_DAILY" },
-      },
-    },
-  },
-};
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-interface ServerModeItem {
+type ModeCatalogItem = {
   mode_id: string;
-  display_name: string;
-  description: string;
-  source: string;
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-end justify-between gap-2">
-        <label className="block text-sm font-medium text-ink mb-1.5">{label}</label>
-        {hint ? <span className="text-xs text-ink-light mb-1.5">{hint}</span> : null}
-      </div>
-      {children}
-    </div>
-  );
-}
+  category: "core" | "more" | "custom" | string;
+  source?: string;
+  display_name?: string;
+  description?: string;
+  i18n?: {
+    zh?: { name?: string; tip?: string };
+    en?: { name?: string; tip?: string };
+  };
+};
 
 function ModeSection({
   title,
@@ -275,17 +31,17 @@ function ModeSection({
   onPreview,
   collapsible,
   customMeta,
+  tailItem,
   locale,
-  extraItem,
 }: {
   title: string;
   modes: string[];
-  currentMode: string | null;
+  currentMode: string;
   onPreview: (m: string) => void;
   collapsible?: boolean;
   customMeta?: Record<string, { name: string; tip: string }>;
+  tailItem?: React.ReactNode;
   locale: string;
-  extraItem?: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   if (!modes.length) return null;
@@ -306,11 +62,7 @@ function ModeSection({
       {collapsed ? null : (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {modes.map((m) => {
-            const meta =
-              (locale === "en" ? MODE_META_EN[m] : MODE_META[m]) ||
-              customMeta?.[m] ||
-              MODE_META[m] ||
-              { name: m, tip: "" };
+            const meta = customMeta?.[m] || { name: m, tip: "" };
             const isCurrent = currentMode === m;
             return (
               <div key={m} className="rounded-sm border border-ink/10 bg-white overflow-hidden">
@@ -338,7 +90,7 @@ function ModeSection({
               </div>
             );
           })}
-          {extraItem}
+          {tailItem ? tailItem : null}
         </div>
       )}
     </div>
@@ -351,33 +103,35 @@ export default function ExperiencePage() {
   const locale = localeFromPathname(pathname || "/");
 
   const [authChecked, setAuthChecked] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ user_id: number; username: string } | null | undefined>(
-    undefined,
-  );
   const [userLlmApiKey, setUserLlmApiKey] = useState<string>("");
 
-  const [serverModes, setServerModes] = useState<ServerModeItem[]>([]);
+  const [catalogItems, setCatalogItems] = useState<ModeCatalogItem[]>([]);
   const [modesError, setModesError] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState<string | null>(null);
-  const [customPreviewTitle, setCustomPreviewTitle] = useState<string | null>(null);
-  const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
+  // do not preselect any mode
+  const [previewMode, setPreviewMode] = useState("");
+  const [previewModeNameOverride, setPreviewModeNameOverride] = useState<string | null>(null);
 
-  const [city, setCity] = useState("杭州");
-  const [memoText, setMemoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
+  const [city] = useState("杭州");
+  const [memoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
 
   const [previewLoading, setPreviewLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+
+  // 当前预览对应的大模型调用状态提示（无 / 成功 / 失败使用兜底等）
+  const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
 
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const lastObjectUrlRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
   const [modal, setModal] = useState<null | { type: "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar"; modeId: string }>(null);
-  const [imageUploadLoading, setImageUploadLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_imageUploadLoading, setImageUploadLoading] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
-  const [cityDraft, setCityDraft] = useState("");
+  const [weatherDraftLocation, setWeatherDraftLocation] = useState<LocationValue>({ city: "杭州" });
   const [memoDraft, setMemoDraft] = useState("");
   
   // 倒计时状态
@@ -400,7 +154,6 @@ export default function ExperiencePage() {
   const [customModeName, setCustomModeName] = useState("");
   const [customJson, setCustomJson] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
-  const [customEditorTab, setCustomEditorTab] = useState<"ai" | "template">("ai");
 
   const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -417,18 +170,20 @@ export default function ExperiencePage() {
     return data.url;
   };
 
-  // 检查当前登录状态（不强制立即跳转，未登录时在页面内给出提示和登录按钮）
+  // 进入无设备体验前必须登录
   useEffect(() => {
     fetchCurrentUser()
       .then((u) => {
-        setCurrentUser(u ? { user_id: u.user_id, username: u.username } : null);
+        if (!u) {
+          router.replace(withLocalePath(locale, "/login"));
+          return;
+        }
         setAuthChecked(true);
       })
       .catch(() => {
-        setCurrentUser(null);
-        setAuthChecked(true);
+        router.replace(withLocalePath(locale, "/login"));
       });
-  }, [locale]);
+  }, [locale, router]);
 
   // 从本机缓存读取用户 API Key（由配置页写入）
   useEffect(() => {
@@ -448,20 +203,55 @@ export default function ExperiencePage() {
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
   };
 
-  const customSectionModes = ["MY_ADAPTIVE"];
+  const modeMeta = useMemo(() => {
+    const map: Record<string, { name: string; tip: string }> = {};
+    for (const item of catalogItems) {
+      const mid = (item.mode_id || "").toUpperCase();
+      if (!mid) continue;
+      const lang = locale === "en" ? item.i18n?.en : item.i18n?.zh;
+      const name =
+        (lang?.name && String(lang.name)) ||
+        (item.display_name && String(item.display_name)) ||
+        mid;
+      const tip =
+        (lang?.tip && String(lang.tip)) ||
+        (item.description && String(item.description)) ||
+        "";
+      map[mid] = { name, tip };
+    }
+    return map;
+  }, [catalogItems, locale]);
+
+  const coreModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "core").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const moreModes = useMemo(
+    () =>
+      catalogItems
+        .filter((m) => m.category === "more")
+        .map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const customModes = useMemo(
+    () =>
+      catalogItems
+        .filter((m) => m.category === "custom")
+        .map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
 
   const previewModeName =
-    previewMode === null
-      ? t(locale, "preview.select_mode", locale === "zh" ? "请选择模式" : "Please select a mode")
-      : (locale === "en" ? MODE_META_EN[previewMode]?.name : MODE_META[previewMode]?.name) ||
-        previewMode ||
-        t(locale, "preview.unknown_mode", "Unknown");
+    previewModeNameOverride ||
+    modeMeta[previewMode]?.name ||
+    previewMode ||
+    t(locale, "preview.unknown_mode", "Unknown");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const previewModeTip =
-    previewMode === null
-      ? ""
-      : (locale === "en" ? MODE_META_EN[previewMode]?.tip : MODE_META[previewMode]?.tip) || "";
+    modeMeta[previewMode]?.tip ||
+    "";
 
-  const handlePreview = async (modeId?: string, override?: Record<string, unknown>) => {
+  const handlePreview = async (modeId?: string, override?: Record<string, unknown> | LocationValue) => {
     const targetMode = modeId || previewMode;
     if (!targetMode) return;
     if (!authChecked) return;
@@ -470,7 +260,7 @@ export default function ExperiencePage() {
     if (!override) {
       if (targetMode === "WEATHER") {
         setModal({ type: "weather", modeId: targetMode });
-        setCityDraft(city);
+        setWeatherDraftLocation({});
         return;
       }
       if (targetMode === "MEMO") {
@@ -496,8 +286,7 @@ export default function ExperiencePage() {
       }
     }
 
-    // 普通模式预览时，清除自定义模式标题和状态
-    setCustomPreviewTitle(null);
+    // 普通模式预览时，清除上次 LLM 状态提示
     setPreviewLlmStatus(null);
 
     setPreviewLoading(true);
@@ -514,7 +303,9 @@ export default function ExperiencePage() {
       
       // 处理便签文本：优先使用 override 中的 memo_text
       if (targetMode === "MEMO") {
-        const memoOverride = override?.memo_text ? String(override.memo_text) : memoText;
+        const memoOverrideValue =
+          override && "memo_text" in override ? override.memo_text : undefined;
+        const memoOverride = memoOverrideValue ? String(memoOverrideValue) : memoText;
         params.set("memo_text", memoOverride);
       }
       
@@ -536,16 +327,15 @@ export default function ExperiencePage() {
         }
       }
       if (!res.ok) {
-        throw new Error(await readErrorMessage(res, t(locale, "preview.error.preview_failed", "Preview failed")));
+        const errText = await res.text().catch(() => "Unknown error");
+        throw new Error(`${t(locale, "preview.error.preview_failed", "Preview failed")}: HTTP ${res.status} ${errText.substring(0, 120)}`);
       }
 
       const statusHeader = res.headers.get("x-preview-status");
       const llmRequired = res.headers.get("x-llm-required");
       
       if (statusHeader === "no_llm_required" || llmRequired === "0") {
-        setPreviewLlmStatus(
-          locale === "zh" ? "该模式无需调用大模型" : "This mode does not require LLM",
-        );
+        setPreviewLlmStatus(null);
       } else if (statusHeader === "model_generated") {
         setPreviewLlmStatus(
           locale === "zh" ? "大模型调用成功" : "Model call succeeded",
@@ -626,7 +416,7 @@ export default function ExperiencePage() {
     }
     if (modeId === "WEATHER") {
       setPreviewMode(modeId);
-      setCityDraft(city); // 使用当前城市作为默认值
+      setWeatherDraftLocation({});
       setModal({ type: "weather", modeId });
       return;
     }
@@ -637,75 +427,42 @@ export default function ExperiencePage() {
       return;
     }
 
+    setPreviewModeNameOverride(null);
     setPreviewMode(modeId);
     await handlePreview(modeId);
   };
 
-  const handleGenerateCustomMode = async () => {
-    if (!customDesc.trim()) {
-      showToast(
-        locale === "zh" ? "请输入模式描述" : "Please enter a description for the mode",
-        "error",
-      );
-      return;
-    }
-    setCustomGenerating(true);
-    try {
-      const res = await fetch("/api/modes/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: customDesc }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Generate failed");
-      setCustomJson(JSON.stringify(data.mode_def, null, 2));
-      setCustomModeName((data.mode_def?.display_name || "").toString());
-      showToast(
-        locale === "zh" ? "模式生成成功" : "Mode generated successfully",
-        "success",
-      );
-    } catch (e) {
-      showToast(
-        (locale === "zh" ? "生成失败: " : "Generate failed: ") +
-          (e instanceof Error ? e.message : "Unknown error"),
-        "error",
-      );
-    } finally {
-      setCustomGenerating(false);
-    }
-  };
-
-  const handleCustomModePreview = async () => {
-    if (!customJson.trim()) return;
+  const handleCustomModePreview = async (defOverride?: unknown) => {
+    if (!defOverride && !customJson.trim()) return;
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewLlmStatus(null);
-    setShowCustomModeModal(false);
     try {
-      const def = JSON.parse(customJson);
+      const def = defOverride ? (defOverride as Record<string, unknown>) : (JSON.parse(customJson) as Record<string, unknown>);
       const nameFromInput = customModeName.trim();
+      const displayNameRaw = (def as Record<string, unknown>)["display_name"];
+      const modeIdRaw = (def as Record<string, unknown>)["mode_id"];
       const nameFromDef =
-        (typeof def.display_name === "string" && def.display_name.trim()) ||
-        (typeof def.mode_id === "string" && def.mode_id.trim()) ||
+        (typeof displayNameRaw === "string" && displayNameRaw.trim()) ||
+        (typeof modeIdRaw === "string" && modeIdRaw.trim()) ||
         "";
-      const finalName = nameFromInput || nameFromDef;
-      setCustomPreviewTitle(finalName || null);
-
+      const displayName = nameFromInput || nameFromDef || (locale === "zh" ? "自定义模式" : "Custom Mode");
+      setPreviewModeNameOverride(displayName);
+      setPreviewMode(displayName.toUpperCase().replace(/[^A-Z0-9_]/g, "_"));
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode_def: def }),
       });
       if (!res.ok) {
-        throw new Error(await readErrorMessage(res, locale === "zh" ? "预览失败" : "Preview failed"));
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Preview failed");
       }
       const statusHeader = res.headers.get("x-preview-status");
       const llmRequired = res.headers.get("x-llm-required");
       
       if (statusHeader === "no_llm_required" || llmRequired === "0") {
-        setPreviewLlmStatus(
-          locale === "zh" ? "该模式无需调用大模型" : "This mode does not require LLM",
-        );
+        setPreviewLlmStatus(null);
       } else if (statusHeader === "model_generated") {
         setPreviewLlmStatus(
           locale === "zh" ? "大模型调用成功" : "Model call succeeded",
@@ -739,36 +496,64 @@ export default function ExperiencePage() {
     }
   };
 
-  const reset = () => {
-    setCity("杭州");
-    setMemoText(t(locale, "preview.memo.default", "写点什么吧…"));
-    setPreviewMode("DAILY");
-    setPreviewError(null);
-    showToast(t(locale, "preview.toast.reset", "Reset to defaults"), "info");
+  const handleGenerateCustomModeAndPreview = async () => {
+    if (!customDesc.trim()) {
+      showToast(locale === "zh" ? "请输入模式描述" : "Please enter a description for the mode", "error");
+      return;
+    }
+    setCustomGenerating(true);
+    try {
+      const res = await fetch("/api/modes/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: customDesc }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Generate failed");
+      setCustomJson(JSON.stringify(data.mode_def, null, 2));
+      if (!customModeName.trim()) {
+        setCustomModeName((data.mode_def?.display_name || "").toString());
+      }
+      // generation complete -> close dialog -> preview on main panel
+      setShowCustomModeModal(false);
+      await handleCustomModePreview(data.mode_def);
+    } catch (e) {
+      showToast(
+        (locale === "zh" ? "生成失败: " : "Generate failed: ") + (e instanceof Error ? e.message : "Unknown error"),
+        "error",
+      );
+    } finally {
+      setCustomGenerating(false);
+    }
   };
+  // (removed) reset(): unused
 
   useEffect(() => {
     setModesError(null);
-    if (!authChecked || !currentUser) return;
-    fetch("/api/modes", { headers: authHeaders() })
+    if (!authChecked) return;
+    fetch("/api/modes/catalog", { headers: authHeaders() })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((d) => {
-        if (d.modes) setServerModes(d.modes);
-        else setModesError(t(locale, "preview.error.no_modes", "No modes data"));
+        if (d.items && Array.isArray(d.items)) {
+          setCatalogItems(d.items);
+        } else {
+          console.error("[PREVIEW] Invalid catalog response:", d);
+          setModesError(t(locale, "preview.error.no_modes", "No modes data"));
+        }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[PREVIEW] Failed to load catalog:", err);
         setModesError(t(locale, "preview.error.modes_unreachable", "Cannot load modes. Make sure backend is running."));
-        setServerModes([]);
+        setCatalogItems([]);
       });
-  }, [authChecked, currentUser, locale]);
+  }, [authChecked, locale]);
 
   useEffect(() => {
-    if (!authChecked || !currentUser) return;
-    handlePreview().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!authChecked) return;
+    // no auto-preview on enter; user must pick a mode
   }, [authChecked]);
 
   useEffect(() => {
@@ -781,64 +566,6 @@ export default function ExperiencePage() {
   useEffect(() => {
     // no-op: playlist removed
   }, [previewMode]);
-
-  // 未登录时，只展示提示条，不渲染后面的预览和模式区域
-  // 未完成登录检查时显示 Loading，避免体验页先闪一下
-  if (!authChecked) {
-    return (
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <div className="mb-4">
-          <h1 className="font-serif text-3xl font-bold text-ink mb-1">
-            {t(locale, "preview.title", "No-device Demo")}
-          </h1>
-          <p className="text-ink-light text-sm">
-            {t(locale, "preview.subtitle", "Try modes and preview without a device.")}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-ink-light text-sm py-4">
-          <Loader2 size={16} className="animate-spin" />
-          {locale === "zh" ? "加载中..." : "Loading..."}
-        </div>
-      </div>
-    );
-  }
-
-  if (authChecked && currentUser === null) {
-    return (
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <div className="mb-4">
-          <h1 className="font-serif text-3xl font-bold text-ink mb-1">
-            {t(locale, "preview.title", "No-device Demo")}
-          </h1>
-          <p className="text-ink-light text-sm">
-            {t(locale, "preview.subtitle", "Try modes and preview without a device.")}
-          </p>
-        </div>
-        <div className="max-w-md rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            <div className="flex items-start gap-2">
-              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">
-                  {locale === "zh" ? "请先登录" : "Please sign in first"}
-                </p>
-                <p className="mt-0.5">
-                  {locale === "zh"
-                    ? "登录后即可体验所有模式，并使用你的 API Key 进行预览。"
-                    : "Sign in to try all modes and use your own API key for previews."}
-                </p>
-                <Link
-                  href={`${withLocalePath(locale, "/login")}?next=${encodeURIComponent(withLocalePath(locale, "/preview"))}`}
-                >
-                  <Button size="sm" className="mt-2">
-                    {locale === "zh" ? "登录 / 注册" : "Sign In / Sign Up"}
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-      </div>
-    );
-  }
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -857,24 +584,17 @@ export default function ExperiencePage() {
             const url = await uploadLocalImage(f);
             await handlePreview("MY_ADAPTIVE", { image_url: url });
           } catch (err) {
-            const msg =
-              err instanceof Error
-                ? err.message
-                : t(locale, "preview.modal.image.need_file", "Please choose a local image");
+            const msg = err instanceof Error ? err.message : t(locale, "preview.modal.image.need_file", "Please choose a local image");
             showToast(msg, "error");
           } finally {
             setImageUploadLoading(false);
           }
         }}
       />
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-ink mb-1">
-            {t(locale, "preview.title", "No-device Demo")}
-          </h1>
-          <p className="text-ink-light text-sm">
-            {t(locale, "preview.subtitle", "Try modes and preview without a device.")}
-          </p>
+          <h1 className="font-serif text-3xl font-bold text-ink mb-1">{t(locale, "preview.title", "No-device Demo")}</h1>
+          <p className="text-ink-light text-sm">{t(locale, "preview.subtitle", "Try modes and preview without a device.")}</p>
         </div>
       </div>
 
@@ -894,49 +614,51 @@ export default function ExperiencePage() {
 
               <ModeSection
                 title={t(locale, "preview.section.core", "Core modes")}
-                modes={CORE_MODES}
+                modes={coreModes}
                 currentMode={previewMode}
                 onPreview={applyModeAndPreview}
                 collapsible
+                customMeta={modeMeta}
                 locale={locale}
               />
 
               <ModeSection
                 title={t(locale, "preview.section.more", "More modes")}
-                modes={EXTRA_MODES}
+                modes={moreModes}
                 currentMode={previewMode}
                 onPreview={applyModeAndPreview}
                 collapsible
+                customMeta={modeMeta}
                 locale={locale}
               />
 
-              <ModeSection
-                title={t(locale, "preview.section.custom", "Custom modes")}
-                modes={customSectionModes}
-                currentMode={previewMode}
-                onPreview={applyModeAndPreview}
-                collapsible
-                locale={locale}
-                extraItem={
-                  <div className="rounded-sm border border-dashed border-ink/20 bg-paper-dark/40 overflow-hidden">
+              {customModes.length ? (
+                <ModeSection
+                  title={t(locale, "preview.section.custom", "Custom modes")}
+                  modes={customModes}
+                  currentMode={previewMode}
+                  onPreview={applyModeAndPreview}
+                  collapsible
+                  customMeta={modeMeta}
+                  tailItem={
                     <button
                       onClick={() => {
                         setShowCustomModeModal(true);
                         setCustomDesc("");
                         setCustomModeName("");
                         setCustomJson("");
-                        setCustomEditorTab("ai");
+                        setCustomGenerating(false);
                       }}
-                      className="w-full px-3 py-2 text-left transition-colors min-h-[64px] flex flex-col justify-center items-center hover:bg-paper-dark text-ink"
+                      className="rounded-sm border border-dashed border-ink/20 bg-white px-3 py-2 min-h-[64px] flex flex-col items-center justify-center text-ink-light hover:border-ink/40 hover:bg-paper-dark transition-colors"
+                      title={locale === "zh" ? "新建自定义模式" : "Create custom mode"}
                     >
-                      <div className="text-xl font-semibold">+</div>
-                      <div className="text-[11px] mt-0.5 text-ink-light">
-                        {locale === "zh" ? "创建自定义模式" : "Create Custom Mode"}
-                      </div>
+                      <Plus size={18} className="mb-1" />
+                      <div className="text-[11px]">{locale === "zh" ? "新建" : "New"}</div>
                     </button>
-                  </div>
-                }
-              />
+                  }
+                  locale={locale}
+                />
+              ) : null}
             </CardContent>
           </Card>
         </div>
@@ -947,16 +669,11 @@ export default function ExperiencePage() {
               <CardTitle className="flex items-baseline justify-between gap-3 flex-wrap">
                 <span className="text-base font-semibold text-ink">{t(locale, "preview.panel.display", "E-Ink Preview")}</span>
                 <span className="text-base font-semibold text-ink">
-                  {t(locale, "preview.summary.current_mode", "Mode")}:{" "}
-                  {customPreviewTitle
-                    ? locale === "zh"
-                      ? `自定义模式 ${customPreviewTitle}`
-                      : `Custom mode: ${customPreviewTitle}`
-                    : previewModeName}
+                  {t(locale, "preview.summary.current_mode", "Mode")}: {previewModeName}
                 </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="h-[calc(100vh-220px)] flex flex-col p-0">
+            <CardContent className="h-[calc(80vh-220px)] flex flex-col p-0">
               <div className="border border-ink/10 rounded-sm bg-paper flex flex-col items-center justify-center flex-1 w-full">
                 {previewLoading ? (
                   <div className="flex items-center justify-center w-full">
@@ -966,14 +683,23 @@ export default function ExperiencePage() {
                     </div>
                   </div>
                 ) : previewImageUrl ? (
-                  <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
-                    <img
-                      src={previewImageUrl}
-                      alt={t(locale, "preview.display.alt", "InkSight preview")}
-                      className="absolute inset-0 w-full h-full object-contain"
-                    />
+                  <div className="flex flex-col items-center gap-2 w-full">
+                    <div className="relative w-full max-w-md aspect-[4/3] bg-white border border-ink/20 rounded-sm overflow-hidden">
+                      <Image
+                        src={previewImageUrl}
+                        alt={t(locale, "preview.display.alt", "InkSight preview")}
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+                    {previewLlmStatus ? (
+                      <p className="text-[11px] text-ink-light text-center px-4">
+                        {previewLlmStatus}
+                      </p>
+                    ) : null}
                   </div>
-                ) : previewMode === null ? (
+                ) : !previewMode ? (
                   <div className="flex items-center justify-center w-full">
                     <div className="text-center">
                       <Eye size={32} className="mx-auto text-ink-light mb-3" />
@@ -990,11 +716,6 @@ export default function ExperiencePage() {
                   </div>
                 )}
               </div>
-              {previewLlmStatus && (
-                <div className="px-3 py-1.5 text-xs text-ink-light">
-                  {previewLlmStatus}
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -1082,23 +803,23 @@ export default function ExperiencePage() {
               ) : modal.type === "weather" ? (
                 <>
                   <div className="text-xs text-ink-light">
-                    {locale === "zh" 
-                      ? "输入城市名称查看天气。如果大模型调用失败，将显示默认城市天气。" 
-                      : "Enter city name to view weather. If LLM call fails, default city weather will be shown."}
+                    {locale === "zh"
+                      ? "搜索并选择具体地点查看天气，避免重名地点。"
+                      : "Search and choose a specific place to avoid ambiguous names."}
                   </div>
-                  <input
-                    value={cityDraft}
-                    onChange={(e) => setCityDraft(e.target.value)}
-                    placeholder={locale === "zh" ? "输入城市名称（如：北京、上海）" : "Enter city name (e.g., Beijing, Shanghai)"}
+                  <LocationPicker
+                    value={weatherDraftLocation}
+                    onChange={setWeatherDraftLocation}
+                    locale={locale === "zh" ? "zh" : "en"}
+                    placeholder={locale === "zh" ? "输入地点名称（如：上海、巴黎、Singapore）" : "Enter a place name (e.g. Shanghai, Paris, Singapore)"}
+                    helperText={locale === "zh" ? "建议从候选列表中点选。" : "Pick a result from the suggestion list."}
                     className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                     autoFocus
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <Button
                       onClick={async () => {
-                        setModal(null);
-                        // 使用默认城市
-                        await handlePreview(modal.modeId);
+                        setWeatherDraftLocation({ city: "杭州" });
                       }}
                       disabled={previewLoading}
                       variant="outline"
@@ -1107,10 +828,10 @@ export default function ExperiencePage() {
                     </Button>
                     <Button
                       onClick={async () => {
-                        const c = cityDraft.trim();
+                        const nextLocation = cleanLocationValue(weatherDraftLocation);
                         setModal(null);
-                        if (c) {
-                          await handlePreview(modal.modeId, { city: c });
+                        if (nextLocation.city) {
+                          await handlePreview(modal.modeId, nextLocation);
                         } else {
                           await handlePreview(modal.modeId);
                         }
@@ -1375,280 +1096,59 @@ export default function ExperiencePage() {
           </div>
         </div>
       ) : null}
-      {showCustomModeModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setShowCustomModeModal(false)}
-          />
-          <div className="relative w-[min(720px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-80px))] rounded-sm border border-ink/15 bg-white shadow-xl flex flex-col">
-            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
-              <div className="text-sm font-semibold text-ink">
-                {locale === "zh" ? "创建自定义模式" : "Create Custom Mode"}
-              </div>
-              <button
-                className="text-ink-light hover:text-ink"
-                onClick={() => setShowCustomModeModal(false)}
-              >
-                ✕
-              </button>
+      <Dialog open={showCustomModeModal} onClose={() => setShowCustomModeModal(false)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader onClose={() => setShowCustomModeModal(false)}>
+            <div>
+              <DialogTitle>{locale === "zh" ? "创建自定义模式" : "Create Custom Mode"}</DialogTitle>
+              <DialogDescription>
+                {locale === "zh"
+                  ? "用一句话描述你想要的模式，点击 AI 生成预览即可。"
+                  : "Describe the mode you want, then click AI Generate Preview."}
+              </DialogDescription>
             </div>
-            <div className="px-4 py-4 space-y-4 overflow-auto">
-              <div className="flex gap-1 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setCustomEditorTab("ai")}
-                  className={`px-3 py-1.5 rounded-sm text-xs flex items-center gap-1 transition-colors ${
-                    customEditorTab === "ai"
-                      ? "bg-ink text-white"
-                      : "bg-paper-dark text-ink-light hover:text-ink"
-                  }`}
-                >
-                  <Sparkles size={12} />
-                  {locale === "zh" ? "AI 生成" : "AI Generate"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomEditorTab("template")}
-                  className={`px-3 py-1.5 rounded-sm text-xs flex items-center gap-1 transition-colors ${
-                    customEditorTab === "template"
-                      ? "bg-ink text-white"
-                      : "bg-paper-dark text-ink-light hover:text-ink"
-                  }`}
-                >
-                  <LayoutGrid size={12} />
-                  {locale === "zh" ? "从模板" : "From Template"}
-                </button>
-              </div>
+          </DialogHeader>
 
-              {customEditorTab === "ai" ? (
-                <div className="space-y-3">
-                  <textarea
-                    value={customDesc}
-                    onChange={(e) => setCustomDesc(e.target.value)}
-                    rows={3}
-                    maxLength={2000}
-                    placeholder={
-                      locale === "zh"
-                        ? "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中"
-                        : "Describe your mode, e.g. show one English word and definition daily with a large centered font"
-                    }
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateCustomMode}
-                    disabled={customGenerating || !customDesc.trim()}
-                  >
-                    {customGenerating ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin mr-1" />
-                        {locale === "zh" ? "生成中..." : "Generating..."}
-                      </>
-                    ) : (
-                      locale === "zh" ? "AI 生成模式" : "Generate Mode with AI"
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <select
-                    onChange={(e) => {
-                      const template = MODE_TEMPLATES[e.target.value];
-                      if (!template) return;
-                      setCustomJson(JSON.stringify(template.def, null, 2));
-                      setCustomModeName((template.def?.display_name || "").toString());
-                    }}
-                    defaultValue=""
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="" disabled>
-                      {locale === "zh" ? "选择模板..." : "Select template..."}
-                    </option>
-                    {Object.entries(MODE_TEMPLATES).map(([key, template]) => (
-                      <option key={key} value={key}>
-                        {template.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="space-y-3 mt-1">
-                <input
-                  value={customModeName}
-                  onChange={(e) => setCustomModeName(e.target.value)}
-                  placeholder={
-                    locale === "zh"
-                      ? "模式名称（例如：今日英语）"
-                      : "Mode name (e.g. Daily English)"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                />
-                <textarea
-                  value={customJson}
-                  onChange={(e) => setCustomJson(e.target.value)}
-                  rows={12}
-                  spellCheck={false}
-                  placeholder={
-                    locale === "zh"
-                      ? "模式 JSON 定义"
-                      : "Mode JSON definition"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-xs font-mono resize-y bg-ink text-green-400"
-                />
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCustomModePreview}
-                    disabled={!customJson.trim() || previewLoading}
-                  >
-                    {locale === "zh" ? "预览到右侧水墨屏" : "Preview on E-ink display"}
-                  </Button>
-                </div>
+          <div className="space-y-3">
+            {customGenerating ? (
+              <div className="rounded-sm border border-ink/10 bg-paper px-3 py-3 text-sm text-ink-light flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                {locale === "zh" ? "模式生成中..." : "Generating mode..."}
               </div>
-            </div>
+            ) : null}
+
+            <textarea
+              value={customDesc}
+              onChange={(e) => setCustomDesc(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder={
+                locale === "zh"
+                  ? "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中"
+                  : "Describe your mode, e.g. show one English word and definition daily with a large centered font"
+              }
+              className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y bg-white"
+              disabled={customGenerating}
+            />
+
+            <input
+              value={customModeName}
+              onChange={(e) => setCustomModeName(e.target.value)}
+              placeholder={locale === "zh" ? "模式名称（例如：今日英语）" : "Mode name (e.g. Daily English)"}
+              className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+              disabled={customGenerating}
+            />
+
+            <Button
+              size="sm"
+              onClick={() => void handleGenerateCustomModeAndPreview()}
+              disabled={customGenerating || !customDesc.trim()}
+            >
+              {locale === "zh" ? "AI 生成预览" : "AI Generate Preview"}
+            </Button>
           </div>
-        </div>
-      ) : null}
-      {showCustomModeModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setShowCustomModeModal(false)}
-          />
-          <div className="relative w-[min(720px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-80px))] rounded-sm border border-ink/15 bg-white shadow-xl flex flex-col">
-            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
-              <div className="text-sm font-semibold text-ink">
-                {locale === "zh" ? "创建自定义模式" : "Create Custom Mode"}
-              </div>
-              <button
-                className="text-ink-light hover:text-ink"
-                onClick={() => setShowCustomModeModal(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="px-4 py-4 space-y-4 overflow-auto">
-              <div className="flex gap-1 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setCustomEditorTab("ai")}
-                  className={`px-3 py-1.5 rounded-sm text-xs flex items-center gap-1 transition-colors ${
-                    customEditorTab === "ai"
-                      ? "bg-ink text-white"
-                      : "bg-paper-dark text-ink-light hover:text-ink"
-                  }`}
-                >
-                  <Sparkles size={12} />
-                  {locale === "zh" ? "AI 生成" : "AI Generate"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomEditorTab("template")}
-                  className={`px-3 py-1.5 rounded-sm text-xs flex items-center gap-1 transition-colors ${
-                    customEditorTab === "template"
-                      ? "bg-ink text-white"
-                      : "bg-paper-dark text-ink-light hover:text-ink"
-                  }`}
-                >
-                  <LayoutGrid size={12} />
-                  {locale === "zh" ? "从模板" : "From Template"}
-                </button>
-              </div>
-
-              {customEditorTab === "ai" ? (
-                <div className="space-y-3">
-                  <textarea
-                    value={customDesc}
-                    onChange={(e) => setCustomDesc(e.target.value)}
-                    rows={3}
-                    maxLength={2000}
-                    placeholder={
-                      locale === "zh"
-                        ? "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中"
-                        : "Describe your mode, e.g. show one English word and definition daily with a large centered font"
-                    }
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateCustomMode}
-                    disabled={customGenerating || !customDesc.trim()}
-                  >
-                    {customGenerating ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin mr-1" />
-                        {locale === "zh" ? "生成中..." : "Generating..."}
-                      </>
-                    ) : (
-                      locale === "zh" ? "AI 生成模式" : "Generate Mode with AI"
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <select
-                    onChange={(e) => {
-                      const template = MODE_TEMPLATES[e.target.value];
-                      if (!template) return;
-                      setCustomJson(JSON.stringify(template.def, null, 2));
-                      setCustomModeName((template.def?.display_name || "").toString());
-                    }}
-                    defaultValue=""
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="" disabled>
-                      {locale === "zh" ? "选择模板..." : "Select template..."}
-                    </option>
-                    {Object.entries(MODE_TEMPLATES).map(([key, template]) => (
-                      <option key={key} value={key}>
-                        {template.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="space-y-3 mt-1">
-                <input
-                  value={customModeName}
-                  onChange={(e) => setCustomModeName(e.target.value)}
-                  placeholder={
-                    locale === "zh"
-                      ? "模式名称（例如：今日英语）"
-                      : "Mode name (e.g. Daily English)"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                />
-                <textarea
-                  value={customJson}
-                  onChange={(e) => setCustomJson(e.target.value)}
-                  rows={12}
-                  spellCheck={false}
-                  placeholder={
-                    locale === "zh"
-                      ? "模式 JSON 定义"
-                      : "Mode JSON definition"
-                  }
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-xs font-mono resize-y bg-ink text-green-400"
-                />
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCustomModePreview}
-                    disabled={!customJson.trim() || previewLoading}
-                  >
-                    {locale === "zh" ? "预览到右侧水墨屏" : "Preview on E-ink display"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
       {/* 邀请码输入弹窗 */}
       {showInviteModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1659,15 +1159,26 @@ export default function ExperiencePage() {
             <CardContent className="space-y-4">
               <p className="text-sm text-ink-light">
                 {locale === "en"
-                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 50 more free LLM calls, or configure your own API key in device settings."
+                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 5 more free LLM calls, or configure your own API key in device settings."
                   : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在设备配置中设置自己的 API key。"}
               </p>
               <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
                 <p className="text-xs text-ink-light mb-2">
                   {locale === "en"
-                    ? "💡 Tip: If you have your own API key, you can configure it in device settings (AI Models tab) to avoid quota limits."
-                    : "💡 提示：如果您有自己的 API key，可以在设备配置的「AI 模型」标签页中设置，这样就不会受到额度限制了。"}
+                    ? "💡 Tip: If you have your own API key, you can configure it in your profile to avoid quota limits."
+                    : "💡 提示：如果您有自己的 API key，可以在个人信息中配置，这样就不会受到额度限制了。"}
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    router.push(withLocalePath(localeFromPathname(pathname || "/"), "/profile"));
+                  }}
+                  className="w-full text-xs"
+                >
+                  {locale === "en" ? "Go to Profile Settings" : "前往个人信息配置"}
+                </Button>
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">

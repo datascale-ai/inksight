@@ -463,15 +463,6 @@ h1{font-size:1.8rem;margin-bottom:8px}
 </div>
 
 <div class="fg">
-<label class="lbl">API Key (可选)</label>
-<div style="display:flex;gap:8px">
-<input type="password" class="inp" id="llmApiKey" placeholder="使用自己的 API Key（留空则用服务器默认）" style="flex:1" autocomplete="off">
-<button type="button" class="btn btn-outline" onclick="toggleApiKeyVisibility()" style="padding:8px 12px;font-size:.8rem">显示</button>
-</div>
-<small id="apiKeyStatus" style="color:#666;font-size:.72rem;margin-top:4px;display:block"></small>
-</div>
-
-<div class="fg">
 <label class="lbl">刷新间隔（分钟）</label>
 <input type="number" class="inp" id="interval" min="10" max="1440" placeholder="60">
 </div>
@@ -1032,17 +1023,6 @@ function fillForm(cfg) {
   updateModels();
   document.getElementById('llmModel').value = cfg.llm_model || 'deepseek-chat';
 
-  // API Key status
-  document.getElementById('llmApiKey').value = '';
-  const apiKeyStatus = document.getElementById('apiKeyStatus');
-  if (cfg.has_api_key) {
-    apiKeyStatus.textContent = '✓ 已配置自定义 API Key';
-    apiKeyStatus.style.color = '#2d7d46';
-  } else {
-    apiKeyStatus.textContent = '使用服务器默认 Key';
-    apiKeyStatus.style.color = '#666';
-  }
-
   // Countdown events
   fillCountdownEvents(cfg.countdownEvents ?? cfg.countdown_events ?? []);
 
@@ -1095,8 +1075,7 @@ function collectFormData() {
     refreshInterval: parseInt(document.getElementById('interval').value) || 60,
     countdownEvents: getCountdownEvents(),
     timeSlotRules: getTimeSlotRules(),
-    memoText: document.getElementById('memoText').value.trim(),
-    llmApiKey: document.getElementById('llmApiKey').value.trim()
+    memoText: document.getElementById('memoText').value.trim()
   };
 }
 
@@ -1759,20 +1738,6 @@ async function showInlinePreview(mode) {
     status.textContent = `${mode} · ${elapsed}ms · ${(blob.size/1024).toFixed(1)}KB`;
   } catch (e) {
     status.textContent = '渲染失败: ' + e.message;
-  }
-}
-
-// ── API Key visibility toggle ────────────────────────────────
-
-function toggleApiKeyVisibility() {
-  const input = document.getElementById('llmApiKey');
-  const btn = input.parentElement.querySelector('button');
-  if (input.type === 'password') {
-    input.type = 'text';
-    btn.textContent = '隐藏';
-  } else {
-    input.type = 'password';
-    btn.textContent = '显示';
   }
 }
 

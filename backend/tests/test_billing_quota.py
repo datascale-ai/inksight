@@ -9,11 +9,10 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from core.config_store import (
-    DEFAULT_FREE_LLM_QUOTA,
     init_db,
-    ensure_user_api_quota,
     init_user_api_quota,
     get_user_api_quota,
     consume_user_free_quota,
@@ -39,60 +38,11 @@ async def use_memory_db(tmp_path):
 
 
 class TestUserRegistration:
-    """测试用户注册功能（包含邀请码机制）"""
-
-    @pytest.mark.asyncio
-    async def test_register_with_valid_invite_code(self):
-        """测试注册默认发放 50 次额度，且不消耗邀请码"""
-        await init_db()
-        db = await get_main_db()
-        
-        # 1. 先创建一个邀请码
-        await db.execute(
-            """
-            INSERT INTO invitation_codes (code, is_used, generated_at)
-            VALUES (?, 0, datetime('now'))
-            """,
-            ("TEST123",),
-        )
-        await db.commit()
-        
-        # 2. 模拟注册请求
-        from api.routes.auth import auth_register
-        from fastapi import Response
-        
-        body = {
-            "username": "testuser",
-            "password": "testpass123",
-            "phone": "13800138000",
-            "invite_code": "TEST123",
-        }
-        response = Response()
-        result = await auth_register(body, response)
-        
-        # 3. 验证注册成功
-        assert result["ok"] is True
-        assert result["username"] == "testuser"
-        user_id = result["user_id"]
-        
-        # 4. 验证邀请码未在注册阶段被消耗
-        cursor = await db.execute(
-            "SELECT is_used, used_by_user_id FROM invitation_codes WHERE code = ?",
-            ("TEST123",),
-        )
-        row = await cursor.fetchone()
-        assert row[0] == 0
-        assert row[1] is None
-
-        # 5. 验证用户获得了 50 次免费额度
-        quota = await get_user_api_quota(user_id)
-        assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
-        assert quota["total_calls_made"] == 0
+    """测试用户注册功能（前端已移除邀请码输入，仅测试无邀请码场景）"""
 
     @pytest.mark.asyncio
     async def test_register_without_invite_code(self):
-        """测试不使用邀请码注册也会默认获得 50 次额度"""
+        """测试不使用邀请码注册（初始额度为 50）"""
         await init_db()
         
         from api.routes.auth import auth_register
@@ -109,73 +59,11 @@ class TestUserRegistration:
         assert result["ok"] is True
         user_id = result["user_id"]
         
-        # 验证用户默认额度为 50
+        # 验证用户额度为 50
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
+        assert quota["free_quota_remaining"] == 50
         assert quota["total_calls_made"] == 0
-
-    @pytest.mark.asyncio
-    async def test_register_with_invalid_invite_code(self):
-        """测试注册时即使传入无效邀请码也不会失败"""
-        await init_db()
-
-        from api.routes.auth import auth_register
-        from fastapi import Response
-
-        body = {
-            "username": "testuser3",
-            "password": "testpass123",
-            "phone": "13900139000",
-            "invite_code": "INVALID123",
-        }
-        response = Response()
-        result = await auth_register(body, response)
-
-        assert result["ok"] is True
-        quota = await get_user_api_quota(result["user_id"])
-        assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
-
-    @pytest.mark.asyncio
-    async def test_register_with_used_invite_code(self):
-        """测试注册时传入已使用邀请码也不会失败或重复消耗"""
-        await init_db()
-        db = await get_main_db()
-        
-        # 创建并标记邀请码为已使用
-        await db.execute(
-            """
-            INSERT INTO invitation_codes (code, is_used, used_by_user_id, generated_at)
-            VALUES (?, 1, 999, datetime('now'))
-            """,
-            ("USED123",),
-        )
-        await db.commit()
-        
-        from api.routes.auth import auth_register
-        from fastapi import Response
-
-        body = {
-            "username": "testuser4",
-            "password": "testpass123",
-            "phone": "13700137000",
-            "invite_code": "USED123",
-        }
-        response = Response()
-        result = await auth_register(body, response)
-
-        assert result["ok"] is True
-        cursor = await db.execute(
-            "SELECT is_used, used_by_user_id FROM invitation_codes WHERE code = ?",
-            ("USED123",),
-        )
-        row = await cursor.fetchone()
-        assert row[0] == 1
-        assert row[1] == 999
-        quota = await get_user_api_quota(result["user_id"])
-        assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
 
     @pytest.mark.asyncio
     async def test_register_phone_email_validation(self):
@@ -221,36 +109,6 @@ class TestUserRegistration:
         assert result3.status_code == 400
         assert "手机号或邮箱至少填写一个" in result3.body.decode()
 
-    @pytest.mark.asyncio
-    async def test_login_repairs_legacy_zero_quota(self):
-        """测试历史上被错误发成 0 次额度的账号，登录后会自动修复。"""
-        await init_db()
-        db = await get_main_db()
-        user_id = await create_user("legacylogin", "testpass123", email="legacy@login.example")
-        assert user_id is not None
-
-        await db.execute(
-            """
-            INSERT INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
-            VALUES (?, 0, 0)
-            """,
-            (user_id,),
-        )
-        await db.commit()
-
-        from api.routes.auth import auth_login
-        from fastapi import Response
-
-        result = await auth_login(
-            {"username": "legacylogin", "password": "testpass123"},
-            Response(),
-        )
-
-        assert result["ok"] is True
-        quota = await get_user_api_quota(user_id)
-        assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
-
 
 class TestInviteCodeRedemption:
     """测试邀请码兑换功能"""
@@ -261,7 +119,7 @@ class TestInviteCodeRedemption:
         await init_db()
         db = await get_main_db()
         
-        # 1. 创建用户（兑换时会先补齐默认 50 次，再叠加邀请码赠送的 50 次）
+        # 1. 创建用户（无邀请码，额度为 0）
         user_id = await create_user("testuser", "testpass", email="test@example.com")
         assert user_id is not None
         
@@ -288,7 +146,7 @@ class TestInviteCodeRedemption:
         # 4. 验证兑换成功
         assert result["ok"] is True
         assert "邀请码兑换成功" in result["message"]
-        assert result["free_quota_remaining"] == 100
+        assert result["free_quota_remaining"] == 50
         
         # 5. 验证邀请码已被标记为使用
         cursor = await db.execute(
@@ -301,7 +159,7 @@ class TestInviteCodeRedemption:
         
         # 6. 验证用户额度已增加
         quota = await get_user_api_quota(user_id)
-        assert quota["free_quota_remaining"] == 100
+        assert quota["free_quota_remaining"] == 50
 
     @pytest.mark.asyncio
     async def test_redeem_invalid_invite_code(self):
@@ -360,19 +218,19 @@ class TestQuotaManagement:
         """测试初始化用户额度"""
         await init_db()
         user_id = await create_user("quotauser", "testpass", phone="13900139000")
-
-        # 初始化额度（默认 50 次）
+        
+        # 初始化额度（默认 5 次）
         await init_user_api_quota(user_id)
-
+        
         quota = await get_user_api_quota(user_id)
         assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
+        assert quota["free_quota_remaining"] == 5
         assert quota["total_calls_made"] == 0
-
+        
         # 测试幂等性（再次初始化不应改变值）
         await init_user_api_quota(user_id)
         quota2 = await get_user_api_quota(user_id)
-        assert quota2["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
+        assert quota2["free_quota_remaining"] == 5
 
     @pytest.mark.asyncio
     async def test_init_user_api_quota_custom_amount(self):
@@ -384,28 +242,6 @@ class TestQuotaManagement:
         
         quota = await get_user_api_quota(user_id)
         assert quota["free_quota_remaining"] == 50
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("legacy_quota", [0, 5])
-    async def test_ensure_user_api_quota_repairs_legacy_signup_quota(self, legacy_quota):
-        """测试历史上被错误初始化为 0/5 次的账号会自动补齐到 50 次。"""
-        await init_db()
-        db = await get_main_db()
-        user_id = await create_user("legacyquota", "testpass", phone="13300133000")
-
-        await db.execute(
-            """
-            INSERT INTO api_quotas (user_id, total_calls_made, free_quota_remaining)
-            VALUES (?, 0, ?)
-            """,
-            (user_id, legacy_quota),
-        )
-        await db.commit()
-
-        quota = await ensure_user_api_quota(user_id)
-        assert quota is not None
-        assert quota["free_quota_remaining"] == DEFAULT_FREE_LLM_QUOTA
-        assert quota["total_calls_made"] == 0
 
     @pytest.mark.asyncio
     async def test_get_user_api_quota_nonexistent(self):
@@ -586,3 +422,152 @@ class TestQuotaExhaustionHandling:
         # 这个测试应该通过 API 路由测试来完成
         # 见 test_integration.py 或专门的 API 测试文件
         pass
+
+
+class TestLlmPrecheckBehavior:
+    """测试在额度耗尽时不会触发 LLM 调用（预先拦截）。"""
+
+    @pytest.mark.asyncio
+    async def test_custom_mode_preview_quota_exhausted_blocks_llm(self, monkeypatch):
+        """当 custom preview 额度为 0 时，应在调用 LLM 之前返回 402，且不调用 generate_json_mode_content。"""
+        from api.routes.modes import custom_mode_preview
+
+        # 打开计费开关
+        monkeypatch.setenv("INKSIGHT_BILLING_ENABLED", "1")
+
+        user_id = 123
+
+        # 构造一个需要 LLM 的自定义模式：content.type = "llm"
+        body = {
+            "mode_def": {
+                "mode_id": "PREVIEW",
+                "content": {
+                    "type": "llm",
+                    "prompt_template": "test {context}",
+                },
+            },
+            "w": 400,
+            "h": 300,
+            "responseType": "json",
+        }
+
+        # 确保使用平台 Key（即没有用户级 API key）
+        async def fake_get_user_llm_config(_user_id: int):
+            # 模拟用户级配置中只设置了文本 provider（无自定义文本/图像 model），与生产逻辑保持字段一致
+            return {
+                "provider": "deepseek",
+                "model": "",
+                "api_key": "",
+                "base_url": "",
+                "image_provider": "aliyun",
+                "image_api_key": "",
+                "image_model": "qwen-image-plus",
+            }
+
+        # 配额为 0
+        async def fake_get_quota(user_id_param: int):
+            assert user_id_param == user_id
+            return {
+                "user_id": user_id,
+                "total_calls_made": 0,
+                "free_quota_remaining": 0,
+            }
+
+        # 非 root 用户
+        async def fake_get_role(user_id_param: int):
+            assert user_id_param == user_id
+            return "user"
+
+        # LLM 生成函数，应该不会被调用
+        called = {"generate": False}
+
+        async def fake_generate_json_mode_content(*args, **kwargs):
+            called["generate"] = True
+            return {}
+
+        from core import config_store as cfg_mod
+        from core import json_content as json_mod
+        from api import routes as api_pkg
+
+        # 覆盖 config_store 内部实现，避免真实访问数据库
+        monkeypatch.setattr(cfg_mod, "get_user_llm_config", fake_get_user_llm_config)
+        monkeypatch.setattr(cfg_mod, "get_user_api_quota", fake_get_quota)
+        monkeypatch.setattr(cfg_mod, "get_user_role", fake_get_role)
+        monkeypatch.setattr(json_mod, "generate_json_mode_content", fake_generate_json_mode_content)
+        # 关键：同时覆盖 api.routes.modes 中直接导入的 get_user_api_quota / get_user_role，
+        # 防止其调用真实的 DB 层导致 "no such table: api_quotas"
+        monkeypatch.setattr("api.routes.modes.get_user_api_quota", fake_get_quota)
+        monkeypatch.setattr("api.routes.modes.get_user_role", fake_get_role)
+
+        # 依赖中的 admin_auth 直接传 None 即可
+        resp = await custom_mode_preview(body, user_id=user_id, admin_auth=None)
+
+        assert isinstance(resp, JSONResponse)
+        assert resp.status_code == 402
+        assert "您的免费额度已用完" in resp.body.decode("utf-8")
+        # 关键断言：LLM 内容生成函数没有被调用
+        assert called["generate"] is False
+
+    @pytest.mark.asyncio
+    async def test_generate_mode_quota_exhausted_blocks_llm(self, monkeypatch):
+        """当 AI 生成模式额度为 0 时，应在调用 LLM 之前返回 402，且不调用 generate_mode_definition。"""
+        from api.routes.modes import generate_mode
+
+        monkeypatch.setenv("INKSIGHT_BILLING_ENABLED", "1")
+
+        user_id = 456
+        body = {
+            "description": "帮我生成一个测试模式定义",
+            "provider": "deepseek",
+            "model": "deepseek-chat",
+        }
+
+        # 使用平台 Key（无用户级 key）
+        async def fake_get_user_llm_config(_user_id: int):
+            # 同步 user_llm_config 结构，显式包含文本 model 与图像配置字段
+            return {
+                "provider": "deepseek",
+                "model": "deepseek-chat",
+                "api_key": "",
+                "base_url": "",
+                "image_provider": "aliyun",
+                "image_api_key": "",
+                "image_model": "qwen-image-plus",
+            }
+
+        async def fake_get_quota(user_id_param: int):
+            assert user_id_param == user_id
+            return {
+                "user_id": user_id,
+                "total_calls_made": 0,
+                "free_quota_remaining": 0,
+            }
+
+        async def fake_get_role(user_id_param: int):
+            assert user_id_param == user_id
+            return "user"
+
+        called = {"generate_mode": False}
+
+        async def fake_generate_mode_definition(*args, **kwargs):
+            called["generate_mode"] = True
+            return {"ok": True, "mode_def": {}}
+
+        from core import config_store as cfg_mod
+        from core import mode_generator as mode_gen_mod
+
+        # 覆盖底层实现与 API 层引用，避免真实访问 api_quotas 表
+        monkeypatch.setattr(cfg_mod, "get_user_llm_config", fake_get_user_llm_config)
+        monkeypatch.setattr(cfg_mod, "get_user_api_quota", fake_get_quota)
+        monkeypatch.setattr(cfg_mod, "get_user_role", fake_get_role)
+        monkeypatch.setattr(mode_gen_mod, "generate_mode_definition", fake_generate_mode_definition)
+        monkeypatch.setattr("api.routes.modes.get_user_api_quota", fake_get_quota)
+        monkeypatch.setattr("api.routes.modes.get_user_role", fake_get_role)
+
+        resp = await generate_mode(body, user_id=user_id, admin_auth=None)
+
+        assert isinstance(resp, JSONResponse)
+        assert resp.status_code == 402
+        assert "您的免费额度已用完" in resp.body.decode("utf-8")
+        # 关键断言：模式生成的 LLM 调用函数没有被触发
+        assert called["generate_mode"] is False

@@ -1,28 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppScreen } from '@/components/layout/AppScreen';
-import { InkBottomSheet } from '@/components/ui/InkBottomSheet';
-import { InkButton } from '@/components/ui/InkButton';
 import { InkCard } from '@/components/ui/InkCard';
-import { InkChip } from '@/components/ui/InkChip';
 import { InkText } from '@/components/ui/InkText';
+import { InkButton } from '@/components/ui/InkButton';
 import { useAuthStore } from '@/features/auth/store';
 import { getCachedTodayContent } from '@/features/content/storage';
+import { useI18n } from '@/lib/i18n';
 import { listModes } from '@/features/modes/api';
 import { syncLocalDailyNotification } from '@/features/notifications/local';
 import { getStoredNotificationStatus, registerPushNotifications, unregisterPushNotifications } from '@/features/notifications/api';
 import { getPreferences, updatePreferences } from '@/features/preferences/api';
-import { useI18n } from '@/lib/i18n';
 import { theme } from '@/lib/theme';
-
-const HOURS = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '18:00', '20:00'];
 
 export default function SettingsScreen() {
   const { locale: activeLocale, setLocale: saveLocale, t } = useI18n();
   const token = useAuthStore((state) => state.token);
   const queryClient = useQueryClient();
-  const [picker, setPicker] = useState<'time' | 'widget' | null>(null);
   const query = useQuery({
     queryKey: ['preferences', token],
     queryFn: () => getPreferences(token || ''),
@@ -48,7 +43,7 @@ export default function SettingsScreen() {
     setWidgetMode(prefs.widget_mode);
     setLocaleState((prefs.locale as 'zh' | 'en') || activeLocale);
     setPushModes(prefs.push_modes);
-  }, [prefs, activeLocale]);
+  }, [prefs]);
 
   useEffect(() => {
     getStoredNotificationStatus().then((record) => {
@@ -101,150 +96,82 @@ export default function SettingsScreen() {
   }
 
   return (
-    <>
-      <AppScreen>
-        <InkText serif style={styles.title}>{t('settings.title')}</InkText>
-        <InkText dimmed>{t('settings.subtitle')}</InkText>
+    <AppScreen>
+      <InkText serif style={{ fontSize: 32, fontWeight: '600' }}>{t('settings.title')}</InkText>
+      <InkText dimmed>{t('settings.subtitle')}</InkText>
 
-        <InkCard style={styles.sectionCard}>
-          <InkText style={styles.sectionTitle}>{t('settings.notifications')}</InkText>
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <InkText style={styles.rowTitle}>{t('settings.enablePush')}</InkText>
-              <InkText dimmed>{t('settings.registration', { status: pushTokenLabel })}</InkText>
-            </View>
-            <Switch value={pushEnabled} onValueChange={setPushEnabled} />
-          </View>
-          <Pressable style={styles.selectionCard} onPress={() => setPicker('time')}>
-            <InkText dimmed>{t('settings.pushTimeLabel')}</InkText>
-            <InkText style={styles.selectionValue}>{pushTime}</InkText>
-          </Pressable>
-          <View style={styles.modeWrap}>
-            {(modesQuery.data?.modes || []).slice(0, 8).map((mode) => (
-              <InkChip
+      <InkCard>
+        <InkText style={{ fontWeight: '600', fontSize: 16 }}>{t('settings.notifications')}</InkText>
+        <View style={styles.row}>
+          <InkText dimmed>{t('settings.enablePush')}</InkText>
+          <Switch value={pushEnabled} onValueChange={setPushEnabled} />
+        </View>
+        <TextInput value={pushTime} onChangeText={setPushTime} style={styles.input} />
+        <InkText dimmed>
+          {prefs ? t('settings.currentModes', { modes: pushModes.join(', ') || '-' }) : t('settings.notLoggedIn')}
+        </InkText>
+        <InkText dimmed style={{ marginTop: 8 }}>{t('settings.registration', { status: pushTokenLabel })}</InkText>
+      </InkCard>
+
+      <InkCard>
+        <InkText style={{ fontWeight: '600', fontSize: 16 }}>{t('settings.pushModes')}</InkText>
+        <View style={styles.modeWrap}>
+          {(modesQuery.data?.modes || []).slice(0, 8).map((mode) => {
+            const active = pushModes.includes(mode.mode_id);
+            return (
+              <InkButton
                 key={mode.mode_id}
-                label={mode.display_name}
-                active={pushModes.includes(mode.mode_id)}
+                label={mode.mode_id}
+                variant={active ? 'primary' : 'secondary'}
                 onPress={() => togglePushMode(mode.mode_id)}
               />
-            ))}
-          </View>
-        </InkCard>
-
-        <InkCard style={styles.sectionCard}>
-          <InkText style={styles.sectionTitle}>{t('settings.widgetAndLocale')}</InkText>
-          <Pressable style={styles.selectionCard} onPress={() => setPicker('widget')}>
-            <InkText dimmed>{t('settings.widgetModeLabel')}</InkText>
-            <InkText style={styles.selectionValue}>{widgetMode}</InkText>
-          </Pressable>
-          <View style={styles.modeWrap}>
-            <InkChip label="ZH" active={locale === 'zh'} onPress={() => setLocaleState('zh')} />
-            <InkChip label="EN" active={locale === 'en'} onPress={() => setLocaleState('en')} />
-          </View>
-          <InkText dimmed style={styles.helperText}>
-            {prefs ? t('settings.localeTimezone', { locale, timezone: prefs.timezone }) : t('settings.notLoggedIn')}
-          </InkText>
-        </InkCard>
-
-        <InkCard style={styles.sectionCard}>
-          <InkText style={styles.sectionTitle}>{t('settings.aboutTitle')}</InkText>
-          <InkText dimmed style={styles.helperText}>{t('settings.aboutBody')}</InkText>
-        </InkCard>
-
-        <InkButton
-          label={saveMutation.isPending ? t('common.loading') : t('common.save')}
-          block
-          onPress={() => saveMutation.mutate()}
-          disabled={!token || saveMutation.isPending}
-        />
-      </AppScreen>
-
-      <InkBottomSheet visible={picker !== null} onClose={() => setPicker(null)}>
-        <InkText serif style={styles.sheetTitle}>
-          {picker === 'time' ? t('settings.pushTimeLabel') : t('settings.widgetModeLabel')}
-        </InkText>
-        <View style={styles.sheetOptions}>
-          {picker === 'time'
-            ? HOURS.map((time) => (
-                <InkButton
-                  key={time}
-                  label={time}
-                  block
-                  variant={pushTime === time ? 'primary' : 'secondary'}
-                  onPress={() => {
-                    setPushTime(time);
-                    setPicker(null);
-                  }}
-                />
-              ))
-            : (modesQuery.data?.modes || []).slice(0, 10).map((mode) => (
-                <InkButton
-                  key={mode.mode_id}
-                  label={mode.display_name}
-                  block
-                  variant={widgetMode === mode.mode_id ? 'primary' : 'secondary'}
-                  onPress={() => {
-                    setWidgetMode(mode.mode_id);
-                    setPicker(null);
-                  }}
-                />
-              ))}
+            );
+          })}
         </View>
-      </InkBottomSheet>
-    </>
+      </InkCard>
+
+      <InkCard>
+        <InkText style={{ fontWeight: '600', fontSize: 16 }}>{t('settings.widgetAndLocale')}</InkText>
+        <TextInput value={widgetMode} onChangeText={setWidgetMode} style={styles.input} autoCapitalize="characters" />
+        <View style={styles.modeWrap}>
+          <InkButton label="ZH" variant={locale === 'zh' ? 'primary' : 'secondary'} onPress={() => setLocaleState('zh')} />
+          <InkButton label="EN" variant={locale === 'en' ? 'primary' : 'secondary'} onPress={() => setLocaleState('en')} />
+        </View>
+        <InkText dimmed style={{ marginTop: 8 }}>
+          {prefs ? t('settings.localeTimezone', { locale, timezone: prefs.timezone }) : t('settings.notLoggedIn')}
+        </InkText>
+      </InkCard>
+
+      <InkButton
+        label={saveMutation.isPending ? t('common.loading') : t('common.save')}
+        block
+        onPress={() => saveMutation.mutate()}
+        disabled={!token || saveMutation.isPending}
+      />
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-  },
-  sectionCard: {
-    gap: 14,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    marginTop: 10,
+    marginBottom: 12,
   },
-  rowText: {
-    flex: 1,
-    gap: 4,
-  },
-  rowTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  selectionCard: {
+  input: {
+    height: 50,
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 6,
-  },
-  selectionValue: {
-    fontSize: 16,
-    fontWeight: '600',
+    marginVertical: 12,
+    color: theme.colors.ink,
   },
   modeWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-  },
-  helperText: {
-    lineHeight: 21,
-  },
-  sheetTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sheetOptions: {
-    gap: 10,
+    marginTop: 12,
   },
 });

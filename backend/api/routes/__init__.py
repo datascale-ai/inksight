@@ -3,6 +3,7 @@ from .config import router as config_router
 from .device import router as device_router
 from .discover import router as discover_router
 from .firmware import router as firmware_router
+from .locations import router as locations_router
 from .mobile import router as mobile_router
 from .modes import router as modes_router
 from .pages import router as pages_router
@@ -21,6 +22,7 @@ api_routers = [
     stats_router,
     firmware_router,
     discover_router,
+    locations_router,
 ]
 
 page_routers = [pages_router]

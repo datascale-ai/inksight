@@ -24,7 +24,7 @@ from core.config_store import (
     save_user_preferences,
     unregister_push_token,
 )
-from core.context import get_date_context, get_weather
+from core.context import extract_location_settings, get_date_context, get_weather
 from core.mode_registry import get_registry
 from core.pipeline import generate_content_only
 from core.schemas import PushRegistrationRequest, UserPreferencesRequest
@@ -78,49 +78,6 @@ def _fallback_content(mode_id: str, city: str) -> dict:
     }
 
 
-def _pick_title(content: dict, fallback: str) -> str:
-    for key in ("title", "question", "quote", "text", "summary"):
-        text = _first_text(content.get(key))
-        if text:
-            return text[:40]
-    return fallback
-
-
-def _build_recommendation_reason(mode_id: str, date_ctx: dict, weather: dict) -> str:
-    hour = int(date_ctx.get("hour") or 0)
-    daily_word = str(date_ctx.get("daily_word") or "").strip()
-    weather_summary = str(weather.get("weather_str") or "").strip()
-    festival = str(date_ctx.get("festival") or "").strip()
-
-    if mode_id == "WEATHER":
-        return f"根据今天的天气 {weather_summary}，先把实用安排放到前面。".strip()
-    if mode_id == "POETRY":
-        return "今天的节奏适合留一点安静给自己。"
-    if mode_id == "LETTER":
-        return "今天适合读一段更有陪伴感的内容。"
-    if hour < 10:
-        return f"用一句有方向感的话开始今天。{daily_word[:12] if daily_word else ''}".strip()
-    if festival:
-        return f"临近 {festival}，这条内容会更有当下感。"
-    return "这是一条适合今天先看到的慢信息。"
-
-
-def _build_header_meta(city: str, date_ctx: dict, weather: dict) -> dict:
-    upcoming_holiday = str(date_ctx.get("upcoming_holiday") or "").strip()
-    days_until = int(date_ctx.get("days_until_holiday") or 0)
-    season_label = (
-        f"{upcoming_holiday}还有{days_until}天"
-        if upcoming_holiday and days_until > 0
-        else str(date_ctx.get("festival") or date_ctx.get("month_cn") or "").strip()
-    )
-    return {
-        "date_label": str(date_ctx.get("date_str") or "").strip(),
-        "weather_summary": f"{city} · {str(weather.get('weather_str') or '--°C').strip()}",
-        "season_label": season_label,
-        "daily_keyword": str(date_ctx.get("daily_word") or "").strip()[:14],
-    }
-
-
 def _normalize_modes(raw_modes: str, limit: int) -> list[str]:
     registry = get_registry()
     items = [item.strip().upper() for item in raw_modes.split(",") if item.strip()]
@@ -167,7 +124,7 @@ async def get_today_content(
     resolved_locale = (locale or (prefs or {}).get("locale") or DEFAULT_LANGUAGE).lower()
     selected_modes = _normalize_modes(modes, limit)
     date_ctx = await get_date_context()
-    weather = await get_weather(city=city)
+    weather = await get_weather(**extract_location_settings({"city": city}, fallback_city=DEFAULT_CITY))
     registry = get_registry()
 
     items: list[dict] = []
@@ -187,25 +144,17 @@ async def get_today_content(
                 "mode_id": mode_id,
                 "display_name": info.display_name if info else mode_id,
                 "icon": info.icon if info else "star",
-                "title": _pick_title(content, info.display_name if info else mode_id),
                 "summary": _pick_summary(content),
                 "content": content,
                 "preview_url": _preview_url(mode_id, city=city),
                 "image_url": _preview_url(mode_id, city=city),
-                "recommendation_reason": _build_recommendation_reason(mode_id, date_ctx, weather),
             }
         )
-
-    hero_item = items[0] if items else None
-    secondary_items = items[1:3] if len(items) > 1 else []
 
     return {
         "generated_at": datetime.now().isoformat(),
         "date": date_ctx,
         "weather": weather,
-        "header_meta": _build_header_meta(city, date_ctx, weather),
-        "hero_item": hero_item,
-        "secondary_items": secondary_items,
         "items": items,
     }
 
@@ -272,10 +221,11 @@ async def get_widget_data(
         content = latest["content"]
         updated_at = latest_history[0]["time"] if latest_history else ""
     else:
-        city = (config or {}).get("city", DEFAULT_CITY)
+        effective_cfg = config or {}
+        city = effective_cfg.get("city", DEFAULT_CITY)
         locale = (config or {}).get("language", DEFAULT_LANGUAGE)
         date_ctx = await get_date_context()
-        weather = await get_weather(city=city)
+        weather = await get_weather(**extract_location_settings(effective_cfg, fallback_city=DEFAULT_CITY))
         try:
             content = await generate_content_only(
                 selected_mode,

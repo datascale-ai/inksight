@@ -4,9 +4,12 @@ import { useEffect, useState, useCallback, Suspense, useMemo, useRef } from "rea
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DeviceInfo } from "@/components/config/device-info";
+import { LocationPicker } from "@/components/config/location-picker";
 import { ModeSelector } from "@/components/config/mode-selector";
+import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,9 +24,18 @@ import {
   Trash2,
   Monitor,
   X,
+  Users,
 } from "lucide-react";
 import { authHeaders, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
 import { localeFromPathname, withLocalePath } from "@/lib/i18n";
+import {
+  buildLocationValue,
+  cleanLocationValue,
+  describeLocation,
+  extractLocationValue,
+  locationsEqual,
+  type LocationValue,
+} from "@/lib/locations";
 
 interface UserDevice {
   mac: string;
@@ -52,52 +64,17 @@ interface AccessRequestItem {
   created_at: string;
 }
 
-const MODE_META: Record<string, { name: string; tip: string }> = {
-  DAILY: { name: "每日", tip: "语录、书籍推荐、冷知识的综合日报" },
-  WEATHER: { name: "天气", tip: "实时天气和未来趋势看板" },
-  ZEN: { name: "禅意", tip: "一个大字表达当下心境" },
-  BRIEFING: { name: "简报", tip: "科技热榜 + AI 洞察简报" },
-  STOIC: { name: "斯多葛", tip: "每日一句哲学箴言" },
-  POETRY: { name: "诗词", tip: "古诗词与简短注解" },
-  ARTWALL: { name: "画廊", tip: "根据时令生成黑白艺术画" },
-  ALMANAC: { name: "老黄历", tip: "农历、节气、宜忌信息" },
-  RECIPE: { name: "食谱", tip: "按时段推荐三餐方案" },
-  COUNTDOWN: { name: "倒计时", tip: "重要日程倒计时/正计时" },
-  MEMO: { name: "便签", tip: "展示自定义便签文字" },
-  HABIT: { name: "打卡", tip: "每日习惯完成进度" },
-  ROAST: { name: "毒舌", tip: "轻松幽默的吐槽风格内容" },
-  FITNESS: { name: "健身", tip: "居家健身动作与建议" },
-  LETTER: { name: "慢信", tip: "来自不同时空的一封慢信" },
-  THISDAY: { name: "今日历史", tip: "历史上的今天重大事件" },
-  RIDDLE: { name: "猜谜", tip: "谜题与脑筋急转弯" },
-  QUESTION: { name: "每日一问", tip: "值得思考的开放式问题" },
-  BIAS: { name: "认知偏差", tip: "认知偏差与心理效应" },
-  STORY: { name: "微故事", tip: "可在 30 秒内读完的微故事" },
-  LIFEBAR: { name: "进度条", tip: "年/月/周/人生进度条" },
-  CHALLENGE: { name: "微挑战", tip: "每天一个 5 分钟微挑战" },
-};
-
-const CORE_MODES = ["DAILY", "WEATHER", "POETRY", "ARTWALL", "ALMANAC", "BRIEFING"];
-const EXTRA_MODES = Object.keys(MODE_META).filter((m) => !CORE_MODES.includes(m));
-
-const LLM_MODELS: Record<string, { v: string; n: string }[]> = {
-  deepseek: [{ v: "deepseek-chat", n: "DeepSeek Chat" }],
-  aliyun: [
-    { v: "qwen-max", n: "通义千问 Max" },
-    { v: "qwen-plus", n: "通义千问 Plus" },
-    { v: "qwen-turbo", n: "通义千问 Turbo" },
-    { v: "deepseek-v3", n: "DeepSeek V3" },
-  ],
-  moonshot: [
-    { v: "moonshot-v1-8k", n: "Kimi K1.5" },
-    { v: "moonshot-v1-32k", n: "Kimi K1.5 32K" },
-  ],
-};
-
-const IMAGE_MODELS: Record<string, { v: string; n: string }[]> = {
-  aliyun: [
-    { v: "qwen-image-max", n: "通义万相 qwen-image-max" },
-  ],
+type ModeCatalogItem = {
+  mode_id: string;
+  category: "core" | "more" | "custom" | string;
+  source?: string;
+  display_name?: string;
+  description?: string;
+  settings_schema?: ModeSettingSchemaItem[];
+  i18n?: {
+    zh?: { name?: string; tip?: string };
+    en?: { name?: string; tip?: string };
+  };
 };
 
 const STRATEGIES: Record<string, string> = {
@@ -121,6 +98,37 @@ const TONE_OPTIONS = [
 ] as const;
 const PERSONA_PRESETS = ["鲁迅", "王小波", "JARVIS", "苏格拉底", "村上春树"] as const;
 
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export async function queueImmediateRefreshIfOnline(
+  fetchImpl: FetchLike,
+  mac: string,
+  headers: Record<string, string>,
+): Promise<{ onlineNow: boolean | null; lastSeen: string | null; refreshQueued: boolean }> {
+  try {
+    const stateRes = await fetchImpl(`/api/device/${encodeURIComponent(mac)}/state`, {
+      cache: "no-store",
+      headers,
+    });
+    if (!stateRes.ok) {
+      return { onlineNow: null, lastSeen: null, refreshQueued: false };
+    }
+    const stateData = await stateRes.json();
+    const onlineNow = Boolean(stateData?.is_online);
+    const lastSeen = typeof stateData?.last_seen === "string" && stateData.last_seen ? stateData.last_seen : null;
+    if (!onlineNow) {
+      return { onlineNow, lastSeen, refreshQueued: false };
+    }
+    const refreshRes = await fetchImpl(`/api/device/${encodeURIComponent(mac)}/refresh`, {
+      method: "POST",
+      headers,
+    });
+    return { onlineNow, lastSeen, refreshQueued: refreshRes.ok };
+  } catch {
+    return { onlineNow: null, lastSeen: null, refreshQueued: false };
+  }
+}
+
 function normalizeLanguage(v: unknown): string {
   if (typeof v !== "string") return "zh";
   if (v === "zh" || v === "en" || v === "mixed") return v;
@@ -135,67 +143,13 @@ function normalizeTone(v: unknown): string {
   return found?.value || "neutral";
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const MODE_TEMPLATES: Record<string, { label: string; def: any }> = {
-  quote: {
-    label: "语录模板",
-    def: {
-      mode_id: "MY_QUOTE", display_name: "自定义语录", icon: "book", cacheable: true,
-      description: "自定义语录模式",
-      content: {
-        type: "llm_json", prompt_template: "请生成一条有深度的语录，用 JSON 返回 {quote, author}。{context}",
-        output_schema: { quote: { type: "string" }, author: { type: "string" } }, temperature: 0.8,
-        fallback: { quote: "路漫漫其修远兮", author: "屈原" },
-        fallback_pool: [{ quote: "路漫漫其修远兮", author: "屈原" }, { quote: "知者不惑，仁者不忧", author: "孔子" }, { quote: "天行健，君子以自强不息", author: "易经" }],
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "centered_text", field: "quote", font: "NotoSerifSC-Light.ttf", font_size: 18, vertical_center: true }], footer: { label: "MY_QUOTE", attribution_template: "— {author}" } },
-    },
-  },
-  list: {
-    label: "列表模板",
-    def: {
-      mode_id: "MY_LIST", display_name: "自定义列表", icon: "list", cacheable: true,
-      description: "列表展示模式",
-      content: {
-        type: "llm_json", prompt_template: "请生成3条科技快讯，JSON 格式 {title, items: [{text}]}。{context}",
-        output_schema: { title: { type: "string" }, items: { type: "array", items: { type: "object", properties: { text: { type: "string" } } } } },
-        temperature: 0.7, fallback: { title: "今日快讯", items: [{ text: "暂无内容" }] },
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "text", field: "title", font_size: 16, align: "center", bold: true }, { type: "spacer", height: 8 }, { type: "list", field: "items", item_template: "{text}", max_items: 5, font_size: 12 }], footer: { label: "MY_LIST" } },
-    },
-  },
-  zen: {
-    label: "禅意模板",
-    def: {
-      mode_id: "MY_ZEN", display_name: "自定义禅", icon: "zen", cacheable: true,
-      description: "单字禅意模式",
-      content: {
-        type: "llm_json", prompt_template: "请给出一个蕴含哲理的汉字，并简短解读。JSON: {word, reading}。{context}",
-        output_schema: { word: { type: "string" }, reading: { type: "string" } }, temperature: 0.9,
-        fallback: { word: "道", reading: "万物之始" },
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "centered_text", field: "word", font: "NotoSerifSC-Bold.ttf", font_size: 80, vertical_center: true }, { type: "centered_text", field: "reading", font_size: 13 }], footer: { label: "MY_ZEN" } },
-    },
-  },
-  sections: {
-    label: "综合模板",
-    def: {
-      mode_id: "MY_DAILY", display_name: "自定义综合", icon: "daily", cacheable: true,
-      description: "多栏综合内容",
-      content: {
-        type: "llm_json", prompt_template: "请生成今日内容：一句话语录、一个推荐、一个小贴士。JSON: {quote, recommend, tip}。{context}",
-        output_schema: { quote: { type: "string" }, recommend: { type: "string" }, tip: { type: "string" } }, temperature: 0.8,
-        fallback: { quote: "今天是美好的一天", recommend: "推荐阅读", tip: "记得喝水" },
-      },
-      layout: { status_bar: { line_width: 1 }, body: [{ type: "section", label: "📖 语录", blocks: [{ type: "text", field: "quote", font_size: 13 }] }, { type: "separator", dashed: true }, { type: "section", label: "💡 推荐", blocks: [{ type: "text", field: "recommend", font_size: 12 }] }, { type: "separator", dashed: true }, { type: "section", label: "🌟 小贴士", blocks: [{ type: "text", field: "tip", font_size: 12 }] }], footer: { label: "MY_DAILY" } },
-    },
-  },
-};
-/* eslint-enable @typescript-eslint/no-explicit-any */
+// Custom mode templates removed (AI-only creation)
+
 
 const TABS = [
   { id: "modes", label: "模式", icon: Settings },
   { id: "preferences", label: "个性化", icon: Sliders },
+  { id: "sharing", label: "共享成员", icon: Users },
   { id: "stats", label: "状态", icon: BarChart3 },
 ] as const;
 
@@ -209,6 +163,11 @@ interface DeviceConfig {
   refresh_strategy?: string;
   refresh_minutes?: number;
   city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  admin1?: string;
+  country?: string;
   language?: string;
   contentTone?: string;
   content_tone?: string;
@@ -226,17 +185,34 @@ interface DeviceConfig {
   countdown_events?: { name: string; date: string }[];
   memoText?: string;
   memo_text?: string;
-  has_api_key?: boolean;
-  has_image_api_key?: boolean;
   mode_overrides?: Record<string, ModeOverride>;
   modeOverrides?: Record<string, ModeOverride>;
 }
 
 interface ModeOverride {
   city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  admin1?: string;
+  country?: string;
   llm_provider?: string;
   llm_model?: string;
   [key: string]: unknown;
+}
+
+interface PendingPreviewConfirm {
+  mode: string;
+  forceNoCache: boolean;
+  forcedModeOverride?: ModeOverride;
+  usageSource?: string;
+}
+
+type ParamModalType = "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar";
+interface ParamModalState {
+  type: ParamModalType;
+  mode: string;
+  action: "preview" | "apply";
 }
 
 interface ModeSettingSchemaItem {
@@ -251,14 +227,6 @@ interface ModeSettingSchemaItem {
   description?: string;
   as_json?: boolean;
   options?: Array<{ value: string; label: string } | string>;
-}
-
-interface ServerModeItem {
-  mode_id: string;
-  display_name: string;
-  description: string;
-  source: string;
-  settings_schema?: ModeSettingSchemaItem[];
 }
 
 interface DeviceStats {
@@ -277,7 +245,7 @@ function ConfigPageInner() {
   const pathname = usePathname();
   const locale = localeFromPathname(pathname || "/");
   const isEn = locale === "en";
-  const tr = (zh: string, en: string) => (isEn ? en : zh);
+  const tr = useCallback((zh: string, en: string) => (isEn ? en : zh), [isEn]);
   const searchParams = useSearchParams();
   const mac = searchParams.get("mac") || "";
   const preferMac = searchParams.get("prefer_mac") || "";
@@ -529,6 +497,7 @@ function ConfigPageInner() {
   const [strategy, setStrategy] = useState("random");
   const [refreshMin, setRefreshMin] = useState(60);
   const [city, setCity] = useState("");
+  const [locationMeta, setLocationMeta] = useState<LocationValue>({});
   const [language, setLanguage] = useState("zh");
   const [contentTone, setContentTone] = useState("neutral");
   const [characterTones, setCharacterTones] = useState<string[]>([]);
@@ -549,17 +518,41 @@ function ConfigPageInner() {
   const [previewMode, setPreviewMode] = useState("");
   const [previewNoCacheOnce, setPreviewNoCacheOnce] = useState(false);
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
+  const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
+  const [previewConfirm, setPreviewConfirm] = useState<PendingPreviewConfirm | null>(null);
+
+  // 自适应图片（MY_ADAPTIVE）本地选图 + 上传（与 /preview 页面一致）
+  const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingAdaptiveAction, setPendingAdaptiveAction] = useState<null | { action: "preview" | "apply"; mode: string }>(null);
+  const [, setAdaptiveUploading] = useState(false);
+
+  // 参数弹窗（与 /preview 页面保持一致）
+  const [paramModal, setParamModal] = useState<ParamModalState | null>(null);
+  const [quoteDraft, setQuoteDraft] = useState("");
+  const [authorDraft, setAuthorDraft] = useState("");
+  const [weatherDraftLocation, setWeatherDraftLocation] = useState<LocationValue>({});
+  const [memoDraft, setMemoDraft] = useState("");
+  const [countdownName, setCountdownName] = useState("元旦");
+  const [countdownDate, setCountdownDate] = useState("2027-01-01");
+  const [habitItems, setHabitItems] = useState([
+    { name: "早起", done: false },
+    { name: "运动", done: false },
+    { name: "阅读", done: false },
+  ]);
+  const [userAge, setUserAge] = useState(30);
+  const [lifeExpectancy, setLifeExpectancy] = useState<100 | 120>(100);
   // 邀请码弹窗状态
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [redeemingInvite, setRedeemingInvite] = useState(false);
   const [pendingPreviewMode, setPendingPreviewMode] = useState<string | null>(null);
-  const [currentMode, setCurrentMode] = useState<string>("");
+  const [, setCurrentMode] = useState<string>("");
   const [applyToScreenLoading, setApplyToScreenLoading] = useState(false);
-  const [favoritedModes, setFavoritedModes] = useState<Set<string>>(new Set());
+  const [, setFavoritedModes] = useState<Set<string>>(new Set());
   const favoritesLoadedMacRef = useRef<string>("");
   const memoSettingsInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previewStreamRef = useRef<EventSource | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("unknown");
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
@@ -569,16 +562,63 @@ function ConfigPageInner() {
   const [customJson, setCustomJson] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
   const [customPreviewImg, setCustomPreviewImg] = useState<string | null>(null);
-  const [customPreviewLoading, setCustomPreviewLoading] = useState(false);
-  const [customApplyToScreenLoading, setCustomApplyToScreenLoading] = useState(false);
+  const [, setCustomPreviewLoading] = useState(false);
   const [editingCustomMode, setEditingCustomMode] = useState(false);
-  const [editorTab, setEditorTab] = useState<"ai" | "template">("ai");
+  const [customEditorSource, setCustomEditorSource] = useState<"ai" | "manual" | null>(null);
+  const [previewModeLabelOverride, setPreviewModeLabelOverride] = useState<string | null>(null);
+  const previewPanelRef = useRef<HTMLDivElement | null>(null);
 
-  const [serverModes, setServerModes] = useState<ServerModeItem[]>([]);
+  const [catalogItems, setCatalogItems] = useState<ModeCatalogItem[]>([]);
 
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const currentLocation = useMemo(
+    () => buildLocationValue(city, locationMeta),
+    [city, locationMeta],
+  );
+  const defaultWeatherLocation = useMemo(
+    () => (currentLocation.city ? cleanLocationValue(currentLocation) : buildLocationValue("杭州")),
+    [currentLocation],
+  );
+
+  const applyGlobalLocation = useCallback((next: Partial<LocationValue> | null | undefined) => {
+    const cleaned = cleanLocationValue(next);
+    setCity(cleaned.city || "");
+    setLocationMeta(cleaned);
+  }, []);
+
+  const replacePreviewImg = useCallback((nextUrl: string | null) => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+    if (nextUrl) previewObjectUrlRef.current = nextUrl;
+    setPreviewImg(nextUrl);
+  }, []);
+
+  const uploadLocalImage = useCallback(async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const up = await fetch("/api/uploads", { method: "POST", body: fd });
+    if (!up.ok) {
+      const err = await up.text().catch(() => "");
+      throw new Error(err || `upload failed: ${up.status}`);
+    }
+    const data = (await up.json()) as { url?: string };
+    if (!data.url) throw new Error("upload failed: missing url");
+    return data.url;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+        previewObjectUrlRef.current = null;
+      }
+    };
   }, []);
 
   const nextConfigPath = useMemo(() => {
@@ -593,22 +633,32 @@ function ConfigPageInner() {
     return query ? `${withLocalePath(locale, "/config")}?${query}` : withLocalePath(locale, "/config");
   }, [locale, mac, preferMac, prefillCode]);
 
-  const supportedModeIds = useMemo(
-    () => new Set(serverModes.map((m) => m.mode_id.toUpperCase())),
-    [serverModes]
-  );
+  const refreshCatalog = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (mac) params.append("mac", mac);
+    try {
+      const res = await fetch(`/api/modes/catalog?${params.toString()}`, { headers: authHeaders() });
+      if (!res.ok) {
+        console.error("[CONFIG] Catalog request failed:", res.status, res.statusText);
+        return;
+      }
+      const data = await res.json().catch((err) => {
+        console.error("[CONFIG] Failed to parse catalog JSON:", err);
+        return {};
+      });
+      if (data.items && Array.isArray(data.items)) {
+        setCatalogItems(data.items);
+      } else {
+        console.error("[CONFIG] Invalid catalog response:", data);
+      }
+    } catch (err) {
+      console.error("[CONFIG] Failed to load catalog:", err);
+    }
+  }, [mac]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (mac) {
-      params.append("mac", mac);
-    }
-    fetch(`/api/modes?${params.toString()}`, {
-      headers: authHeaders(),
-    }).then((r) => r.json()).then((d) => {
-      if (d.modes) setServerModes(d.modes);
-    }).catch(() => {});
-  }, [mac]);
+    refreshCatalog();
+  }, [refreshCatalog]);
 
   useEffect(() => {
     if (mac && currentUser) {
@@ -656,7 +706,7 @@ function ConfigPageInner() {
         if (cfg.modes?.length) setSelectedModes(new Set(cfg.modes.map((m) => m.toUpperCase())));
         if (cfg.refreshStrategy || cfg.refresh_strategy) setStrategy((cfg.refreshStrategy || cfg.refresh_strategy) as string);
         if (cfg.refreshInterval || cfg.refresh_minutes) setRefreshMin((cfg.refreshInterval || cfg.refresh_minutes) as number);
-        if (cfg.city) setCity(cfg.city);
+        applyGlobalLocation(extractLocationValue(cfg as Record<string, unknown>));
         if (cfg.language) setLanguage(normalizeLanguage(cfg.language));
         if (cfg.contentTone || cfg.content_tone) setContentTone(normalizeTone(cfg.contentTone || cfg.content_tone));
         if (cfg.characterTones || cfg.character_tones) setCharacterTones((cfg.characterTones || cfg.character_tones) as string[]);
@@ -672,7 +722,7 @@ function ConfigPageInner() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [mac]);
+  }, [applyGlobalLocation, mac]);
 
   const getModeOverride = useCallback((modeId: string) => {
     return modeOverrides[modeId] || {};
@@ -681,8 +731,19 @@ function ConfigPageInner() {
   const sanitizeModeOverride = useCallback((input: ModeOverride) => {
     const cleaned: ModeOverride = {};
     for (const [k, raw] of Object.entries(input)) {
-      if (k === "city" || k === "llm_provider" || k === "llm_model") {
+      if (
+        k === "city" ||
+        k === "timezone" ||
+        k === "admin1" ||
+        k === "country" ||
+        k === "llm_provider" ||
+        k === "llm_model"
+      ) {
         if (typeof raw === "string" && raw.trim()) cleaned[k] = raw.trim();
+        continue;
+      }
+      if (k === "latitude" || k === "longitude") {
+        if (typeof raw === "number" && Number.isFinite(raw)) cleaned[k] = raw;
         continue;
       }
       if (typeof raw === "string") {
@@ -721,6 +782,44 @@ function ConfigPageInner() {
     });
   }, [sanitizeModeOverride]);
 
+  const requiresParamModal = useCallback((modeId: string) => {
+    const m = (modeId || "").toUpperCase();
+    return m === "WEATHER" || m === "MEMO" || m === "MY_QUOTE" || m === "COUNTDOWN" || m === "HABIT" || m === "LIFEBAR";
+  }, []);
+
+  const openParamModal = useCallback((modeId: string, action: "preview" | "apply") => {
+    const m = (modeId || "").toUpperCase();
+    if (m === "WEATHER") {
+      setWeatherDraftLocation({});
+      setParamModal({ type: "weather", mode: m, action });
+      return;
+    }
+    if (m === "MEMO") {
+      const existing = (modeOverrides[m]?.memo_text as string) || memoText || "";
+      setMemoDraft(existing);
+      setParamModal({ type: "memo", mode: m, action });
+      return;
+    }
+    if (m === "MY_QUOTE") {
+      setQuoteDraft("");
+      setAuthorDraft("");
+      setParamModal({ type: "quote", mode: m, action });
+      return;
+    }
+    if (m === "COUNTDOWN") {
+      setParamModal({ type: "countdown", mode: m, action });
+      return;
+    }
+    if (m === "HABIT") {
+      setParamModal({ type: "habit", mode: m, action });
+      return;
+    }
+    if (m === "LIFEBAR") {
+      setParamModal({ type: "lifebar", mode: m, action });
+      return;
+    }
+  }, [memoText, modeOverrides]);
+
   const clearModeOverride = useCallback((modeId: string) => {
     setModeOverrides((prev) => {
       const copied = { ...prev };
@@ -744,8 +843,8 @@ function ConfigPageInner() {
   }, []);
 
   const modeSchemaMap = useMemo(
-    () => Object.fromEntries(serverModes.map((m) => [m.mode_id, m.settings_schema || []])),
-    [serverModes]
+    () => Object.fromEntries(catalogItems.map((m) => [m.mode_id.toUpperCase(), m.settings_schema || []])),
+    [catalogItems]
   );
 
   const applySettingsDrafts = useCallback((modeId: string) => {
@@ -789,7 +888,7 @@ function ConfigPageInner() {
         modes: Array.from(selectedModes),
         refreshStrategy: strategy,
         refreshInterval: refreshMin,
-        city,
+        ...currentLocation,
         language,
         contentTone,
         characterTones: characterTones,
@@ -803,18 +902,23 @@ function ConfigPageInner() {
       });
       if (!res.ok) throw new Error("Save failed");
       let onlineNow = isOnline;
-      try {
-        const stateRes = await fetch(`/api/device/${encodeURIComponent(mac)}/state`, { cache: "no-store", headers: authHeaders() });
-        if (stateRes.ok) {
-          const stateData = await stateRes.json();
-          onlineNow = Boolean(stateData?.is_online);
-          setIsOnline(onlineNow);
-          setLastSeen(typeof stateData?.last_seen === "string" && stateData.last_seen ? stateData.last_seen : null);
-        }
-      } catch {}
+      let refreshQueued = false;
+      let latestLastSeen: string | null = lastSeen;
+      const syncResult = await queueImmediateRefreshIfOnline(fetch, mac, authHeaders());
+      onlineNow = syncResult.onlineNow ?? isOnline;
+      refreshQueued = syncResult.refreshQueued;
+      latestLastSeen = syncResult.lastSeen;
+      if (syncResult.onlineNow !== null) {
+        setIsOnline(syncResult.onlineNow);
+      }
+      setLastSeen(latestLastSeen);
       showToast(
-        onlineNow ? "配置已保存" : "配置已保存，设备当前离线，将在设备上线后生效",
-        onlineNow ? "success" : "info",
+        syncResult.onlineNow === null
+          ? "配置已保存，暂时无法确认设备状态"
+          : onlineNow
+            ? (refreshQueued ? "配置已保存，已通知设备立即刷新" : "配置已保存，设备在线，但立即刷新通知失败")
+            : "配置已保存，设备当前离线，将在设备上线后生效",
+        syncResult.onlineNow === null || !refreshQueued ? "info" : "success",
       );
       setPreviewNoCacheOnce(true);
     } catch {
@@ -824,53 +928,132 @@ function ConfigPageInner() {
     }
   };
 
-  const handlePreview = async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
+  const buildPreviewParams = useCallback((mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
     const m = mode || previewMode;
     const consumeNoCacheOnce = previewNoCacheOnce;
     const forceFresh = forceNoCache || consumeNoCacheOnce;
+    const params = new URLSearchParams({ persona: m });
+    if (mac) params.set("mac", mac);
+    const modeOverrideSource = sanitizeModeOverride({
+      ...(modeOverrides[m] || {}),
+      ...(forcedModeOverride || {}),
+    });
+    const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
+    const effectiveLocation = cleanLocationValue(
+      modeOverrideSource.city
+        ? extractLocationValue(modeOverrideSource as Record<string, unknown>)
+        : currentLocation,
+    );
+    const savedEffectiveLocation = cleanLocationValue(
+      savedOverrides[m]?.city
+        ? extractLocationValue(savedOverrides[m] as Record<string, unknown>)
+        : extractLocationValue(config as Record<string, unknown>),
+    );
+    const locationChanged = Boolean(effectiveLocation.city) && !locationsEqual(effectiveLocation, savedEffectiveLocation);
+
+    const activeModeOverride = sanitizeModeOverride({
+      ...modeOverrideSource,
+      ...(locationChanged ? effectiveLocation : {}),
+    });
+    if (m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
+      activeModeOverride.memo_text = memoText.trim();
+    }
+    const hasModeOverride = Object.keys(activeModeOverride).length > 0;
+    if (hasModeOverride) {
+      params.set("mode_override", JSON.stringify(activeModeOverride));
+    }
+    if (m === "MEMO") {
+      const memoCandidate = (
+        typeof forcedModeOverride?.memo_text === "string" && forcedModeOverride.memo_text.trim()
+          ? forcedModeOverride.memo_text
+          : typeof activeModeOverride.memo_text === "string" && activeModeOverride.memo_text.trim()
+          ? activeModeOverride.memo_text
+          : memoText
+      ).trim();
+      if (memoCandidate) {
+        params.set("memo_text", memoCandidate);
+      }
+    }
+    if (locationChanged && effectiveLocation.city) params.set("city_override", effectiveLocation.city);
+    if (forceFresh || locationChanged || hasModeOverride) params.set("no_cache", "1");
+    return { m, params, consumeNoCacheOnce };
+  }, [config, currentLocation, mac, memoText, modeOverrides, previewMode, previewNoCacheOnce, sanitizeModeOverride]);
+
+  const ownerUsername = useMemo(
+    () => deviceMembers.find((member) => member.role === "owner")?.username || "",
+    [deviceMembers],
+  );
+
+  const formatPreviewUsageText = useCallback((usageSource?: string) => {
+    switch (usageSource) {
+      case "current_user_api_key":
+        return tr("当前使用你的 API key", "Using your API key");
+      case "owner_api_key":
+        return ownerUsername
+          ? tr(`当前使用 owner（${ownerUsername}）的 API key`, `Using ${ownerUsername}'s API key`)
+          : tr("当前使用 owner 的 API key", "Using owner's API key");
+      case "owner_free_quota":
+        return ownerUsername
+          ? tr(`当前消耗 owner（${ownerUsername}）的免费额度`, `Using ${ownerUsername}'s free quota`)
+          : tr("当前消耗 owner 的免费额度", "Using owner's free quota");
+      case "current_user_free_quota":
+        return tr("当前消耗你的免费额度", "Using your free quota");
+      default:
+        return "";
+    }
+  }, [ownerUsername, tr]);
+
+  const handlePreview = useCallback(async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, confirmed = false) => {
+    const { m, params, consumeNoCacheOnce } = buildPreviewParams(mode, forceNoCache, forcedModeOverride);
+    if (!m) return;
+
+    if (mac && !confirmed) {
+      try {
+        const intentParams = new URLSearchParams(params);
+        intentParams.set("intent", "1");
+        const intentRes = await fetch(`/api/preview?${intentParams.toString()}`, {
+          cache: "no-store",
+          headers: authHeaders(),
+        });
+        if (intentRes.ok) {
+          const intentData = (await intentRes.json()) as {
+            cache_hit?: boolean;
+            usage_source?: string;
+            requires_invite_code?: boolean;
+            llm_mode_requires_quota?: boolean;
+          };
+          if (intentData.requires_invite_code) {
+            setPreviewConfirm(null);
+            setShowInviteModal(true);
+            setPendingPreviewMode(m);
+            setPreviewStatusText(formatPreviewUsageText(intentData.usage_source));
+            return;
+          }
+          if (!intentData.cache_hit && intentData.llm_mode_requires_quota) {
+            setPreviewConfirm({
+              mode: m,
+              forceNoCache,
+              forcedModeOverride,
+              usageSource: intentData.usage_source,
+            });
+            return;
+          }
+        }
+      } catch {}
+    }
+
+    setPreviewConfirm(null);
     setPreviewCacheHit(null);
+    setPreviewLlmStatus(null);
     setPreviewLoading(true);
     setPreviewStatusText(tr("正在生成...", "Generating..."));
     try {
-      const params = new URLSearchParams({ persona: m });
-      if (mac) params.set("mac", mac);
-      const activeModeOverride = sanitizeModeOverride({
-        ...(modeOverrides[m] || {}),
-        ...(forcedModeOverride || {}),
-      });
-      if (m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
-        activeModeOverride.memo_text = memoText.trim();
-      }
-      const hasModeOverride = Object.keys(activeModeOverride).length > 0;
-      if (hasModeOverride) {
-        params.set("mode_override", JSON.stringify(activeModeOverride));
-      }
-      if (m === "MEMO") {
-        const memoCandidate = (
-          typeof forcedModeOverride?.memo_text === "string" && forcedModeOverride.memo_text.trim()
-            ? forcedModeOverride.memo_text
-            : typeof activeModeOverride.memo_text === "string" && activeModeOverride.memo_text.trim()
-            ? activeModeOverride.memo_text
-            : memoText
-        ).trim();
-        if (memoCandidate) {
-          params.set("memo_text", memoCandidate);
-        }
-      }
-      const modeCity = (modeOverrides[m]?.city || "").trim();
-      const globalCity = city.trim();
-      const previewCity = modeCity || globalCity;
-      const savedGlobalCity = (config.city || "").trim();
-      const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
-      const savedModeCity = (savedOverrides[m]?.city || "").trim();
-      const cityChanged = previewCity.length > 0 && (modeCity ? modeCity !== savedModeCity : globalCity !== savedGlobalCity);
-      if (cityChanged) params.set("city_override", previewCity);
-      if (forceFresh || cityChanged || hasModeOverride) params.set("no_cache", "1");
       previewStreamRef.current?.close();
       const stream = new EventSource(`/api/preview/stream?${params.toString()}`);
       previewStreamRef.current = stream;
 
       await new Promise<void>((resolve, reject) => {
+        let settled = false;
         stream.addEventListener("status", (event) => {
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as { message?: string };
@@ -881,69 +1064,99 @@ function ConfigPageInner() {
         });
 
         stream.addEventListener("error", (event) => {
+          if (settled) return;
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as {
               error?: string;
               message?: string;
               requires_invite_code?: boolean;
+              usage_source?: string;
             };
-            // 如果额度耗尽，显示邀请码输入弹窗
             if (data.requires_invite_code) {
+              settled = true;
               stream.close();
               previewStreamRef.current = null;
+              setPreviewConfirm(null);
               setShowInviteModal(true);
-              setPendingPreviewMode(previewMode);
-              setPreviewStatusText("");
-              setPreviewLoading(false); // 重置加载状态
-              resolve(); // 不 reject，而是 resolve，因为这是预期的业务逻辑
+              setPendingPreviewMode(m);
+              setPreviewStatusText(formatPreviewUsageText(data.usage_source));
+              setPreviewLoading(false);
+              resolve();
               return;
             }
-            // 其他错误，正常 reject
+            settled = true;
             stream.close();
             previewStreamRef.current = null;
-            setPreviewLoading(false); // 重置加载状态
+            setPreviewLoading(false);
             reject(new Error(data.message || "Preview failed"));
           } catch {
+            settled = true;
             stream.close();
             previewStreamRef.current = null;
-            setPreviewLoading(false); // 重置加载状态
+            setPreviewLoading(false);
             reject(new Error("Preview failed"));
           }
         });
 
-        stream.addEventListener("result", (event) => {
+        stream.addEventListener("result", async (event) => {
           try {
             const data = JSON.parse((event as MessageEvent<string>).data) as {
               message?: string;
               image_url?: string;
               cache_hit?: boolean;
+              preview_status?: string;
+              llm_required?: boolean;
+              usage_source?: string;
             };
             console.log("[PREVIEW] Result event received:", { hasImageUrl: !!data.image_url, message: data.message });
             if (!data.image_url) {
+              settled = true;
               console.error("[PREVIEW] Missing image_url in result event");
-              setPreviewLoading(false); // 重置加载状态
+              setPreviewLoading(false);
               reject(new Error("Preview image missing"));
               return;
             }
+            settled = true;
+            const imageResponse = await fetch(data.image_url, { cache: "no-store" });
+            if (!imageResponse.ok) {
+              setPreviewLoading(false);
+              reject(new Error("Preview image unavailable"));
+              return;
+            }
+            const imageBlob = await imageResponse.blob();
+            const objectUrl = URL.createObjectURL(imageBlob);
             console.log("[PREVIEW] Setting preview image:", data.image_url.substring(0, 50) + "...");
-            setPreviewImg(data.image_url);
+            replacePreviewImg(objectUrl);
             setPreviewCacheHit(typeof data.cache_hit === "boolean" ? data.cache_hit : null);
             setPreviewStatusText(data.message || tr("完成", "Done"));
+            const status = (data.preview_status || "").toLowerCase();
+            const llmRequired = data.llm_required;
+            if (status === "no_llm_required" || llmRequired === false) {
+              setPreviewLlmStatus(null);
+            } else if (status === "model_generated") {
+              setPreviewLlmStatus(isEn ? "Model call succeeded" : "大模型调用成功");
+            } else if (status === "fallback_used") {
+              setPreviewLlmStatus(isEn ? "Model call failed, using fallback content" : "大模型调用失败，使用默认内容");
+            } else {
+              setPreviewLlmStatus(null);
+            }
             setPreviewLoading(false); // 重置加载状态
             stream.close();
             previewStreamRef.current = null;
             resolve();
           } catch (error) {
             console.error("[PREVIEW] Error processing result event:", error);
-            setPreviewLoading(false); // 重置加载状态
+            setPreviewLoading(false);
             reject(error);
           }
         });
 
         stream.onerror = () => {
+          if (settled) return;
+          settled = true;
           stream.close();
           previewStreamRef.current = null;
-          setPreviewLoading(false); // 重置加载状态
+          setPreviewLoading(false);
           reject(new Error("Preview failed"));
         };
       });
@@ -955,7 +1168,7 @@ function ConfigPageInner() {
       setPreviewLoading(false);
       if (consumeNoCacheOnce) setPreviewNoCacheOnce(false);
     }
-  };
+  }, [buildPreviewParams, formatPreviewUsageText, isEn, mac, replacePreviewImg, showToast, tr]);
 
   const handleRedeemInviteCode = async () => {
     if (!inviteCode.trim()) {
@@ -1105,7 +1318,22 @@ function ConfigPageInner() {
       if (!data.ok) throw new Error(data.error || "生成失败");
       setCustomJson(JSON.stringify(data.mode_def, null, 2));
       setCustomModeName((data.mode_def?.display_name || "").toString());
+      setCustomEditorSource("ai");
       showToast("模式生成成功", "success");
+
+      // Close modal right after generation, then start preview on the right panel
+      const finalName = (customModeName || data.mode_def?.display_name || "").toString().trim();
+      setPreviewModeLabelOverride(finalName || null);
+      setEditingCustomMode(false);
+      requestAnimationFrame(() => {
+        previewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+
+      // show "previewing" on the right panel while preview is being built
+      setPreviewLoading(true);
+      setPreviewStatusText(isEn ? "Generating preview..." : "模式预览中...");
+
+      await handleCustomPreview(data.mode_def);
     } catch (e) {
       showToast(`生成失败: ${e instanceof Error ? e.message : "未知错误"}`, "error");
     } finally {
@@ -1113,14 +1341,27 @@ function ConfigPageInner() {
     }
   };
 
-  const handleCustomPreview = async () => {
-    if (!customJson.trim()) return;
+  const handleCustomPreview = async (defOverride?: unknown) => {
+    if (!defOverride && !customJson.trim()) return;
     setCustomPreviewLoading(true);
+    setPreviewLoading(true);
+    if (!previewStatusText) setPreviewStatusText(isEn ? "Generating preview..." : "模式预览中...");
     try {
-      const def = JSON.parse(customJson);
+      const def = defOverride ? (defOverride as Record<string, unknown>) : (JSON.parse(customJson) as Record<string, unknown>);
       if (customModeName.trim()) {
-        def.display_name = customModeName.trim();
+        (def as Record<string, unknown>).display_name = customModeName.trim();
       }
+      let modeHint = "CUSTOM_PREVIEW";
+      try {
+        if (customModeName.trim()) {
+          modeHint = customModeName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+        } else {
+          const modeIdRaw = (def as Record<string, unknown>)["mode_id"];
+          if (typeof modeIdRaw === "string" && modeIdRaw.trim()) {
+            modeHint = modeIdRaw.trim().toUpperCase();
+          }
+        }
+      } catch {}
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1144,62 +1385,32 @@ function ConfigPageInner() {
         throw new Error(d.error || "预览失败");
       }
       const blob = await res.blob();
-      setCustomPreviewImg(URL.createObjectURL(blob));
+      const objectUrl = URL.createObjectURL(blob);
+      if (customPreviewImg) {
+        try { URL.revokeObjectURL(customPreviewImg); } catch {}
+      }
+      setCustomPreviewImg(objectUrl);
+
+      // show custom-mode preview in the right E-Ink panel
+      setPreviewMode(modeHint);
+      setPreviewCacheHit(null);
+      const status = (res.headers.get("x-preview-status") || "").toLowerCase();
+      const llmRequiredHeader = (res.headers.get("x-llm-required") || "").toLowerCase();
+      if (status === "no_llm_required" || llmRequiredHeader === "0" || llmRequiredHeader === "false") {
+        setPreviewLlmStatus(null);
+      } else if (status === "model_generated") {
+        setPreviewLlmStatus(isEn ? "Model call succeeded" : "大模型调用成功");
+      } else if (status === "fallback_used") {
+        setPreviewLlmStatus(isEn ? "Model call failed, using fallback content" : "大模型调用失败，使用默认内容");
+      } else {
+        setPreviewLlmStatus(null);
+      }
+      replacePreviewImg(objectUrl);
     } catch (e) {
       showToast(`预览失败: ${e instanceof Error ? e.message : ""}`, "error");
     } finally {
       setCustomPreviewLoading(false);
-    }
-  };
-
-  const handleApplyCustomPreviewToScreen = async () => {
-    if (!mac || !customPreviewImg) return;
-    setCustomApplyToScreenLoading(true);
-    try {
-      const stateRes = await fetch(`/api/device/${encodeURIComponent(mac)}/state`, { cache: "no-store", headers: authHeaders() });
-      if (!stateRes.ok) {
-        showToast("无法确认设备状态，已阻止发送", "error");
-        return;
-      }
-      const stateData = await stateRes.json();
-      const mode = stateData?.runtime_mode;
-      if (mode === "active" || mode === "interval") {
-        setRuntimeMode(mode);
-      }
-      if (mode !== "active") {
-        showToast("设备处于间歇状态，不可发送", "error");
-        return;
-      }
-
-      const previewResponse = await fetch(customPreviewImg);
-      if (!previewResponse.ok) throw new Error("preview image unavailable");
-      const previewBlob = await previewResponse.blob();
-
-      let modeHint = "CUSTOM_PREVIEW";
-      try {
-        const def = JSON.parse(customJson);
-        if (customModeName.trim()) {
-          modeHint = customModeName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-        } else if (typeof def?.mode_id === "string" && def.mode_id.trim()) {
-          modeHint = def.mode_id.trim().toUpperCase();
-        }
-      } catch {}
-
-      const qs = new URLSearchParams();
-      qs.set("mode", modeHint);
-      const res = await fetch(`/api/device/${encodeURIComponent(mac)}/apply-preview?${qs.toString()}`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "image/png" }),
-        body: previewBlob,
-      });
-      if (!res.ok) throw new Error("apply-preview failed");
-      setCurrentMode(modeHint);
-      await loadRuntimeMode();
-      showToast("已下发到墨水屏", "success");
-    } catch {
-      showToast("下发失败", "error");
-    } finally {
-      setCustomApplyToScreenLoading(false);
+      setPreviewLoading(false);
     }
   };
 
@@ -1255,15 +1466,17 @@ function ConfigPageInner() {
       const data = await res.json();
       if (data.ok || data.status === "ok") {
         showToast(`模式 ${def.mode_id} 已保存`, "success");
-        // Refresh modes list with mac parameter
-        const params = new URLSearchParams();
-        params.append("mac", mac);
-        fetch(`/api/modes?${params.toString()}`, { headers: authHeaders() }).then((r) => r.json()).then((d) => { if (d.modes) setServerModes(d.modes); }).catch(() => {});
+        // Refresh catalog (modes + categories + settings schema)
+        refreshCatalog();
         setEditingCustomMode(false);
         setCustomJson("");
         setCustomDesc("");
         setCustomModeName("");
+        if (customPreviewImg) {
+          try { URL.revokeObjectURL(customPreviewImg); } catch {}
+        }
         setCustomPreviewImg(null);
+        setCustomEditorSource(null);
       } else {
         throw new Error(data.error || "保存失败");
       }
@@ -1272,25 +1485,72 @@ function ConfigPageInner() {
     }
   };
 
-  const toggleMode = (modeId: string) => {
+  const toggleMode = useCallback((modeId: string) => {
     setSelectedModes((prev) => {
       const next = new Set(prev);
       if (next.has(modeId)) next.delete(modeId);
       else next.add(modeId);
       return next;
     });
-  };
+  }, []);
 
   const handleModePreview = (m: string) => {
-    setPreviewMode(m);
-    handlePreview(m);
+    const modeId = (m || "").toUpperCase();
+    setPreviewMode(modeId);
+    if (modeId === "MY_ADAPTIVE") {
+      setPendingAdaptiveAction({ action: "preview", mode: modeId });
+      adaptiveFileInputRef.current?.click();
+      return;
+    }
+    if (requiresParamModal(modeId)) {
+      openParamModal(modeId, "preview");
+      return;
+    }
+    // Config page preview should bypass cache so it:
+    // - reflects latest overrides
+    // - triggers quota deduction when applicable (quota is only deducted on cache miss)
+    handlePreview(modeId, true);
   };
 
   const handleModeApply = async (m: string) => {
-    const wasSelected = selectedModes.has(m);
-    toggleMode(m);
+    const modeId = (m || "").toUpperCase();
+    if (modeId === "MY_ADAPTIVE" && !selectedModes.has(modeId)) {
+      setPendingAdaptiveAction({ action: "apply", mode: modeId });
+      adaptiveFileInputRef.current?.click();
+      return;
+    }
+    if (requiresParamModal(modeId) && !selectedModes.has(modeId)) {
+      // only require params when adding to carousel
+      openParamModal(modeId, "apply");
+      return;
+    }
+    const wasSelected = selectedModes.has(modeId);
+    toggleMode(modeId);
     showToast(wasSelected ? "已从轮播移除" : "已加入轮播", "success");
   };
+
+  const commitModalAction = useCallback(async (modeId: string, action: "preview" | "apply", forcedOverride?: ModeOverride) => {
+    setParamModal(null);
+    if (forcedOverride && Object.keys(forcedOverride).length > 0) {
+      updateModeOverride(modeId, forcedOverride);
+      if (modeId === "MEMO" && typeof forcedOverride.memo_text === "string") {
+        setMemoText(forcedOverride.memo_text);
+      }
+      if (modeId === "WEATHER" && typeof forcedOverride.city === "string") {
+        // keep global city as-is; weather override is per-mode
+      }
+    }
+
+    setPreviewMode(modeId);
+    await handlePreview(modeId, true, forcedOverride);
+
+    if (action === "apply") {
+      if (!selectedModes.has(modeId)) {
+        toggleMode(modeId);
+        showToast("已加入轮播", "success");
+      }
+    }
+  }, [handlePreview, selectedModes, showToast, toggleMode, updateModeOverride]);
 
   const handlePreviewFromSettings = (addToCarousel: boolean) => {
     if (!settingsMode) return;
@@ -1357,26 +1617,6 @@ function ConfigPageInner() {
     }
   };
 
-  const handleModeFavorite = async (m: string) => {
-    const wasFavorited = favoritedModes.has(m);
-    setFavoritedModes((prev) => {
-      const next = new Set(prev);
-      if (next.has(m)) next.delete(m); else next.add(m);
-      return next;
-    });
-    if (mac && !wasFavorited) {
-      try {
-        await fetch(`/api/device/${encodeURIComponent(mac)}/favorite`, {
-          method: "POST",
-          headers: authHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ mode: m }),
-        });
-        await loadFavorites(true);
-      } catch {}
-    }
-    showToast(wasFavorited ? "已取消收藏" : "已收藏", "success");
-  };
-
   const handleAddCustomPersona = () => {
     const v = customPersonaTone.trim();
     if (!v) return;
@@ -1384,51 +1624,43 @@ function ConfigPageInner() {
     setCustomPersonaTone("");
   };
 
-  const handleDeleteCustomMode = async (modeId: string) => {
-    const modeName = customModeMeta[modeId]?.name || modeId;
-    if (!window.confirm(`确定删除自定义模式「${modeName}」吗？`)) return;
-    if (!mac) {
-      showToast("请先选择设备", "error");
-      return;
+  const modeMeta = useMemo(() => {
+    const map: Record<string, { name: string; tip: string }> = {};
+    for (const item of catalogItems) {
+      const mid = (item.mode_id || "").toUpperCase();
+      if (!mid) continue;
+      const lang = isEn ? item.i18n?.en : item.i18n?.zh;
+      const name = (lang?.name && String(lang.name)) || (item.display_name && String(item.display_name)) || mid;
+      const tip = (lang?.tip && String(lang.tip)) || (item.description && String(item.description)) || "";
+      map[mid] = { name, tip };
     }
-    try {
-      const params = new URLSearchParams();
-      params.append("mac", mac);
-      const res = await fetch(`/api/modes/custom/${encodeURIComponent(modeId)}?${params.toString()}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      if (!res.ok) throw new Error("delete failed");
-      setServerModes((prev) => prev.filter((m) => m.mode_id !== modeId));
-      setSelectedModes((prev) => {
-        const next = new Set(prev);
-        next.delete(modeId);
-        return next;
-      });
-      setFavoritedModes((prev) => {
-        const next = new Set(prev);
-        next.delete(modeId);
-        return next;
-      });
-      if (previewMode === modeId) {
-        setPreviewMode("");
-        setPreviewImg(null);
-        setPreviewCacheHit(null);
-      }
-      if (currentMode === modeId) {
-        setCurrentMode("");
-      }
-      if (settingsMode === modeId) {
-        setSettingsMode(null);
-      }
-      showToast(`已删除模式 ${modeName}`, "success");
-    } catch {
-      showToast("删除模式失败", "error");
-    }
-  };
+    return map;
+  }, [catalogItems, isEn]);
 
-  const customModes = serverModes.filter((m) => m.source === "custom" && m.mode_id !== "VOCAB_DAILY");
-  const customModeMeta = Object.fromEntries(serverModes.map((m) => [m.mode_id, { name: m.display_name, tip: m.description }]));
+  const coreModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "core").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const extraModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "more").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const customModes = useMemo(
+    () => catalogItems.filter((m) => m.category === "custom").map((m) => m.mode_id.toUpperCase()),
+    [catalogItems],
+  );
+  const customModeMeta = useMemo(
+    () =>
+      Object.fromEntries(
+        catalogItems
+          .filter((m) => m.category === "custom")
+          .map((m) => [
+            m.mode_id.toUpperCase(),
+            { name: m.display_name || m.mode_id, tip: m.description || "" },
+          ]),
+      ),
+    [catalogItems],
+  );
   const activeModeSchema = settingsMode ? (modeSchemaMap[settingsMode] || []) : [];
 
   const batteryPct = stats?.last_battery_voltage
@@ -1437,6 +1669,24 @@ function ConfigPageInner() {
   const currentDeviceMembership = userDevices.find((d) => d.mac.toUpperCase() === mac.toUpperCase()) || null;
   const denyByMembership = Boolean(mac && currentUser && !devicesLoading && !currentDeviceMembership);
   const currentUserRole = currentDeviceMembership?.role || "";
+  const formatPreviewConfirmText = useCallback((usageSource?: string) => {
+    switch (usageSource) {
+      case "current_user_api_key":
+        return tr("本次预览将使用你的 API key。是否继续？", "This preview will use your API key. Continue?");
+      case "owner_api_key":
+        return ownerUsername
+          ? tr(`本次预览将使用 owner（${ownerUsername}）的 API key。是否继续？`, `This preview will use ${ownerUsername}'s API key. Continue?`)
+          : tr("本次预览将使用 owner 的 API key。是否继续？", "This preview will use the owner's API key. Continue?");
+      case "owner_free_quota":
+        return ownerUsername
+          ? tr(`本次预览将消耗 owner（${ownerUsername}）的免费额度。是否继续？`, `This preview will use ${ownerUsername}'s free quota. Continue?`)
+          : tr("本次预览将消耗 owner 的免费额度。是否继续？", "This preview will use the owner's free quota. Continue?");
+      case "current_user_free_quota":
+        return tr("本次预览将消耗你的免费额度。是否继续？", "This preview will use your free quota. Continue?");
+      default:
+        return tr("当前未命中缓存，将生成新的预览。是否继续？", "No cache hit. A new preview will be generated. Continue?");
+    }
+  }, [ownerUsername, tr]);
   const statusLabel = !isOnline
     ? tr("离线", "Offline")
     : runtimeMode === "active"
@@ -1456,12 +1706,37 @@ function ConfigPageInner() {
     ? [
         { id: "modes", label: "Modes", icon: Settings },
         { id: "preferences", label: "Preferences", icon: Sliders },
+        { id: "sharing", label: "Sharing", icon: Users },
         { id: "stats", label: "Status", icon: BarChart3 },
       ] as const
     : TABS;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-10">
+      {/* Hidden file picker for MY_ADAPTIVE (local upload only) */}
+      <input
+        ref={adaptiveFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0] || null;
+          e.currentTarget.value = "";
+          if (!f) return;
+          setAdaptiveUploading(true);
+          try {
+            const url = await uploadLocalImage(f);
+            const pending = pendingAdaptiveAction;
+            setPendingAdaptiveAction(null);
+            await commitModalAction("MY_ADAPTIVE", pending?.action || "preview", { image_url: url } as ModeOverride);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : tr("请选择一张本地图片", "Please choose a local image");
+            showToast(msg, "error");
+          } finally {
+            setAdaptiveUploading(false);
+          }
+        }}
+      />
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-serif text-3xl font-bold text-ink mb-2">{tr("设备配置", "Device Configuration")}</h1>
@@ -1652,69 +1927,6 @@ function ConfigPageInner() {
 
       {mac && currentUser && !(macAccessDenied || denyByMembership) && !loading && (
         <div className="space-y-4">
-          {(currentUserRole === "owner" || pendingRequests.some((item) => item.mac === mac)) && (
-            <div className="grid gap-4 md:grid-cols-2">
-              {currentUserRole === "owner" && (
-                <Card>
-                  <CardHeader><CardTitle className="text-base">共享成员</CardTitle></CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex gap-2">
-                      <input
-                        value={shareUsernameInput}
-                        onChange={(e) => setShareUsernameInput(e.target.value)}
-                        placeholder="输入要共享的用户名"
-                        className="flex-1 rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                      />
-                      <Button variant="outline" size="sm" onClick={handleShareDevice} disabled={!shareUsernameInput.trim()}>
-                        分享
-                      </Button>
-                    </div>
-                    {membersLoading ? (
-                      <div className="flex items-center gap-2 text-sm text-ink-light">
-                        <Loader2 size={14} className="animate-spin" /> 加载成员中...
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {deviceMembers.map((member) => (
-                          <div key={member.user_id} className="flex items-center justify-between rounded-sm border border-ink/10 p-2 text-sm">
-                            <div>
-                              <p className="font-medium text-ink">{member.username}</p>
-                              <p className="text-xs text-ink-light">{member.role === "owner" ? "Owner" : "Member"}</p>
-                            </div>
-                            {member.role !== "owner" && (
-                              <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.user_id)}>
-                                移除
-                              </Button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-              {pendingRequests.some((item) => item.mac === mac) && (
-                <Card>
-                  <CardHeader><CardTitle className="text-base">待处理绑定请求</CardTitle></CardHeader>
-                  <CardContent className="space-y-2">
-                    {pendingRequests.filter((item) => item.mac === mac).map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-sm border border-ink/10 p-2 text-sm">
-                        <div>
-                          <p className="font-medium text-ink">{item.requester_username}</p>
-                          <p className="text-xs text-ink-light">请求绑定此设备</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleRejectRequest(item.id)}>拒绝</Button>
-                          <Button size="sm" onClick={() => handleApproveRequest(item.id)}>同意</Button>
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
           <div className="flex gap-6">
             {/* Sidebar tabs */}
             <nav className="w-44 flex-shrink-0 hidden md:block">
@@ -1769,49 +1981,132 @@ function ConfigPageInner() {
             {/* Modes Tab */}
             {activeTab === "modes" && (
               <div className="space-y-6">
-                <ModeSelector
-                  tr={tr}
-                  selectedModes={selectedModes}
-                  favoritedModes={favoritedModes}
-                  customModes={customModes.map((cm) => cm.mode_id)}
-                  customModeMeta={customModeMeta}
-                  modeMeta={MODE_META}
-                  coreModes={CORE_MODES}
-                  extraModes={EXTRA_MODES}
-                  modeTemplates={MODE_TEMPLATES}
-                  previewMode={previewMode}
-                  previewImg={previewImg}
-                  previewLoading={previewLoading}
-                  previewStatusText={previewStatusText}
-                  previewCacheHit={previewCacheHit}
-                  applyToScreenLoading={applyToScreenLoading}
-                  handlePreview={handlePreview}
-                  handleModePreview={handleModePreview}
-                  handleModeApply={handleModeApply}
-                  handleModeFavorite={handleModeFavorite}
-                  setSettingsMode={setSettingsMode}
-                  handleDeleteCustomMode={handleDeleteCustomMode}
-                  editingCustomMode={editingCustomMode}
-                  setEditingCustomMode={setEditingCustomMode}
-                  editorTab={editorTab}
-                  setEditorTab={setEditorTab}
-                  customDesc={customDesc}
-                  setCustomDesc={setCustomDesc}
-                  customModeName={customModeName}
-                  setCustomModeName={setCustomModeName}
-                  customJson={customJson}
-                  setCustomJson={setCustomJson}
-                  customGenerating={customGenerating}
-                  customPreviewImg={customPreviewImg}
-                  customPreviewLoading={customPreviewLoading}
-                  customApplyToScreenLoading={customApplyToScreenLoading}
-                  handleGenerateMode={handleGenerateMode}
-                  handleCustomPreview={handleCustomPreview}
-                  handleApplyCustomPreviewToScreen={handleApplyCustomPreviewToScreen}
-                  handleSaveCustomMode={handleSaveCustomMode}
-                  handleApplyPreviewToScreen={handleApplyPreviewToScreen}
-                  mac={mac}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-6 items-start">
+                  <ModeSelector
+                    tr={tr}
+                    selectedModes={selectedModes}
+                    customModes={customModes}
+                    customModeMeta={customModeMeta}
+                    modeMeta={modeMeta}
+                    coreModes={coreModes}
+                    extraModes={extraModes}
+                    handleModePreview={handleModePreview}
+                    handleModeApply={handleModeApply}
+                    setEditingCustomMode={setEditingCustomMode}
+                    setCustomDesc={setCustomDesc}
+                    setCustomModeName={setCustomModeName}
+                    setCustomJson={setCustomJson}
+                  />
+
+                  <div ref={previewPanelRef}>
+                  <EInkPreviewPanel
+                    tr={tr}
+                    previewModeLabel={
+                      previewModeLabelOverride ||
+                      (previewMode
+                        ? (modeMeta[previewMode]?.name || customModeMeta[previewMode]?.name || previewMode)
+                        : tr("请选择模式", "Select a mode"))
+                    }
+                    previewLoading={previewLoading}
+                    previewStatusText={previewStatusText}
+                    previewImg={previewImg}
+                    previewCacheHit={previewCacheHit}
+                    previewLlmStatus={previewLlmStatus}
+                    canApplyToScreen={Boolean(mac && previewMode && previewImg)}
+                    applyToScreenLoading={applyToScreenLoading}
+                    onRegenerate={() => handlePreview(previewMode, true)}
+                    onApplyToScreen={handleApplyPreviewToScreen}
+                    rightActions={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSaveCustomMode}
+                        disabled={!(customEditorSource === "ai" && Boolean(customJson.trim()))}
+                        className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
+                      >
+                        {tr("保存模式", "Save Mode")}
+                      </Button>
+                    }
+                  />
+                  </div>
+                </div>
+
+                <Dialog
+                  open={editingCustomMode}
+                  onClose={() => {
+                    setEditingCustomMode(false);
+                  }}
+                >
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader
+                      onClose={() => {
+                        setEditingCustomMode(false);
+                      }}
+                    >
+                      <div>
+                        <DialogTitle>{tr("创建自定义模式", "Create Custom Mode")}</DialogTitle>
+                        <DialogDescription>
+                          {tr(
+                            "用一句话描述你想要的模式，点击 AI 生成预览，右侧水墨屏会显示效果。",
+                            "Describe the mode you want, click AI Generate Preview, and the right E-Ink panel will show the result.",
+                          )}
+                        </DialogDescription>
+                      </div>
+                    </DialogHeader>
+
+                    <div className="space-y-3">
+                      {customGenerating ? (
+                        <div className="rounded-sm border border-ink/10 bg-paper px-3 py-3 text-sm text-ink-light flex items-center gap-2">
+                          <Loader2 size={16} className="animate-spin" />
+                          {tr("模式生成中...", "Generating mode...")}
+                        </div>
+                      ) : null}
+                      <textarea
+                        value={customDesc}
+                        onChange={(e) => {
+                          setCustomDesc(e.target.value);
+                          setCustomEditorSource("manual");
+                        }}
+                        rows={3}
+                        maxLength={2000}
+                        placeholder={tr(
+                          "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中",
+                          "Describe your mode, e.g. show one English word and definition daily with a large centered font",
+                        )}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y bg-white"
+                        disabled={customGenerating}
+                      />
+
+                      <input
+                        value={customModeName}
+                        onChange={(e) => {
+                          setCustomModeName(e.target.value);
+                          setCustomEditorSource((v) => v || "manual");
+                        }}
+                        placeholder={tr("模式名称（例如：今日英语）", "Mode name (e.g. Daily English)")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                        disabled={customGenerating}
+                      />
+
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          // Keep the dialog open while generating; it will auto-close after generation finishes.
+                          void handleGenerateMode();
+                        }}
+                        disabled={customGenerating || !customDesc.trim()}
+                      >
+                        {tr("AI 生成预览", "AI Generate Preview")}
+                      </Button>
+
+                      {customEditorSource === "ai" ? (
+                        <div className="text-[11px] text-ink-light">
+                          {tr("AI 生成的模式可在右侧预览后直接保存。", "AI-generated modes can be saved from the right preview panel.")}
+                        </div>
+                      ) : null}
+                    </div>
+                  </DialogContent>
+                </Dialog>
 
               </div>
             )}
@@ -1820,8 +2115,9 @@ function ConfigPageInner() {
             {activeTab === "preferences" && (
               <RefreshStrategyEditor
                 tr={tr}
-                city={city}
-                setCity={setCity}
+                locale={isEn ? "en" : "zh"}
+                location={currentLocation}
+                setLocation={applyGlobalLocation}
                 language={language}
                 setLanguage={setLanguage}
                 contentTone={contentTone}
@@ -1840,6 +2136,83 @@ function ConfigPageInner() {
                 personaPresets={PERSONA_PRESETS}
                 strategies={STRATEGIES}
               />
+            )}
+
+            {/* Sharing Tab */}
+            {activeTab === "sharing" && (
+              <div className="space-y-4">
+                {currentUserRole === "owner" ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">{tr("共享成员", "Sharing")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex gap-2 flex-wrap">
+                        <input
+                          value={shareUsernameInput}
+                          onChange={(e) => setShareUsernameInput(e.target.value)}
+                          placeholder={tr("输入要共享的用户名", "Enter username to share")}
+                          className="flex-1 min-w-[220px] rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                        />
+                        <Button variant="outline" size="sm" onClick={handleShareDevice} disabled={!shareUsernameInput.trim()}>
+                          {tr("分享", "Share")}
+                        </Button>
+                      </div>
+                      {membersLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-ink-light">
+                          <Loader2 size={14} className="animate-spin" /> {tr("加载成员中...", "Loading members...")}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {deviceMembers.map((member) => (
+                            <div key={member.user_id} className="flex items-center justify-between rounded-sm border border-ink/10 p-2 text-sm">
+                              <div>
+                                <p className="font-medium text-ink">{member.username}</p>
+                                <p className="text-xs text-ink-light">{member.role === "owner" ? "Owner" : "Member"}</p>
+                              </div>
+                              {member.role !== "owner" ? (
+                                <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.user_id)}>
+                                  {tr("移除", "Remove")}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="p-3 rounded-sm border border-ink/10 bg-paper text-sm text-ink-light">
+                    {tr("只有设备 Owner 可以管理共享成员。", "Only the device owner can manage sharing.")}
+                  </div>
+                )}
+
+                {pendingRequests.some((item) => item.mac === mac) ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">{tr("待处理绑定请求", "Pending requests")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {pendingRequests.filter((item) => item.mac === mac).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-2 rounded-sm border border-ink/10 p-2 text-sm">
+                          <div>
+                            <p className="font-medium text-ink">{item.requester_username}</p>
+                            <p className="text-xs text-ink-light">{tr("请求绑定此设备", "Requested to bind this device")}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleRejectRequest(item.id)}>
+                              {tr("拒绝", "Reject")}
+                            </Button>
+                            <Button size="sm" onClick={() => handleApproveRequest(item.id)}>
+                              {tr("同意", "Approve")}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
             )}
 
 
@@ -1876,7 +2249,7 @@ function ConfigPageInner() {
                             const max = Math.max(...Object.values(stats.mode_frequency!));
                             return (
                               <div key={mode} className="flex items-center gap-2 text-sm">
-                                <span className="w-20 text-ink-light truncate">{MODE_META[mode]?.name || mode}</span>
+                                <span className="w-20 text-ink-light truncate">{modeMeta[mode]?.name || customModeMeta[mode]?.name || mode}</span>
                                 <div className="flex-1 bg-paper-dark rounded-full h-4 overflow-hidden">
                                   <div className="bg-ink h-full rounded-full" style={{ width: `${(count / max) * 100}%` }} />
                                 </div>
@@ -1899,7 +2272,7 @@ function ConfigPageInner() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between text-base">
                     <span>
-                      {tr("模式设置", "Mode Settings")}: {MODE_META[settingsMode]?.name || customModeMeta[settingsMode]?.name || settingsMode}
+                      {tr("模式设置", "Mode Settings")}: {modeMeta[settingsMode]?.name || customModeMeta[settingsMode]?.name || settingsMode}
                     </span>
                     <button className="text-ink-light hover:text-ink" onClick={() => setSettingsMode(null)}>
                       <X size={16} />
@@ -1907,42 +2280,25 @@ function ConfigPageInner() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Field label={tr("API 服务商", "API Provider")}>
-                    <select
-                      value={getModeOverride(settingsMode).llm_provider || "deepseek"}
-                      onChange={(e) => {
-                        const provider = e.target.value;
-                        const defaultModel = LLM_MODELS[provider]?.[0]?.v || "";
-                        const currentModel = getModeOverride(settingsMode).llm_model || "deepseek-chat";
-                        const modelAllowed = (LLM_MODELS[provider] || []).some((m) => m.v === currentModel);
-                        updateModeOverride(settingsMode, {
-                          llm_provider: provider,
-                          llm_model: modelAllowed ? currentModel : defaultModel,
-                        });
-                      }}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                    >
-                      <option value="deepseek">DeepSeek</option>
-                      <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
-                      <option value="moonshot">{tr("月之暗面 (Kimi)", "Moonshot (Kimi)")}</option>
-                    </select>
-                  </Field>
-                  <Field label={tr("模型", "Model")}>
-                    <select
-                      value={getModeOverride(settingsMode).llm_model || "deepseek-chat"}
-                      onChange={(e) => updateModeOverride(settingsMode, { llm_model: e.target.value })}
-                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                    >
-                      {(LLM_MODELS[getModeOverride(settingsMode).llm_provider || "deepseek"] || []).map((m) => (
-                        <option key={m.v} value={m.v}>{m.n}</option>
-                      ))}
-                    </select>
-                  </Field>
                   <Field label="城市（可选）">
-                    <input
-                      value={getModeOverride(settingsMode).city || ""}
-                      onChange={(e) => updateModeOverride(settingsMode, { city: e.target.value })}
-                      placeholder={`留空使用全局默认：${city || "杭州"}`}
+                    <LocationPicker
+                      value={extractLocationValue(getModeOverride(settingsMode) as Record<string, unknown>)}
+                      onChange={(next) =>
+                        updateModeOverride(settingsMode, {
+                          city: next.city,
+                          latitude: next.latitude,
+                          longitude: next.longitude,
+                          timezone: next.timezone,
+                          admin1: next.admin1,
+                          country: next.country,
+                        })
+                      }
+                      locale={isEn ? "en" : "zh"}
+                      placeholder={tr("搜索模式专属地点", "Search a mode-specific place")}
+                      helperText={tr(
+                        `留空则使用全局默认：${describeLocation(currentLocation) || "杭州"}`,
+                        `Leave empty to use global default: ${describeLocation(currentLocation) || "Hangzhou"}`,
+                      )}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
                     />
                   </Field>
@@ -2203,57 +2559,115 @@ function ConfigPageInner() {
         </div>
       )}
 
+      {previewConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>{isEn ? "Confirm Preview" : "确认预览"}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm leading-6 text-ink">
+                {formatPreviewConfirmText(previewConfirm.usageSource)}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPreviewConfirm(null);
+                  }}
+                >
+                  {isEn ? "Cancel" : "取消"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const pending = previewConfirm;
+                    setPreviewConfirm(null);
+                    if (pending) {
+                      handlePreview(pending.mode, pending.forceNoCache, pending.forcedModeOverride, true);
+                    }
+                  }}
+                  className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white"
+                >
+                  {isEn ? "Confirm" : "确定"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
       {/* 邀请码输入弹窗 */}
       {showInviteModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <Card className="w-full max-w-md mx-4">
             <CardHeader>
-              <CardTitle>{isEn ? "Enter Invitation Code" : "请输入邀请码"}</CardTitle>
+              <CardTitle>
+                {currentUserRole === "member"
+                  ? (isEn ? "Free Quota Exhausted" : "免费额度已用完")
+                  : (isEn ? "Enter Invitation Code" : "请输入邀请码")}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-ink-light">
+              <p className={`${currentUserRole === "member" ? "text-base leading-7 text-ink" : "text-sm text-ink-light"}`}>
                 {isEn
-                  ? "Your free quota has been exhausted. You can either enter an invitation code to get 50 more free LLM calls, or configure your own API key in your profile settings."
-                  : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在个人信息中设置自己的 API key。"}
+                  ? (currentUserRole === "member"
+                    ? `This device owner's free quota is exhausted. Please contact ${ownerUsername || "the owner"}, or continue with device-free preview.`
+                    : "Your free quota has been exhausted. You can enter an invitation code or configure your own API key in your profile.")
+                  : (currentUserRole === "member"
+                    ? `当前设备 owner${ownerUsername ? `（${ownerUsername}）` : ""} 的免费额度已用完，请联系 owner，或继续在线体验。`
+                    : "您的免费额度已用完。您可以输入邀请码获得50次免费LLM调用额度，也可以在个人信息中设置自己的 API key。")}
               </p>
-              <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
-                <p className="text-xs text-ink-light mb-2">
-                  {isEn
-                    ? "💡 Tip: If you have your own API key, you can configure it in your profile to avoid quota limits."
-                    : "💡 提示：如果您有自己的 API key，可以在个人信息中配置，这样就不会受到额度限制了。"}
-                </p>
-                <Link href={withLocalePath(locale, "/profile")}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowInviteModal(false);
-                    }}
-                    className="w-full text-xs"
-                  >
-                    {isEn ? "Go to Profile Settings" : "前往个人信息配置"}
-                  </Button>
-                </Link>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">
-                  {isEn ? "Invitation Code" : "邀请码"}
-                </label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder={isEn ? "Enter invitation code" : "请输入邀请码"}
-                  className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !redeemingInvite) {
-                      handleRedeemInviteCode();
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
+              {currentUserRole === "member" ? (
+                <div className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs leading-5 text-amber-800">
+                    {isEn
+                      ? "Member free quota only applies to device-free preview, not on-device generation."
+                      : "Member 免费额度仅用于无设备预览，不用于设备端生成。"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 rounded-sm border border-ink/20 bg-paper-dark">
+                    <p className="text-xs text-ink-light mb-2">
+                      {isEn
+                        ? "Tip: If you have your own API key, you can configure it in your profile to avoid quota limits."
+                        : "提示：如果您有自己的 API key，可以在个人信息中配置，这样就不会受到额度限制了。"}
+                    </p>
+                    <Link href={withLocalePath(locale, "/profile")}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowInviteModal(false);
+                        }}
+                        className="w-full text-xs"
+                      >
+                        {isEn ? "Go to Profile Settings" : "前往个人信息配置"}
+                      </Button>
+                    </Link>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-1">
+                      {isEn ? "Invitation Code" : "邀请码"}
+                    </label>
+                    <input
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value)}
+                      placeholder={isEn ? "Enter invitation code" : "请输入邀请码"}
+                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !redeemingInvite) {
+                          handleRedeemInviteCode();
+                        }
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+              <div className={`flex gap-2 ${currentUserRole === "member" ? "flex-col-reverse sm:flex-row sm:justify-end" : "justify-end"}`}>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -2261,23 +2675,379 @@ function ConfigPageInner() {
                     setInviteCode("");
                     setPendingPreviewMode(null);
                   }}
-                  disabled={redeemingInvite}
+                  disabled={currentUserRole === "member" ? false : redeemingInvite}
                 >
                   {isEn ? "Cancel" : "取消"}
                 </Button>
-                <Button onClick={handleRedeemInviteCode} disabled={redeemingInvite || !inviteCode.trim()}>
-                  {redeemingInvite ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                      {isEn ? "Redeeming..." : "兑换中..."}
-                    </>
-                  ) : (
-                    isEn ? "Redeem" : "兑换"
-                  )}
-                </Button>
+                {currentUserRole === "member" && (
+                  <Link href={withLocalePath(locale, "/preview")} className="sm:min-w-[180px]">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowInviteModal(false);
+                        setInviteCode("");
+                        setPendingPreviewMode(null);
+                      }}
+                      className="w-full bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
+                    >
+                      {isEn ? "Continue Online Preview" : "继续在线体验"}
+                    </Button>
+                  </Link>
+                )}
+                {currentUserRole !== "member" && (
+                  <Button onClick={handleRedeemInviteCode} disabled={redeemingInvite || !inviteCode.trim()}>
+                    {redeemingInvite ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin mr-2" />
+                        {isEn ? "Redeeming..." : "兑换中..."}
+                      </>
+                    ) : (
+                      isEn ? "Redeem" : "兑换"
+                    )}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
+        </div>
+      ) : null}
+
+      {/* 参数弹窗：与 /preview 页面一致（预览/加入轮播都会触发） */}
+      {paramModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setParamModal(null)} />
+          <div className="relative w-[min(520px,calc(100vw-32px))] rounded-sm border border-ink/15 bg-white shadow-xl">
+            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
+              <div className="text-sm font-semibold text-ink">
+                {paramModal.type === "quote"
+                  ? tr("自定义语录", "Custom Quote")
+                  : paramModal.type === "weather"
+                  ? tr("天气设置", "Weather Settings")
+                  : paramModal.type === "memo"
+                  ? tr("便签内容", "Memo Content")
+                  : paramModal.type === "countdown"
+                  ? tr("倒计时设置", "Countdown Settings")
+                  : paramModal.type === "habit"
+                  ? tr("习惯打卡", "Habit Tracker")
+                  : tr("人生进度条", "Life Progress")}
+              </div>
+              <button className="text-ink-light hover:text-ink" onClick={() => setParamModal(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              {paramModal.type === "quote" ? (
+                <>
+                  <div className="text-xs text-ink-light">
+                    {tr(
+                      "随机生成一条有深度的语录，或粘贴你自己的文字。",
+                      "Generate a deep quote randomly, or paste your own text.",
+                    )}
+                  </div>
+                  <textarea
+                    value={quoteDraft}
+                    onChange={(e) => setQuoteDraft(e.target.value)}
+                    placeholder={tr("输入语录内容...", "Type your quote...")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm min-h-28 bg-white"
+                  />
+                  <input
+                    value={authorDraft}
+                    onChange={(e) => setAuthorDraft(e.target.value)}
+                    placeholder={tr("作者（可选）", "Author (optional)")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    <Button
+                      onClick={() => {
+                        commitModalAction(paramModal.mode, paramModal.action);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("随机生成", "Random generate")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const q = quoteDraft.trim();
+                        const a = authorDraft.trim();
+                        commitModalAction(
+                          paramModal.mode,
+                          paramModal.action,
+                          q ? ({ quote: q, author: a } as ModeOverride) : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("使用我的输入", "Use my input")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "weather" ? (
+                <>
+                  <div className="text-xs text-ink-light">
+                    {tr(
+                      "搜索并选择具体地点查看天气，避免重名城市误匹配。",
+                      "Search and choose a specific place to avoid ambiguous city names.",
+                    )}
+                  </div>
+                  <LocationPicker
+                    value={weatherDraftLocation}
+                    onChange={setWeatherDraftLocation}
+                    locale={isEn ? "en" : "zh"}
+                    placeholder={tr("输入地点名称（如：上海、巴黎、Singapore）", "Enter a place name (e.g. Shanghai, Paris, Singapore)")}
+                    helperText={tr("建议从候选列表中点选具体地点。", "Pick a precise result from the suggestion list.")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                    autoFocus
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setWeatherDraftLocation(defaultWeatherLocation)}
+                      disabled={previewLoading}
+                    >
+                      {tr("使用默认城市", "Use default city")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const nextLocation = cleanLocationValue(weatherDraftLocation);
+                        commitModalAction(
+                          paramModal.mode,
+                          paramModal.action,
+                          nextLocation.city ? (nextLocation as ModeOverride) : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览天气", "Preview weather")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "memo" ? (
+                <>
+                  <div className="text-xs text-ink-light">
+                    {tr("输入便签内容，将在墨水屏上显示。", "Enter memo content to display on e-ink screen.")}
+                  </div>
+                  <textarea
+                    value={memoDraft}
+                    onChange={(e) => setMemoDraft(e.target.value)}
+                    placeholder={tr("输入便签内容...", "Enter memo content...")}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm min-h-32 bg-white"
+                    autoFocus
+                  />
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={() => {
+                        const m = memoDraft.trim();
+                        commitModalAction(
+                          paramModal.mode,
+                          paramModal.action,
+                          m ? ({ memo_text: m } as ModeOverride) : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览便签", "Preview memo")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "countdown" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr("设置倒计时事件名称和日期", "Set countdown event name and date")}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("事件名称", "Event Name")}
+                      </label>
+                      <input
+                        value={countdownName}
+                        onChange={(e) => setCountdownName(e.target.value)}
+                        placeholder={tr("例如：元旦、生日", "e.g., New Year, Birthday")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("目标日期", "Target Date")}
+                      </label>
+                      <input
+                        type="date"
+                        value={countdownDate}
+                        onChange={(e) => setCountdownDate(e.target.value)}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const today = new Date();
+                        const target = new Date(countdownDate);
+                        const days = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          events: [
+                            {
+                              name: countdownName || (isEn ? "Countdown" : "倒计时"),
+                              date: countdownDate,
+                              type: "countdown",
+                              days,
+                            },
+                          ],
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览倒计时", "Preview Countdown")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "habit" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr("设置你的习惯并勾选完成情况", "Set your habits and check completion")}
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {habitItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={(e) => {
+                            const next = [...habitItems];
+                            next[idx] = { ...next[idx], done: e.target.checked };
+                            setHabitItems(next);
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <input
+                          value={item.name}
+                          onChange={(e) => {
+                            const next = [...habitItems];
+                            next[idx] = { ...next[idx], name: e.target.value };
+                            setHabitItems(next);
+                          }}
+                          className="flex-1 rounded-sm border border-ink/20 px-3 py-1.5 text-sm bg-white"
+                        />
+                        <button
+                          onClick={() => setHabitItems(habitItems.filter((_, i) => i !== idx))}
+                          className="text-ink-light hover:text-red-500 px-2"
+                          title={tr("删除", "Delete")}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setHabitItems([...habitItems, { name: "", done: false }])}
+                    className="w-full mt-2 px-3 py-2 rounded-sm border border-dashed border-ink/20 text-sm text-ink-light hover:text-ink hover:border-ink/40 transition-colors"
+                  >
+                    + {tr("添加习惯", "Add Habit")}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const lines = habitItems.map((h) => `${h.name} ${h.done ? "✓" : "✗"}`);
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          habits: habitItems,
+                          summary: lines.join("\n"),
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览打卡", "Preview Habits")}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr("设置你的年龄和预期寿命", "Set your age and life expectancy")}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("芳龄几何？", "Your Age")}
+                      </label>
+                      <input
+                        type="number"
+                        value={userAge}
+                        onChange={(e) => setUserAge(parseInt(e.target.value) || 0)}
+                        min="0"
+                        max="120"
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-ink mb-1.5">
+                        {tr("退休金领到？", "Life Expectancy")}
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setLifeExpectancy(100)}
+                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
+                            lifeExpectancy === 100
+                              ? "bg-ink text-white"
+                              : "bg-paper-dark text-ink hover:bg-ink/10"
+                          }`}
+                        >
+                          100 {tr("岁", "years")}
+                        </button>
+                        <button
+                          onClick={() => setLifeExpectancy(120)}
+                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
+                            lifeExpectancy === 120
+                              ? "bg-ink text-white"
+                              : "bg-paper-dark text-ink hover:bg-ink/10"
+                          }`}
+                        >
+                          120 {tr("岁", "years")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const lifePct = ((userAge / lifeExpectancy) * 100).toFixed(1);
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          age: userAge,
+                          life_expect: lifeExpectancy,
+                          life_pct: parseFloat(lifePct),
+                          life_label: isEn ? "Life" : "人生",
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                    >
+                      {tr("预览进度", "Preview Progress")}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
 
