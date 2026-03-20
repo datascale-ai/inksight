@@ -32,6 +32,18 @@ _LLM_RECOVERABLE_ERRORS = (
 )
 
 
+def _chat_completion_extra_body(provider: str, model: str) -> dict | None:
+    """Return provider/model-specific extra_body parameters.
+
+    DashScope exposes Qwen thinking control via OpenAI-compatible extra_body.
+    Keep qwen3.5-flash on non-thinking mode unless the caller explicitly
+    implements a separate switch later.
+    """
+    if provider == "aliyun" and model == "qwen3.5-flash":
+        return {"enable_thinking": False}
+    return None
+
+
 def _extract_llm_base_url(ctx) -> str | None:
     """Extract optional LLM base_url from various ctx shapes (dict / ContentContext / None)."""
     if ctx is None:
@@ -236,11 +248,17 @@ class LLMClient:
         self, prompt: str, temperature: float = 0.8, max_tokens: int | None = None,
     ) -> str:
         """Call the LLM with retry logic. Returns response text."""
+        request_kwargs = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens or self._max_tokens,
+            "temperature": temperature,
+        }
+        extra_body = _chat_completion_extra_body(self.provider, self.model)
+        if extra_body is not None:
+            request_kwargs["extra_body"] = extra_body
         response = await self._client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens or self._max_tokens,
-            temperature=temperature,
+            **request_kwargs,
         )
         text = response.choices[0].message.content.strip()
         finish_reason = response.choices[0].finish_reason
@@ -282,11 +300,17 @@ async def _call_llm(
     Raises ValueError when the API key is missing (no retry).
     """
     client, default_max_tokens = _get_client(provider, model, api_key=api_key, base_url=base_url)
+    request_kwargs = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens or default_max_tokens,
+        "temperature": temperature,
+    }
+    extra_body = _chat_completion_extra_body(provider, model)
+    if extra_body is not None:
+        request_kwargs["extra_body"] = extra_body
     response = await client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens or default_max_tokens,
-        temperature=temperature,
+        **request_kwargs,
     )
     text = response.choices[0].message.content.strip()
 

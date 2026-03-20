@@ -179,11 +179,16 @@ async def _call_llm_with_messages(
 ) -> str:
     """Call LLM with pre-built messages (supports multimodal)."""
     client, _ = _get_client(provider, model, api_key=api_key, base_url=base_url)
+    request_kwargs = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if provider == "aliyun" and model == "qwen3.5-flash":
+        request_kwargs["extra_body"] = {"enable_thinking": False}
     response = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=temperature,
+        **request_kwargs,
     )
     text = response.choices[0].message.content.strip()
 
