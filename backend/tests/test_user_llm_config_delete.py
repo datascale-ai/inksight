@@ -132,77 +132,77 @@ async def test_delete_user_llm_config_clears_profile_and_is_idempotent(client: A
 
 
 @pytest.mark.asyncio
-async def test_save_user_llm_config_requires_fields_except_base_url(client: AsyncClient):
+async def test_save_user_llm_config_allows_partial_preset_updates(client: AsyncClient):
     auth = await _register_and_login(client)
     headers = auth["headers"]
     user_id = auth["user_id"]
 
     try:
-        # Missing required fields should be rejected (base_url can be empty)
-        bad = await client.put(
-            "/api/user/profile/llm",
-            headers={**headers, "Content-Type": "application/json"},
-            json={
-                "llm_access_mode": "preset",
-                "provider": "deepseek",
-                "model": "",  # required
-                "api_key": "",  # required
-                "base_url": "",
-                "image_provider": "aliyun",
-                "image_model": "",  # required
-                "image_api_key": "",  # required
-            },
-        )
-        assert bad.status_code == 400
-        payload = bad.json()
-        assert "缺少必填字段" in (payload.get("error") or "")
-
-        # base_url empty is allowed when other required fields are present
         ok = await client.put(
             "/api/user/profile/llm",
             headers={**headers, "Content-Type": "application/json"},
             json={
                 "llm_access_mode": "preset",
                 "provider": "deepseek",
-                "model": "deepseek-chat",
-                "api_key": "sk-user-test-key",
+                "model": "",
+                "api_key": "",
                 "base_url": "",
                 "image_provider": "aliyun",
-                "image_model": "qwen-image-max",
-                "image_api_key": "sk-user-image-test-key",
+                "image_model": "",
+                "image_api_key": "",
             },
         )
         assert ok.status_code == 200
         assert ok.json().get("ok") is True
+
+        prof = await client.get("/api/user/profile", headers=headers)
+        assert prof.status_code == 200
+        cfg = prof.json().get("llm_config")
+        assert isinstance(cfg, dict)
+        assert cfg.get("llm_access_mode") == "preset"
+        assert cfg.get("provider") == "deepseek"
+        assert (cfg.get("model") or "") == ""
+        assert (cfg.get("api_key") or "") == ""
+        assert (cfg.get("image_model") or "") == ""
+        assert (cfg.get("image_api_key") or "") == ""
     finally:
         await _cleanup_user_data(user_id)
 
 
 @pytest.mark.asyncio
-async def test_save_user_llm_config_custom_openai_requires_base_url(client: AsyncClient):
+async def test_save_user_llm_config_custom_openai_allows_partial_updates(client: AsyncClient):
     auth = await _register_and_login(client)
     headers = auth["headers"]
     user_id = auth["user_id"]
 
     try:
-        # Missing base_url should be rejected in custom_openai mode
-        bad = await client.put(
+        ok = await client.put(
             "/api/user/profile/llm",
             headers={**headers, "Content-Type": "application/json"},
             json={
                 "llm_access_mode": "custom_openai",
                 "provider": "ignored",
                 "model": "gpt-4o-mini",
-                "api_key": "sk-user-test-key",
+                "api_key": "",
                 "base_url": "",
                 "image_provider": "aliyun",
-                "image_model": "qwen-image-max",
-                "image_api_key": "sk-user-image-test-key",
+                "image_model": "",
+                "image_api_key": "",
             },
         )
-        assert bad.status_code == 400
+        assert ok.status_code == 200
 
-        ok = await client.put(
+        prof = await client.get("/api/user/profile", headers=headers)
+        assert prof.status_code == 200
+        cfg = prof.json().get("llm_config")
+        assert isinstance(cfg, dict)
+        assert cfg.get("llm_access_mode") == "custom_openai"
+        assert cfg.get("provider") == "openai_compat"
+        assert (cfg.get("model") or "").strip() == "gpt-4o-mini"
+        assert (cfg.get("api_key") or "") == ""
+        assert (cfg.get("base_url") or "") == ""
+
+        ok2 = await client.put(
             "/api/user/profile/llm",
             headers={**headers, "Content-Type": "application/json"},
             json={
@@ -216,14 +216,13 @@ async def test_save_user_llm_config_custom_openai_requires_base_url(client: Asyn
                 "image_api_key": "sk-user-image-test-key",
             },
         )
-        assert ok.status_code == 200
+        assert ok2.status_code == 200
 
-        prof = await client.get("/api/user/profile", headers=headers)
-        assert prof.status_code == 200
-        cfg = prof.json().get("llm_config")
+        prof2 = await client.get("/api/user/profile", headers=headers)
+        assert prof2.status_code == 200
+        cfg = prof2.json().get("llm_config")
         assert isinstance(cfg, dict)
         assert cfg.get("llm_access_mode") == "custom_openai"
         assert (cfg.get("base_url") or "").strip() != ""
     finally:
         await _cleanup_user_data(user_id)
-

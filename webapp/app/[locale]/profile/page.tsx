@@ -81,6 +81,17 @@ export default function ProfilePage() {
     };
   }, [refreshCurrentUser]);
 
+  const resetLlmForm = useCallback(() => {
+    setLlmAccessMode("preset");
+    setLlmProvider("deepseek");
+    setLlmModel("");
+    setLlmApiKey("");
+    setLlmBaseUrl("");
+    setImageProvider("aliyun");
+    setImageModel("");
+    setImageApiKey("");
+  }, []);
+
   const loadProfile = useCallback(async () => {
     if (!currentUser) {
       setLoading(false);
@@ -102,8 +113,8 @@ export default function ProfilePage() {
       const data: ProfileData = await res.json();
       setProfileData(data);
 
-      // 如果有 LLM 配置，设置到表单中，并切换到自定义模式
-      if (data.llm_config && data.llm_config.api_key) {
+      // 只要数据库里存在配置记录，就回填表单并进入 BYOK 视图。
+      if (data.llm_config) {
         const mode = (data.llm_config.llm_access_mode || "preset") as "preset" | "custom_openai";
         setLlmAccessMode(mode);
         setLlmProvider(data.llm_config.provider || "deepseek");
@@ -114,13 +125,16 @@ export default function ProfilePage() {
         setImageModel(data.llm_config.image_model || "");
         setImageApiKey(data.llm_config.image_api_key || "");
         setQuotaMode("custom");
+      } else {
+        resetLlmForm();
+        setQuotaMode("platform");
       }
     } catch {
       showToast(isEn ? "Failed to load profile" : "加载个人信息失败", "error");
     } finally {
       setLoading(false);
     }
-  }, [currentUser, locale, router, showToast, isEn]);
+  }, [currentUser, locale, router, showToast, isEn, resetLlmForm]);
 
   useEffect(() => {
     if (currentUser) {
@@ -184,30 +198,6 @@ export default function ProfilePage() {
   }, [llmProvider, llmModel, llmAccessMode]);
 
   const handleSaveLlmConfig = async () => {
-    // 除 base_url 外，其余字段均必填
-    const missing: string[] = [];
-    if (llmAccessMode === "preset") {
-      if (!llmProvider.trim()) missing.push(tr("API 服务商", "API Provider"));
-      if (!llmModel.trim()) missing.push(tr("模型名称", "Model Name"));
-      if (!llmApiKey.trim()) missing.push(tr("API Key", "API Key"));
-    } else {
-      if (!llmModel.trim()) missing.push(tr("模型名称", "Model Name"));
-      if (!llmApiKey.trim()) missing.push(tr("API Key", "API Key"));
-      if (!llmBaseUrl.trim()) missing.push(tr("Base URL", "Base URL"));
-    }
-    if (!imageProvider.trim()) missing.push(tr("图像 API 服务商", "Image API Provider"));
-    if (!imageModel.trim()) missing.push(tr("图像模型名称", "Image Model Name"));
-    if (!imageApiKey.trim()) missing.push(tr("图像 API Key", "Image API Key"));
-    if (missing.length > 0) {
-      showToast(
-        llmAccessMode === "preset"
-          ? tr(`请填写必填项：${missing.join("、")}（Base URL 可留空）`, `Please fill required fields: ${missing.join(", ")} (Base URL can be empty)`)
-          : tr(`请填写必填项：${missing.join("、")}`, `Please fill required fields: ${missing.join(", ")}`),
-        "error",
-      );
-      return;
-    }
-
     setSaving(true);
     try {
       const effectiveProvider = llmAccessMode === "custom_openai" ? "openai_compat" : llmProvider;
@@ -241,35 +231,6 @@ export default function ProfilePage() {
       setSaving(false);
     }
   };
-
-  const resetLlmForm = useCallback(() => {
-    setLlmAccessMode("preset");
-    setLlmProvider("deepseek");
-    setLlmModel("");
-    setLlmApiKey("");
-    setLlmBaseUrl("");
-    setImageProvider("aliyun");
-    setImageModel("");
-    setImageApiKey("");
-  }, []);
-
-  const isLlmConfigValid = useMemo(() => {
-    const commonImageOk =
-      imageProvider.trim().length > 0 &&
-      imageModel.trim().length > 0 &&
-      imageApiKey.trim().length > 0;
-    if (llmAccessMode === "preset") {
-      return (
-        llmProvider.trim().length > 0 &&
-        llmModel.trim().length > 0 &&
-        llmApiKey.trim().length > 0 &&
-        commonImageOk
-        // base_url 可为空
-      );
-    }
-    // custom_openai: base_url 必填
-    return llmModel.trim().length > 0 && llmApiKey.trim().length > 0 && llmBaseUrl.trim().length > 0 && commonImageOk;
-  }, [llmProvider, llmModel, llmApiKey, llmBaseUrl, imageProvider, imageModel, imageApiKey, llmAccessMode]);
 
   const handleDeleteLlmConfig = async () => {
     setDeleting(true);
@@ -600,7 +561,7 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-2">
                     <Button
                       onClick={handleSaveLlmConfig}
-                      disabled={saving || deleting || !isLlmConfigValid}
+                      disabled={saving || deleting}
                       variant="outline"
                       className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white hover:border-ink active:bg-ink/90"
                     >
