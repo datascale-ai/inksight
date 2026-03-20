@@ -84,22 +84,13 @@ async def test_user(client: AsyncClient):
     username = "test_discover_user"
     password = "testpass123"
     
-    # 注册用户
-    invite_code = f"TEST_CODE_{username.upper()}"
-    db = await get_main_db()
-    await db.execute(
-        "INSERT OR IGNORE INTO invitation_codes (code, is_used, used_by_user_id) VALUES (?, 0, NULL)",
-        (invite_code,),
-    )
-    await db.commit()
-    
+    # 注册用户（不再需要邀请码）
     resp = await client.post(
         "/api/auth/register",
         json={
             "username": username,
             "password": password,
             "phone": f"138{hash(username) % 100000000:08d}",
-            "invite_code": invite_code,
         },
     )
     assert resp.status_code == 200
@@ -268,6 +259,7 @@ class TestDiscoverAPI:
         """测试成功发布模式"""
         with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
              patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+             patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=None), \
              patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_gen, \
              patch("core.json_renderer.render_json_mode") as mock_render:
             
@@ -299,6 +291,16 @@ class TestDiscoverAPI:
             assert data["ok"] is True
             assert "id" in data
             
+            # 验证 generate_json_mode_content 被调用，且传入了 LLM 配置参数（即使为空）
+            assert mock_gen.called
+            call_kwargs = mock_gen.call_args[1] if mock_gen.call_args else {}
+            assert "llm_provider" in call_kwargs
+            assert "llm_model" in call_kwargs
+            assert "api_key" in call_kwargs
+            assert "image_provider" in call_kwargs
+            assert "image_model" in call_kwargs
+            assert "image_api_key" in call_kwargs
+            
             # 验证数据库中有记录
             db = await get_main_db()
             cursor = await db.execute(
@@ -310,6 +312,62 @@ class TestDiscoverAPI:
             assert row[1] == "测试模式"
             assert row[2] == "效率"
             assert row[3] == test_user["user_id"]
+
+    @pytest.mark.asyncio
+    async def test_publish_mode_uses_user_llm_config(self, client: AsyncClient, test_user, test_custom_mode, sample_date_ctx, sample_weather):
+        """测试发布模式时使用用户的 LLM 配置"""
+        # Mock 用户 LLM 配置
+        user_llm_config = {
+            "provider": "deepseek",
+            "model": "deepseek-chat",
+            "api_key": "sk-test-user-key-12345",
+            "image_provider": "aliyun",
+            "image_model": "qwen-image-max",
+            "image_api_key": "sk-test-image-key-67890",
+        }
+        
+        with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
+             patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+             patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=user_llm_config), \
+             patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_gen, \
+             patch("core.json_renderer.render_json_mode") as mock_render:
+            
+            # Mock 内容生成
+            mock_gen.return_value = {
+                "text": "测试内容",
+                "title": "测试标题",
+            }
+            
+            # Mock 图片渲染
+            from PIL import Image
+            mock_img = Image.new("RGB", (400, 300), color="white")
+            mock_render.return_value = mock_img
+            
+            resp = await client.post(
+                "/api/discover/modes/publish",
+                headers=test_user["headers"],
+                json={
+                    "source_custom_mode_id": "TEST_MODE",
+                    "name": "测试模式",
+                    "description": "测试描述",
+                    "category": "效率",
+                    "mac": test_user["mac"],
+                },
+            )
+            
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"] is True
+            
+            # 验证 generate_json_mode_content 被调用，且传入了用户的 LLM 配置
+            assert mock_gen.called
+            call_kwargs = mock_gen.call_args[1] if mock_gen.call_args else {}
+            assert call_kwargs.get("llm_provider") == "deepseek"
+            assert call_kwargs.get("llm_model") == "deepseek-chat"
+            assert call_kwargs.get("api_key") == "sk-test-user-key-12345"
+            assert call_kwargs.get("image_provider") == "aliyun"
+            assert call_kwargs.get("image_model") == "qwen-image-max"
+            assert call_kwargs.get("image_api_key") == "sk-test-image-key-67890"
 
     @pytest.mark.asyncio
     async def test_publish_mode_requires_auth(self, client: AsyncClient, test_custom_mode):
@@ -423,6 +481,7 @@ class TestDiscoverAPI:
             
             with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
                  patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+                 patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=None), \
                  patch("core.json_content.generate_json_mode_content", side_effect=mock_generate_content), \
                  patch("core.json_renderer.render_json_mode") as mock_render:
                 
@@ -491,6 +550,7 @@ class TestDiscoverAPI:
             
             with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
                  patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+                 patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=None), \
                  patch("core.json_content.generate_json_mode_content", side_effect=mock_generate_content):
                 
                 resp = await client.post(
@@ -517,6 +577,7 @@ class TestDiscoverAPI:
         # 先发布一个模式
         with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
              patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+             patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=None), \
              patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_gen, \
              patch("core.json_renderer.render_json_mode") as mock_render:
             
@@ -568,6 +629,7 @@ class TestDiscoverAPI:
         # 先发布一个模式
         with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
              patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+             patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=None), \
              patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_gen, \
              patch("core.json_renderer.render_json_mode") as mock_render:
             
@@ -618,6 +680,7 @@ class TestDiscoverAPI:
         """测试列表包含作者信息"""
         with patch("core.context.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx), \
              patch("core.context.get_weather", new_callable=AsyncMock, return_value=sample_weather), \
+             patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, return_value=None), \
              patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_gen, \
              patch("core.json_renderer.render_json_mode") as mock_render:
             

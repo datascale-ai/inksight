@@ -3,11 +3,14 @@
 import { Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Chip, Field } from "@/components/config/shared";
+import { LocationPicker } from "@/components/config/location-picker";
+import type { LocationValue } from "@/lib/locations";
 
 export function RefreshStrategyEditor({
   tr,
-  city,
-  setCity,
+  locale,
+  location,
+  setLocation,
   language,
   setLanguage,
   contentTone,
@@ -27,8 +30,9 @@ export function RefreshStrategyEditor({
   strategies,
 }: {
   tr: (zh: string, en: string) => string;
-  city: string;
-  setCity: (value: string) => void;
+  locale: "zh" | "en";
+  location: LocationValue;
+  setLocation: (value: LocationValue) => void;
   language: string;
   setLanguage: (value: string) => void;
   contentTone: string;
@@ -60,10 +64,12 @@ export function RefreshStrategyEditor({
       </CardHeader>
       <CardContent className="space-y-5">
         <Field label={tr("城市（全局默认）", "City (global default)")}>
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
+          <LocationPicker
+            value={location}
+            onChange={setLocation}
+            locale={locale}
             placeholder={tr("如：深圳", "e.g. Shenzhen")}
+            helperText={tr("搜索后请选择具体地点，例如：上海 · 中国、巴黎 · 法国、Singapore · Singapore。", "Search and choose a specific place, for example Shanghai · China, Paris · France, or Singapore · Singapore.")}
             className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
           />
         </Field>

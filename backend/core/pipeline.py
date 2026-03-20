@@ -29,11 +29,33 @@ def get_effective_mode_config(cfg: dict | None, persona: str) -> dict:
     override = mode_overrides.get((persona or "").upper(), {})
     if not isinstance(override, dict):
         return base
-    for key in ("city", "llm_provider", "llm_model"):
+    for key in (
+        "city",
+        "latitude",
+        "longitude",
+        "timezone",
+        "admin1",
+        "country",
+        "llm_provider",
+        "llm_model",
+    ):
         value = override.get(key)
         if isinstance(value, str) and value.strip():
             base[key] = value.strip()
-    reserved = {"city", "llm_provider", "llm_model", "llmProvider", "llmModel"}
+        elif isinstance(value, (int, float)) and key in {"latitude", "longitude"}:
+            base[key] = value
+    reserved = {
+        "city",
+        "latitude",
+        "longitude",
+        "timezone",
+        "admin1",
+        "country",
+        "llm_provider",
+        "llm_model",
+        "llmProvider",
+        "llmModel",
+    }
     mode_settings = {k: v for k, v in override.items() if k not in reserved}
     if mode_settings:
         base["mode_settings"] = mode_settings
@@ -133,57 +155,29 @@ async def _generate_content_for_persona(
     device_api_key: str | None = None
     device_image_api_key: str | None = None
 
-    # 1) 用户级别的明文配置（例如 Web 预览使用个人信息页的 API key）
+    # 使用用户级别的 API key 配置（不再从设备配置读取）
+    # 用户级别的配置通过 shared.py 中的 get_user_llm_config 获取并设置到 config["user_api_key"]
     user_api_key = cfg.get("user_api_key")
     if isinstance(user_api_key, str):
         device_api_key = user_api_key
         logger.info(
-            "[Pipeline] Using user_api_key override for persona=%s (mac=%s), length=%s",
+            "[Pipeline] Using user_api_key for persona=%s (mac=%s), length=%s",
             persona,
             mac,
             len(user_api_key) if user_api_key else 0,
         )
+    else:
+        logger.info("[Pipeline] No user_api_key in config, will use env var")
+    
     user_image_api_key = cfg.get("user_image_api_key")
     if isinstance(user_image_api_key, str):
         device_image_api_key = user_image_api_key
         logger.info(
-            "[Pipeline] Using user_image_api_key override for persona=%s (mac=%s), length=%s",
+            "[Pipeline] Using user_image_api_key for persona=%s (mac=%s), length=%s",
             persona,
             mac,
             len(user_image_api_key) if user_image_api_key else 0,
         )
-
-    # 2) 设备配置中的加密 key（仅当没有用户级别覆盖时才使用）
-    if device_api_key is None:
-        encrypted_key = cfg.get("llm_api_key", "")
-        if encrypted_key:
-            from .crypto import decrypt_api_key
-            decrypted = decrypt_api_key(encrypted_key)
-            # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但无效
-            if decrypted and decrypted.strip():
-                device_api_key = decrypted
-                logger.info(f"[Pipeline] Successfully decrypted llm_api_key (length: {len(device_api_key)})")
-            else:
-                device_api_key = ""
-                logger.warning("[Pipeline] Failed to decrypt llm_api_key or decrypted value is empty")
-        else:
-            logger.info("[Pipeline] No llm_api_key in config, will use env var")
-
-    if device_image_api_key is None:
-        encrypted_image_key = cfg.get("image_api_key", "")
-        if encrypted_image_key:
-            from .crypto import decrypt_api_key
-            decrypted = decrypt_api_key(encrypted_image_key)
-            # 如果解密成功且非空，使用解密后的值；如果解密失败或为空，使用空字符串表示用户配置了但解密后为空或无效
-            if decrypted and decrypted.strip():
-                device_image_api_key = decrypted
-                logger.info(
-                    "[Pipeline] Successfully decrypted image_api_key (length: %s)",
-                    len(device_image_api_key),
-                )
-            else:
-                device_image_api_key = ""
-                logger.warning("[Pipeline] Failed to decrypt image_api_key or decrypted value is empty")
 
     ctx = ContentContext(
         config=cfg,
@@ -201,6 +195,7 @@ async def _generate_content_for_persona(
         llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
         api_key=device_api_key,
         image_api_key=device_image_api_key,
+        llm_base_url=cfg.get("llm_base_url"),
     )
 
     # JSON-defined mode
@@ -240,6 +235,7 @@ async def _generate_content_for_persona(
             content_tone=cfg.get("content_tone", DEFAULT_CONTENT_TONE),
             llm_provider=cfg.get("llm_provider", DEFAULT_LLM_PROVIDER),
             llm_model=cfg.get("llm_model", DEFAULT_LLM_MODEL),
+            llm_base_url=cfg.get("llm_base_url"),
             image_provider=cfg.get("image_provider", DEFAULT_IMAGE_PROVIDER),
             image_model=cfg.get("image_model", DEFAULT_IMAGE_MODEL),
             mac=mac,

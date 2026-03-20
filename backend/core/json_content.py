@@ -128,6 +128,7 @@ async def generate_json_mode_content(
     content_tone: str | None = None,
     llm_provider: str = "",
     llm_model: str = "",
+    llm_base_url: str | None = None,
     image_provider: str = "",
     image_model: str = "",
     mac: str = "",
@@ -178,6 +179,7 @@ async def generate_json_mode_content(
         content_tone=content_tone,
         llm_provider=llm_provider,
         llm_model=llm_model,
+        llm_base_url=llm_base_url,
         image_provider=image_provider,
         image_model=image_model,
         config=config or {},
@@ -287,20 +289,40 @@ async def generate_json_mode_content(
         llm_ok = False
         api_key_invalid = False
         try:
-            text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key)
+            text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key, base_url=llm_base_url)
             llm_ok = True
-        except (LLMKeyMissingError, OpenAIError, httpx.HTTPError, OSError, TypeError, ValueError) as e:
+        except (LLMKeyMissingError, httpx.HTTPError, HTTPStatusError, OpenAIError, OSError, TypeError, ValueError) as e:
+            # 这里捕获所有 LLM 调用异常（包括 OpenAI/DeepSeek 的 BadRequestError 等），
+            # 避免将 4xx/5xx 直接抛到上层导致 500，而是统一回退到 fallback 内容。
             logger.error(f"[JSONContent] LLM call failed for {mode_id}: {e}")
             if DISABLE_FALLBACK:
                 result = {"text": f"[LLM_ERROR] {e}", "_is_fallback": True, "_llm_used": True, "_llm_ok": False}
                 return _apply_post_process(result, content_cfg)
-            # 检查是否是 API key 缺失或无效错误
+            # 检查是否是 API key 缺失或无效错误（401/403 等），用于给上游返回更明确的 api_key_invalid 标记
             if isinstance(e, LLMKeyMissingError):
                 api_key_invalid = True
                 logger.warning(f"[JSONContent] API key missing or invalid for {mode_id}: {e}")
-            elif _is_api_key_error(e):
-                api_key_invalid = True
-                logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
+            elif isinstance(e, HTTPStatusError):
+                status_code = e.response.status_code if hasattr(e, "response") and e.response else None
+                if status_code in (401, 403):
+                    api_key_invalid = True
+                    logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: HTTP {status_code}")
+            elif isinstance(e, OpenAIError):
+                # OpenAI/兼容 SDK 的错误可能包含状态码或错误码信息
+                # 这里只把「鉴权相关」错误视为 API key 问题，避免把诸如 Model Not Exist 也误判为 key 失效。
+                error_message = str(e).lower()
+                error_code = getattr(e, "status_code", None) or getattr(e, "code", None)
+                if (
+                    error_code in (401, 403)
+                    or "401" in error_message
+                    or "403" in error_message
+                    or "unauthorized" in error_message
+                    or "auth" in error_message
+                    or "api key" in error_message
+                    or "apikey" in error_message
+                ):
+                    api_key_invalid = True
+                    logger.warning(f"[JSONContent] API key invalid or expired for {mode_id}: {e}")
             fb = dict(fallback)
             # 标记为使用兜底内容，便于前端/统计判断
             fb["_is_fallback"] = True
@@ -517,16 +539,15 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         return result
 
     if provider == "weather_forecast":
-        from .context import get_weather_forecast
+        from .context import extract_location_settings, get_weather_forecast
         try:
             config = kwargs.get("config") or {}
             mode_settings = config.get("mode_settings", {}) if isinstance(config.get("mode_settings", {}), dict) else {}
-            city = config.get("city")
             days = mode_settings.get("forecast_days", 4)
             if not isinstance(days, int):
                 days = 4
             days = max(1, min(7, days))
-            data = await get_weather_forecast(city=city, days=days)
+            data = await get_weather_forecast(days=days, **extract_location_settings(config))
             if not data:
                 return dict(fallback)
             if not data.get("today_temp") or data["today_temp"] == "--":
@@ -552,11 +573,15 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
         prompt_template = str(content_cfg.get("prompt_template", "") or "")
         fallback_title = str(fallback.get("artwork_title", "") or "")
         api_key = kwargs.get("api_key")
+        llm_provider = kwargs.get("llm_provider") or DEFAULT_LLM_PROVIDER
+        llm_model = kwargs.get("llm_model") or DEFAULT_LLM_MODEL
         try:
             result = await generate_artwall_content(
                 date_str=kwargs.get("date_str", ""),
                 weather_str=kwargs.get("weather_str", ""),
                 festival=kwargs.get("festival", ""),
+                llm_provider=llm_provider,
+                llm_model=llm_model,
                 image_provider=kwargs.get("image_provider") or DEFAULT_IMAGE_PROVIDER,
                 image_model=kwargs.get("image_model") or DEFAULT_IMAGE_MODEL,
                 mode_display_name=mode_display_name,
@@ -599,7 +624,6 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
     result: dict[str, Any] = {}
     any_llm_used = False
     any_llm_failed = False
-    any_api_key_invalid = False
     
     for step in steps:
         try:
@@ -614,16 +638,12 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
                     any_llm_used = True
                     if not part.get("_llm_ok", True):
                         any_llm_failed = True
-                if part.get("_api_key_invalid") is True:
-                    any_api_key_invalid = True
                 # 移除内部标记，避免污染最终结果
                 part_clean = {k: v for k, v in part.items() if not k.startswith("_")}
                 result.update(part_clean)
-        except (LLMKeyMissingError, OpenAIError, httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
+        except (LLMKeyMissingError, httpx.HTTPError, OSError, TypeError, ValueError, JSONDecodeError) as e:
             logger.warning(f"[JSONContent] Step failed in composite mode {mode_def.get('mode_id', 'UNKNOWN')}: {e}", exc_info=True)
             any_llm_failed = True
-            if isinstance(e, LLMKeyMissingError) or _is_api_key_error(e):
-                any_api_key_invalid = True
             # Continue with next step instead of failing entirely
             continue
     
@@ -633,8 +653,6 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             fb["_llm_used"] = True
             fb["_llm_ok"] = False
             fb["_used_fallback"] = True
-        if any_api_key_invalid:
-            fb["_api_key_invalid"] = True
         return fb
     
     merged = dict(fallback)
@@ -648,9 +666,7 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
             merged["_used_fallback"] = True
         else:
             merged["_llm_ok"] = True
-    if any_api_key_invalid:
-        merged["_api_key_invalid"] = True
-
+    
     return merged
 
 

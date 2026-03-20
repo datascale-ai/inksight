@@ -48,6 +48,11 @@ export function DeviceInfo({
           {tr("返回设备列表", "Back to Device List")}
         </Link>
       </p>
+      {currentUserRole === "member" && (
+        <p className="text-xs text-amber-700">
+          {tr("Member 免费额度仅用于无设备预览，不用于设备端生成。", "Member free quota only applies to device-free preview, not on-device generation.")}
+        </p>
+      )}
     </div>
   );
 }

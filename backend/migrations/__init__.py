@@ -83,6 +83,11 @@ async def run_main_db_migrations(db, *, defaults: dict[str, str]) -> None:
                 """
             ),
         ),
+        (18, "configs.latitude", lambda: _add_column_if_missing(db, "configs", "latitude", "latitude REAL")),
+        (19, "configs.longitude", lambda: _add_column_if_missing(db, "configs", "longitude", "longitude REAL")),
+        (20, "configs.timezone", lambda: _add_column_if_missing(db, "configs", "timezone", "timezone TEXT DEFAULT ''")),
+        (21, "configs.admin1", lambda: _add_column_if_missing(db, "configs", "admin1", "admin1 TEXT DEFAULT ''")),
+        (22, "configs.country", lambda: _add_column_if_missing(db, "configs", "country", "country TEXT DEFAULT ''")),
     ]
 
     now = datetime.now().isoformat()

@@ -18,13 +18,17 @@ class TestConfigRequest:
             refreshInterval=30,
             language="zh",
             contentTone="neutral",
-            city="北京",
+            city="北京市",
+            latitude=39.9042,
+            longitude=116.4074,
+            timezone="Asia/Shanghai",
             llmProvider="deepseek",
             llmModel="deepseek-chat",
         )
         assert body.mac == "AA:BB:CC:DD:EE:FF"
         assert body.modes == ["STOIC", "ZEN"]
         assert body.refreshInterval == 30
+        assert body.latitude == pytest.approx(39.9042)
 
     def test_invalid_mac_format(self):
         with pytest.raises(ValidationError, match="MAC"):
@@ -83,6 +87,7 @@ class TestConfigRequest:
         assert body.language == "zh"
         assert body.contentTone == "neutral"
         assert body.city == "杭州"
+        assert body.latitude is None
         assert body.llmProvider == "deepseek"
 
     def test_model_dump(self):
@@ -98,3 +103,20 @@ class TestConfigRequest:
             characterTones=["  鲁迅 ", "", "  莫言  "],
         )
         assert body.characterTones == ["鲁迅", "莫言"]
+
+    def test_mode_overrides_accept_location_fields(self):
+        body = ConfigRequest(
+            mac="AA:BB:CC:DD:EE:FF",
+            modeOverrides={
+                "WEATHER": {
+                    "city": "平阳县",
+                    "latitude": 27.66,
+                    "longitude": 120.56,
+                    "timezone": "Asia/Shanghai",
+                    "admin1": "浙江省",
+                    "country": "中国",
+                }
+            },
+        )
+        assert body.modeOverrides["WEATHER"]["city"] == "平阳县"
+        assert body.modeOverrides["WEATHER"]["latitude"] == pytest.approx(27.66)

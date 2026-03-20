@@ -11,6 +11,8 @@ from core.config_store import (
     get_active_config,
     get_config_history,
     activate_config,
+    create_claim_token,
+    get_or_create_claim_token,
     remove_mode_from_all_configs,
 )
 
@@ -47,6 +49,11 @@ class TestConfigStore:
             "language": "zh",
             "contentTone": "neutral",
             "city": "北京",
+            "latitude": 39.9042,
+            "longitude": 116.4074,
+            "timezone": "Asia/Shanghai",
+            "admin1": "北京市",
+            "country": "中国",
             "llmProvider": "deepseek",
             "llmModel": "deepseek-chat",
         }
@@ -58,6 +65,8 @@ class TestConfigStore:
         assert config["nickname"] == "Test"
         assert "STOIC" in config["modes"]
         assert config["refresh_strategy"] == "cycle"
+        assert config["latitude"] == pytest.approx(39.9042)
+        assert config["country"] == "中国"
         assert isinstance(config["countdown_events"], list)
         assert isinstance(config["countdownEvents"], list)
 
@@ -133,122 +142,20 @@ class TestConfigStore:
         assert config["time_slot_rules"][0]["modes"] == ["DAILY"]
 
     @pytest.mark.asyncio
-    async def test_save_config_with_api_key(self):
-        """测试保存配置时设置 API key"""
+    async def test_get_or_create_claim_token_reuses_active_pair_code(self):
         await init_db()
-        mac = "AA:BB:CC:DD:EE:FF"
-        from core.crypto import decrypt_api_key
+        mac = "33:44:55:66:77:88"
 
-        # 第一次保存：设置 API key
-        data1 = {
-            "modes": ["STOIC"],
-            "refreshStrategy": "random",
-            "llmApiKey": "sk-test-key-12345",
-            "imageApiKey": "sk-test-image-key-67890",
-        }
-        await save_config(mac, data1)
+        created = await create_claim_token(mac, source="portal")
+        reused = await get_or_create_claim_token(mac, source="render")
 
-        config1 = await get_active_config(mac)
-        assert config1["has_api_key"] is True
-        assert config1["has_image_api_key"] is True
-        # 验证 API key 已加密保存
-        encrypted_llm = config1.get("llm_api_key", "")
-        encrypted_image = config1.get("image_api_key", "")
-        assert encrypted_llm != ""
-        assert encrypted_image != ""
-        # 验证可以正确解密
-        assert decrypt_api_key(encrypted_llm) == "sk-test-key-12345"
-        assert decrypt_api_key(encrypted_image) == "sk-test-image-key-67890"
+        assert created is not None
+        assert reused is not None
+        assert reused["pair_code"] == created["pair_code"]
+        assert reused["expires_at"] == created["expires_at"]
 
-    @pytest.mark.asyncio
-    async def test_save_config_clear_api_key(self):
-        """测试清空 API key（发送空字符串）"""
-        await init_db()
-        mac = "AA:BB:CC:DD:EE:FF"
-        from core.crypto import decrypt_api_key
-
-        # 第一次保存：设置 API key
-        await save_config(mac, {
-            "modes": ["STOIC"],
-            "llmApiKey": "sk-test-key-12345",
-            "imageApiKey": "sk-test-image-key-67890",
-        })
-
-        config1 = await get_active_config(mac)
-        assert config1["has_api_key"] is True
-        assert config1["has_image_api_key"] is True
-
-        # 第二次保存：清空 API key（发送空字符串）
-        await save_config(mac, {
-            "modes": ["STOIC"],
-            "llmApiKey": "",  # 发送空字符串表示清空
-            "imageApiKey": "",  # 发送空字符串表示清空
-        })
-
-        config2 = await get_active_config(mac)
-        assert config2["has_api_key"] is False
-        assert config2["has_image_api_key"] is False
-        assert config2.get("llm_api_key", "") == ""
-        assert config2.get("image_api_key", "") == ""
-
-    @pytest.mark.asyncio
-    async def test_save_config_preserve_api_key_when_not_sent(self):
-        """测试不发送 API key 字段时保留旧值"""
-        await init_db()
-        mac = "AA:BB:CC:DD:EE:FF"
-        from core.crypto import decrypt_api_key
-
-        # 第一次保存：设置 API key
-        await save_config(mac, {
-            "modes": ["STOIC"],
-            "llmApiKey": "sk-test-key-12345",
-            "imageApiKey": "sk-test-image-key-67890",
-        })
-
-        config1 = await get_active_config(mac)
-        original_llm_key = config1.get("llm_api_key", "")
-        original_image_key = config1.get("image_api_key", "")
-        assert original_llm_key != ""
-        assert original_image_key != ""
-
-        # 第二次保存：不发送 API key 字段（模拟用户未修改）
-        await save_config(mac, {
-            "modes": ["ZEN"],  # 只修改其他字段
-            # 不包含 llmApiKey 和 imageApiKey
-        })
-
-        config2 = await get_active_config(mac)
-        # 验证 API key 被保留
-        assert config2.get("llm_api_key", "") == original_llm_key
-        assert config2.get("image_api_key", "") == original_image_key
-        assert config2["has_api_key"] is True
-        assert config2["has_image_api_key"] is True
-        # 验证其他字段已更新
-        assert "ZEN" in config2["modes"]
-
-    @pytest.mark.asyncio
-    async def test_save_config_update_api_key(self):
-        """测试更新 API key（发送新值）"""
-        await init_db()
-        mac = "AA:BB:CC:DD:EE:FF"
-        from core.crypto import decrypt_api_key
-
-        # 第一次保存：设置 API key
-        await save_config(mac, {
-            "modes": ["STOIC"],
-            "llmApiKey": "sk-old-key-12345",
-        })
-
-        # 第二次保存：更新 API key
-        await save_config(mac, {
-            "modes": ["STOIC"],
-            "llmApiKey": "sk-new-key-67890",
-        })
-
-        config = await get_active_config(mac)
-        encrypted_key = config.get("llm_api_key", "")
-        assert decrypt_api_key(encrypted_key) == "sk-new-key-67890"
-        assert decrypt_api_key(encrypted_key) != "sk-old-key-12345"
+    # 设备配置层面的 API key 行为已完全迁移到用户级配置（user_llm_config），
+    # 不再在 config_store 里做单元测试，相关旧用例已移除。
 
     async def test_remove_mode_from_all_configs_cleans_modes_and_overrides(self):
         await init_db()

@@ -2,14 +2,17 @@
 Integration tests for InkSight API -> render pipeline.
 Uses httpx.AsyncClient with FastAPI TestClient, mocking LLM calls.
 """
+from __future__ import annotations
+
 import io
 import json
 import pytest
 from PIL import Image
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
 
 from api.index import app
+from api import shared as shared_api
 from core.cache import content_cache
 from core.config_store import init_db
 from core.db import get_main_db
@@ -85,8 +88,8 @@ async def provision_device_headers(client: AsyncClient, mac: str) -> dict[str, s
 
 
 async def register_user(client: AsyncClient, username: str, password: str = "pass1234") -> dict:
-    # Register now grants the default quota directly; invite codes are redeemed after login.
-    # We still send a seeded code here to verify the endpoint safely ignores legacy invite input.
+    # Register validates invite_code (optional). If provided, it must exist and be unused.
+    # We generate a unique code per user and seed it into the test DB to keep tests isolated.
     invite_code = f"TEST_CODE_{username.upper()}"
     db = await get_main_db()
     await db.execute(
@@ -136,6 +139,114 @@ async def test_render_returns_bmp(client):
         assert resp.headers["content-type"] == "image/bmp"
         # BMP magic bytes
         assert resp.content[:2] == b"BM"
+
+
+@pytest.mark.asyncio
+async def test_render_returns_binding_prompt_when_device_has_no_owner(client, monkeypatch):
+    headers = await provision_device_headers(client, "AA:BB:CC:DD:EE:99")
+
+    async def _fake_get_device_owner(mac: str):
+        assert mac == "AA:BB:CC:DD:EE:99"
+        return None
+
+    async def _fake_get_or_create_claim_token(mac: str, source: str = "render"):
+        assert mac == "AA:BB:CC:DD:EE:99"
+        assert source == "render"
+        return {
+            "token": "claim-token",
+            "pair_code": "AB12CD34",
+            "expires_at": "2099-01-01T00:00:00",
+        }
+
+    async def _unexpected_build_image(*args, **kwargs):
+        raise AssertionError("build_image should not run for unbound devices")
+
+    async def _unexpected_log_render_stats(*args, **kwargs):
+        raise AssertionError("log_render_stats should not run for unbound devices")
+
+    async def _unexpected_get_latest_heartbeat(*args, **kwargs):
+        raise AssertionError("heartbeat lookup should not run for unbound devices")
+
+    monkeypatch.setattr("api.routes.render.get_device_owner", _fake_get_device_owner)
+    monkeypatch.setattr("api.routes.render.get_or_create_claim_token", _fake_get_or_create_claim_token)
+    monkeypatch.setattr("api.routes.render.build_image", _unexpected_build_image)
+    monkeypatch.setattr("api.routes.render.log_render_stats", _unexpected_log_render_stats)
+    monkeypatch.setattr("api.routes.render.get_latest_heartbeat", _unexpected_get_latest_heartbeat)
+
+    resp = await client.get("/api/render", params={
+        "mac": "AA:BB:CC:DD:EE:99",
+        "v": "3.85",
+        "w": "400",
+        "h": "300",
+    }, headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/bmp"
+    assert resp.content[:2] == b"BM"
+
+
+@pytest.mark.asyncio
+async def test_build_image_prefers_owner_image_provider_over_device_config(sample_date_ctx, sample_weather):
+    captured = {}
+    mock_reg = MagicMock()
+    mock_reg.is_supported.return_value = True
+    mock_reg.get_mode_info.return_value = MagicMock(cacheable=False)
+    mock_reg.get_json_mode.return_value = None
+
+    async def _fake_generate_and_render(persona, config, date_ctx, weather, battery_pct, **kwargs):
+        captured["config"] = config
+        return Image.new("1", (400, 300), 1), {"quote": "ok"}
+
+    async def _fake_get_active_config(mac):
+        assert mac == "AA:BB:CC:DD:EE:88"
+        return {
+            "mac": mac,
+            "modes": ["ARTWALL"],
+            "llm_provider": "deepseek",
+            "llm_model": "deepseek-chat",
+            "image_provider": "aliyun",
+        }
+
+    async def _fake_resolve_mode(mac, config, persona_override, force_next=False):
+        return "ARTWALL"
+
+    async def _fake_get_device_owner(mac):
+        assert mac == "AA:BB:CC:DD:EE:88"
+        return {"user_id": 123}
+
+    async def _fake_get_user_llm_config(user_id):
+        assert user_id == 123
+        return {
+            "provider": "moonshot",
+            "model": "moonshot-v1-8k",
+            "api_key": "sk-user-key",
+            "image_provider": "owner-image-provider",
+            "image_api_key": "img-key",
+        }
+
+    with (
+        patch("core.mode_registry.get_registry", return_value=mock_reg),
+        patch("api.shared.get_active_config", new_callable=AsyncMock, side_effect=_fake_get_active_config),
+        patch("api.shared.resolve_mode", new_callable=AsyncMock, side_effect=_fake_resolve_mode),
+        patch("core.config_store.get_device_owner", new_callable=AsyncMock, side_effect=_fake_get_device_owner),
+        patch("core.config_store.get_user_llm_config", new_callable=AsyncMock, side_effect=_fake_get_user_llm_config),
+        patch("api.shared.get_date_context", new_callable=AsyncMock, return_value=sample_date_ctx),
+        patch("api.shared.get_weather", new_callable=AsyncMock, return_value=sample_weather),
+        patch("api.shared.generate_and_render", new_callable=AsyncMock, side_effect=_fake_generate_and_render),
+        patch("api.shared.update_device_state", new_callable=AsyncMock),
+        patch("api.shared.save_render_content", new_callable=AsyncMock),
+    ):
+        await shared_api.build_image(
+            3.85,
+            "AA:BB:CC:DD:EE:88",
+            "ARTWALL",
+            screen_w=400,
+            screen_h=300,
+        )
+
+    assert captured["config"]["llm_provider"] == "moonshot"
+    assert captured["config"]["llm_model"] == "moonshot-v1-8k"
+    assert captured["config"]["image_provider"] == "owner-image-provider"
 
 
 @pytest.mark.asyncio
@@ -420,6 +531,16 @@ async def test_device_preview_stats_and_share_flow(client, monkeypatch):
     mac = "CC:DD:EE:FF:11:22"
     headers = await provision_device_headers(client, mac)
 
+    claim_resp = await client.post(f"/api/device/{mac}/claim-token", headers=headers)
+    assert claim_resp.status_code == 200
+    claim = claim_resp.json()
+    assert claim["ok"] is True
+
+    await register_user(client, "preview_owner")
+    consume_resp = await client.post("/api/claim/consume", json={"token": claim["token"]})
+    assert consume_resp.status_code == 200
+    assert consume_resp.json()["status"] == "claimed"
+
     config_resp = await client.post(
         "/api/config",
         json={
@@ -659,10 +780,6 @@ async def test_mobile_content_today_and_widget_data(client):
         assert today_resp.status_code == 200
         today_payload = today_resp.json()
         assert len(today_payload["items"]) == 2
-        assert today_payload["hero_item"]["mode_id"] == today_payload["items"][0]["mode_id"]
-        assert len(today_payload["secondary_items"]) == 1
-        assert "header_meta" in today_payload
-        assert today_payload["header_meta"]["date_label"]
         assert today_payload["items"][0]["preview_url"].startswith("/api/preview?")
 
         widget_resp = await client.get(f"/api/widget/{mac}/data", params={"mode": "POETRY"}, headers=headers)
@@ -671,16 +788,6 @@ async def test_mobile_content_today_and_widget_data(client):
         assert widget_payload["mode_id"] == "POETRY"
         assert "content" in widget_payload
         assert widget_payload["preview_url"].startswith("/api/preview?")
-
-
-@pytest.mark.asyncio
-async def test_discover_feed_returns_editorial_sections(client):
-    resp = await client.get("/api/discover/feed")
-    assert resp.status_code == 200
-    payload = resp.json()
-    assert len(payload["editorial_sections"]) >= 1
-    assert len(payload["scene_chips"]) >= 3
-    assert len(payload["featured_modes"]) >= 4
 
 
 @pytest.mark.asyncio

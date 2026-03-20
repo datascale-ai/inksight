@@ -196,3 +196,19 @@ def test_render_quota_exhausted_image_uses_project_font_loader(monkeypatch):
     shared_api._render_quota_exhausted_image(400, 300)
 
     assert calls
+
+
+def test_render_device_unbound_image_uses_project_font_loader(monkeypatch):
+    calls = []
+
+    def _fake_load_font(font_key: str, size: int):
+        calls.append((font_key, size))
+        from PIL import ImageFont
+
+        return ImageFont.load_default()
+
+    monkeypatch.setattr(shared_api, "load_font", _fake_load_font, raising=False)
+
+    shared_api._render_device_unbound_image(400, 300, "AB12CD34")
+
+    assert calls
