@@ -26,6 +26,7 @@ interface ProfileData {
     image_provider?: string;
     image_model?: string;
     image_api_key?: string;
+    image_base_url?: string;
   } | null;
 }
 
@@ -55,9 +56,12 @@ export default function ProfilePage() {
   const [imageProvider, setImageProvider] = useState("aliyun");
   const [imageModel, setImageModel] = useState("");
   const [imageApiKey, setImageApiKey] = useState("");
+  const [imageBaseUrl, setImageBaseUrl] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savedAccessMode, setSavedAccessMode] = useState<"preset" | "custom_openai" | null>(null);
+  const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
 
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
@@ -90,6 +94,7 @@ export default function ProfilePage() {
     setImageProvider("aliyun");
     setImageModel("");
     setImageApiKey("");
+    setImageBaseUrl("");
   }, []);
 
   const loadProfile = useCallback(async () => {
@@ -116,17 +121,30 @@ export default function ProfilePage() {
       // 只要数据库里存在配置记录，就回填表单并进入 BYOK 视图。
       if (data.llm_config) {
         const mode = (data.llm_config.llm_access_mode || "preset") as "preset" | "custom_openai";
+        resetLlmForm();
         setLlmAccessMode(mode);
-        setLlmProvider(data.llm_config.provider || "deepseek");
-        setLlmModel(data.llm_config.model || "");
-        setLlmApiKey(data.llm_config.api_key || "");
-        setLlmBaseUrl(data.llm_config.base_url || "");
-        setImageProvider(data.llm_config.image_provider || "aliyun");
-        setImageModel(data.llm_config.image_model || "");
-        setImageApiKey(data.llm_config.image_api_key || "");
+        if (mode === "preset") {
+          setLlmProvider(data.llm_config.provider || "deepseek");
+          setLlmModel(data.llm_config.model || "");
+          setLlmApiKey(data.llm_config.api_key || "");
+          setImageProvider("aliyun");
+          setImageModel(data.llm_config.image_model || "");
+          setImageApiKey(data.llm_config.image_api_key || "");
+        } else {
+          setLlmProvider("openai_compat");
+          setLlmModel(data.llm_config.model || "");
+          setLlmApiKey(data.llm_config.api_key || "");
+          setLlmBaseUrl(data.llm_config.base_url || "");
+          setImageProvider(data.llm_config.image_provider || "");
+          setImageModel(data.llm_config.image_model || "");
+          setImageApiKey(data.llm_config.image_api_key || "");
+          setImageBaseUrl(data.llm_config.image_base_url || "");
+        }
+        setSavedAccessMode(mode);
         setQuotaMode("custom");
       } else {
         resetLlmForm();
+        setSavedAccessMode(null);
         setQuotaMode("platform");
       }
     } catch {
@@ -197,7 +215,7 @@ export default function ProfilePage() {
     }
   }, [llmProvider, llmModel, llmAccessMode]);
 
-  const handleSaveLlmConfig = async () => {
+  const doSaveLlmConfig = async () => {
     setSaving(true);
     try {
       const effectiveProvider = llmAccessMode === "custom_openai" ? "openai_compat" : llmProvider;
@@ -211,9 +229,10 @@ export default function ProfilePage() {
           model: llmModel.trim(),
           api_key: llmApiKey.trim(),
           base_url: effectiveBaseUrl,
-          image_provider: imageProvider,
+          image_provider: imageProvider.trim() || "aliyun",
           image_model: imageModel.trim(),
           image_api_key: imageApiKey.trim(),
+          image_base_url: llmAccessMode === "custom_openai" ? imageBaseUrl.trim() : "",
         }),
       });
 
@@ -223,13 +242,25 @@ export default function ProfilePage() {
       }
 
       showToast(tr("配置已保存", "Configuration saved"), "success");
-      await loadProfile(); // 重新加载配置
+      await loadProfile();
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr("保存配置失败", "Failed to save configuration");
       showToast(msg, "error");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveLlmConfig = () => {
+    if (llmAccessMode === "preset" && imageApiKey.trim() && !imageModel.trim()) {
+      showToast(tr("请选择图像模型", "Please select an image model"), "error");
+      return;
+    }
+    if (savedAccessMode && savedAccessMode !== llmAccessMode) {
+      setSwitchConfirmOpen(true);
+      return;
+    }
+    doSaveLlmConfig();
   };
 
   const handleDeleteLlmConfig = async () => {
@@ -417,10 +448,14 @@ export default function ProfilePage() {
                   <button
                     onClick={() => {
                       setLlmAccessMode("preset");
-                      // 回到预设模式时，确保 provider 合法并触发 model 自动回退
                       if (!llmProvider.trim() || llmProvider === "openai_compat") setLlmProvider("deepseek");
-                      // 预设模式不使用 base_url，清空避免误提交
+                      setLlmApiKey("");
+                      setLlmModel("");
                       setLlmBaseUrl("");
+                      setImageApiKey("");
+                      setImageModel("");
+                      setImageBaseUrl("");
+                      setImageProvider("aliyun");
                     }}
                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                       llmAccessMode === "preset"
@@ -434,6 +469,13 @@ export default function ProfilePage() {
                     onClick={() => {
                       setLlmAccessMode("custom_openai");
                       setLlmProvider("openai_compat");
+                      setLlmApiKey("");
+                      setLlmModel("");
+                      setLlmBaseUrl("");
+                      setImageApiKey("");
+                      setImageModel("");
+                      setImageBaseUrl("");
+                      setImageProvider("");
                     }}
                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                       llmAccessMode === "custom_openai"
@@ -447,6 +489,8 @@ export default function ProfilePage() {
 
                 {llmAccessMode === "preset" ? (
                   <>
+                    {/* ── 文本生成 ── */}
+                    <p className="text-sm font-medium text-ink">{tr("文本生成", "Text Generation")}</p>
                     <Field label={tr("API 服务商", "API Provider")}>
                       <select
                         value={llmProvider}
@@ -487,15 +531,66 @@ export default function ProfilePage() {
                         autoComplete="off"
                       />
                     </Field>
+
+                    {/* ── 图像生成 ── */}
+                    <div className="pt-4 border-t border-ink/10">
+                      <p className="text-sm font-medium text-ink">{tr("图像生成", "Image Generation")}</p>
+                    </div>
+                    <Field label={tr("图像 API 服务商", "Image API Provider")}>
+                      <input
+                        type="text"
+                        value="aliyun"
+                        disabled
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-ink/5 text-ink-light"
+                      />
+                    </Field>
+                    <Field label={tr("图像模型名称", "Image Model Name")}>
+                      {(() => {
+                        const presetImageModels = ["qwen-image-plus", "qwen-image-2.0", "qwen-image-max"];
+                        const showSaved = imageModel && !presetImageModels.includes(imageModel);
+                        return (
+                          <select
+                            value={imageModel}
+                            onChange={(e) => setImageModel(e.target.value)}
+                            className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                          >
+                            <option value="">{tr("请选择图像模型", "Select image model")}</option>
+                            {showSaved && <option value={imageModel}>{imageModel}</option>}
+                            {presetImageModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        );
+                      })()}
+                    </Field>
+                    <Field label={tr("图像 API Key", "Image API Key")}>
+                      <input
+                        type="password"
+                        value={imageApiKey}
+                        onChange={(e) => setImageApiKey(e.target.value)}
+                        placeholder={tr("（可选）留空则图像生成功能不可用", "(Optional) Leave empty to disable image generation")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                        autoComplete="off"
+                      />
+                    </Field>
                   </>
                 ) : (
                   <>
+                    {/* ── 文本生成 ── */}
+                    <p className="text-sm font-medium text-ink">{tr("文本生成", "Text Generation")}</p>
+                    <Field label={tr("Base URL", "Base URL")}>
+                      <input
+                        type="text"
+                        value={llmBaseUrl}
+                        onChange={(e) => setLlmBaseUrl(e.target.value)}
+                        placeholder={tr("例如：https://api.deepseek.com/v1", "e.g. https://api.deepseek.com/v1")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                      />
+                    </Field>
                     <Field label={tr("模型名称", "Model Name")}>
                       <input
                         type="text"
                         value={llmModel}
                         onChange={(e) => setLlmModel(e.target.value)}
-                        placeholder={tr("例如：gpt-4o-mini", "e.g. gpt-4o-mini")}
+                        placeholder={tr("例如：deepseek-chat", "e.g. deepseek-chat")}
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
                       />
                     </Field>
@@ -509,53 +604,42 @@ export default function ProfilePage() {
                         autoComplete="off"
                       />
                     </Field>
-                    <Field label={tr("Base URL（必填）", "Base URL (Required)")}>
+
+                    {/* ── 图像生成 ── */}
+                    <div className="pt-4 border-t border-ink/10">
+                      <p className="text-sm font-medium text-ink">{tr("图像生成", "Image Generation")}</p>
+                      <p className="text-xs text-ink-light mt-1">{tr("（可选）不填则图像生成功能不可用", "(Optional) Leave empty to disable image generation")}</p>
+                    </div>
+                    <Field label={tr("Base URL", "Base URL")}>
                       <input
                         type="text"
-                        value={llmBaseUrl}
-                        onChange={(e) => setLlmBaseUrl(e.target.value)}
-                        placeholder={tr("例如：https://api.openai.com/v1", "e.g. https://api.openai.com/v1")}
+                        value={imageBaseUrl}
+                        onChange={(e) => setImageBaseUrl(e.target.value)}
+                        placeholder={tr("例如：https://dashscope.aliyuncs.com/compatible-mode/v1", "e.g. https://dashscope.aliyuncs.com/compatible-mode/v1")}
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                      />
+                    </Field>
+                    <Field label={tr("模型名称", "Model Name")}>
+                      <input
+                        type="text"
+                        value={imageModel}
+                        onChange={(e) => setImageModel(e.target.value)}
+                        placeholder={tr("例如：qwen-image-max", "e.g. qwen-image-max")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                      />
+                    </Field>
+                    <Field label={tr("API Key", "API Key")}>
+                      <input
+                        type="password"
+                        value={imageApiKey}
+                        onChange={(e) => setImageApiKey(e.target.value)}
+                        placeholder={tr("请输入图像生成 API Key", "Enter image generation API Key")}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                        autoComplete="off"
                       />
                     </Field>
                   </>
                 )}
-                
-                <div className="pt-4 border-t border-ink/10">
-                  <p className="text-sm font-medium text-ink mb-3">{tr("图像生成 API 配置", "Image Generation API Configuration")}</p>
-                </div>
-                
-                <Field label={tr("图像 API 服务商", "Image API Provider")}>
-                  <input
-                    type="text"
-                    value={imageProvider}
-                    onChange={(e) => setImageProvider(e.target.value)}
-                    placeholder={tr("例如 aliyun", "e.g. aliyun")}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  />
-                </Field>
-                <Field label={tr("图像模型名称", "Image Model Name")}>
-                  <select
-                    value={imageModel}
-                    onChange={(e) => setImageModel(e.target.value)}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="">{tr("请选择图像模型", "Select image model")}</option>
-                    <option value="qwen-image-plus">qwen-image-plus</option>
-                    <option value="qwen-image-2.0">qwen-image-2.0</option>
-                    <option value="qwen-image-max">qwen-image-max</option>
-                  </select>
-                </Field>
-                <Field label={tr("图像 API Key", "Image API Key")}>
-                  <input
-                    type="password"
-                    value={imageApiKey}
-                    onChange={(e) => setImageApiKey(e.target.value)}
-                    placeholder={tr("请输入您的图像 API Key（用于生成图片）", "Enter your Image API Key (for image generation)")}
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
-                    autoComplete="off"
-                  />
-                </Field>
                 
                 <div className="pt-2">
                   <div className="flex items-center gap-2">
@@ -630,6 +714,45 @@ export default function ProfilePage() {
                 ) : (
                   tr("确认删除", "Delete")
                 )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {switchConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSwitchConfirmOpen(false)} />
+          <div className="relative z-10 w-[92vw] max-w-md rounded-sm border border-ink/20 bg-white shadow-lg p-4">
+            <div className="text-sm font-medium text-ink mb-2">{tr("切换配置模式", "Switch configuration mode")}</div>
+            <div className="text-sm text-ink-light">
+              {savedAccessMode === "preset"
+                ? tr(
+                    "保存当前配置会使得已有的「预设服务商」配置失效，是否继续？",
+                    "Saving will override existing Preset Provider configuration. Continue?"
+                  )
+                : tr(
+                    "保存当前配置会使得已有的「自定义 OpenAI 格式」配置失效，是否继续？",
+                    "Saving will override existing Custom OpenAI configuration. Continue?"
+                  )}
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setSwitchConfirmOpen(false)}
+                className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white hover:border-ink active:bg-ink/90"
+              >
+                {tr("取消", "Cancel")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSwitchConfirmOpen(false);
+                  doSaveLlmConfig();
+                }}
+                className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white hover:border-ink active:bg-ink/90"
+              >
+                {tr("确认保存", "Confirm")}
               </Button>
             </div>
           </div>

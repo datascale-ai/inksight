@@ -1989,11 +1989,13 @@ async def get_user_llm_config(user_id: int) -> dict | None:
     has_image_config = "image_provider" in columns and "image_api_key" in columns
     has_model_column = "model" in columns
     has_image_model_column = "image_model" in columns
+    has_image_base_url_column = "image_base_url" in columns
     
     # Build SELECT with backward compatibility across schema versions.
     if has_access_mode_column and has_image_config and has_model_column and has_image_model_column:
+        extra_cols = ", image_base_url" if has_image_base_url_column else ""
         cursor = await db.execute(
-            "SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key, model, image_model FROM user_llm_config WHERE user_id = ?",
+            f"SELECT llm_access_mode, provider, api_key, base_url, image_provider, image_api_key, model, image_model{extra_cols} FROM user_llm_config WHERE user_id = ?",
             (user_id,),
         )
     elif has_access_mode_column and has_image_config and has_model_column:
@@ -2059,6 +2061,9 @@ async def get_user_llm_config(user_id: int) -> dict | None:
         idx += 1
     if has_image_model_column and len(row) > idx:
         result["image_model"] = row[idx] or ""
+        idx += 1
+    if has_image_base_url_column and len(row) > idx:
+        result["image_base_url"] = row[idx] or ""
     return result
 
 
@@ -2072,6 +2077,7 @@ async def save_user_llm_config(
     image_provider: str = "aliyun",
     image_model: str = "",
     image_api_key: str = "",
+    image_base_url: str = "",
 ) -> bool:
     """保存用户级别的 LLM 配置。"""
     from .crypto import encrypt_api_key
@@ -2089,6 +2095,7 @@ async def save_user_llm_config(
     has_image_config = "image_provider" in columns and "image_api_key" in columns
     has_model_column = "model" in columns
     has_image_model_column = "image_model" in columns
+    has_image_base_url_column = "image_base_url" in columns
 
     # 如果表没有 llm_access_mode 列，先添加
     if not has_access_mode_column:
@@ -2126,12 +2133,20 @@ async def save_user_llm_config(
         except Exception as e:
             logger.warning(f"[USER_LLM_CONFIG] Failed to add image_model column: {e}")
             await db.rollback()
+    if not has_image_base_url_column:
+        try:
+            await db.execute("ALTER TABLE user_llm_config ADD COLUMN image_base_url TEXT DEFAULT ''")
+            await db.commit()
+            has_image_base_url_column = True
+        except Exception as e:
+            logger.warning(f"[USER_LLM_CONFIG] Failed to add image_base_url column: {e}")
+            await db.rollback()
     
     try:
         if has_access_mode_column and has_image_config and has_image_model_column:
             await db.execute(
-                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, image_provider, image_api_key, image_model, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO user_llm_config (user_id, llm_access_mode, provider, model, api_key, base_url, image_provider, image_api_key, image_model, image_base_url, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
                        llm_access_mode = excluded.llm_access_mode,
                        provider = excluded.provider,
@@ -2141,8 +2156,9 @@ async def save_user_llm_config(
                        image_provider = excluded.image_provider,
                        image_api_key = excluded.image_api_key,
                        image_model = excluded.image_model,
+                       image_base_url = excluded.image_base_url,
                        updated_at = excluded.updated_at""",
-                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, image_model, now),
+                (user_id, llm_access_mode, provider, model, encrypted_key, base_url, image_provider, encrypted_image_key, image_model, image_base_url, now),
             )
         elif has_access_mode_column and has_image_config:
             await db.execute(

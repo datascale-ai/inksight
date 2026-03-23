@@ -2274,7 +2274,7 @@ function ConfigPageInner() {
                   {stats && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       <StatCard label={tr("总渲染次数", "Total Renders")} value={stats.total_renders ?? "-"} />
-                      <StatCard label={tr("缓存命中率", "Cache Hit Rate")} value={stats.cache_hit_rate != null ? `${Math.round(stats.cache_hit_rate * 100)}%` : "-"} />
+                      <StatCard label={tr("缓存命中率", "Cache Hit Rate")} value={stats.cache_hit_rate != null ? `${Math.round(stats.cache_hit_rate)}%` : "-"} />
                       <StatCard label={tr("电量", "Battery")} value={batteryPct != null ? `${batteryPct}%` : "-"} />
                       <StatCard label={tr("电压", "Voltage")} value={stats.last_battery_voltage ? `${stats.last_battery_voltage.toFixed(2)}V` : "-"} />
                       <StatCard label={tr("WiFi 信号", "WiFi RSSI")} value={stats.last_rssi ? `${stats.last_rssi} dBm` : "-"} />

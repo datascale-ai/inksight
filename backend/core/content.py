@@ -808,6 +808,7 @@ async def generate_artwall_content(
     fallback_title: str = "",
     image_api_key: str | None = None,
     api_key: str | None = None,
+    llm_base_url: str | None = None,
 ) -> dict:
     """生成 ARTWALL 模式的内容 - 使用文生图模型。
 
@@ -855,7 +856,7 @@ async def generate_artwall_content(
             llm_model,
             title_prompt,
             api_key=api_key,
-            base_url=_extract_llm_base_url(ctx),
+            base_url=_extract_llm_base_url(ctx) or llm_base_url,
         )
         artwork_title = title_text.strip('"').strip("「」") or artwork_title
         logger.info(f"[ARTWALL] Generated title via {llm_provider}/{llm_model}: {artwork_title}")

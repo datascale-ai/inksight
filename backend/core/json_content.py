@@ -470,6 +470,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
     llm_provider = kwargs.get("llm_provider") or DEFAULT_LLM_PROVIDER
     llm_model = kwargs.get("llm_model") or DEFAULT_LLM_MODEL
     api_key = kwargs.get("api_key")
+    llm_base_url = kwargs.get("llm_base_url")
 
     if provider == "briefing":
         hn_limit = int(content_cfg.get("hn_limit", 2))
@@ -494,7 +495,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         llm_failed = False
         if summarize:
             summarized_hn, summarized_ph = await summarize_briefing_content(
-                hn_items, ph_item, llm_provider, llm_model, api_key=api_key
+                hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
             )
             # 如果返回 None，说明 summarize 失败了
             if summarized_hn is None or summarized_ph is None:
@@ -505,7 +506,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         
         insight = ""
         if include_insight:
-            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=api_key)
+            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url)
             # 如果返回 None，说明 insight 生成失败了
             if insight is None:
                 llm_failed = True
@@ -591,6 +592,7 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
                 fallback_title=fallback_title,
                 image_api_key=kwargs.get("image_api_key") or "",
                 api_key=api_key,
+                llm_base_url=kwargs.get("llm_base_url"),
             )
             # 仅当真正拿到图像地址时才使用生成结果；否则回退到 JSON 中的 fallback/fallback_pool
             if mode_id != "ARTWALL":

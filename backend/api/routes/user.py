@@ -162,6 +162,7 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
     image_provider = (body.get("image_provider") or "aliyun").strip()
     image_model = (body.get("image_model") or "").strip()
     image_api_key = (body.get("image_api_key") or "").strip()
+    image_base_url = (body.get("image_base_url") or "").strip()
 
     allowed_modes = {"preset", "custom_openai"}
     if llm_access_mode not in allowed_modes:
@@ -172,13 +173,9 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
     elif not provider:
         provider = "deepseek"
 
-    # 允许部分保存；仅在用户填写了 custom_openai 的 base_url 时做最小 URL 校验。
-    if (
-        llm_access_mode == "custom_openai"
-        and base_url
-        and not (base_url.startswith("http://") or base_url.startswith("https://"))
-    ):
-        return JSONResponse({"error": "base_url 必须以 http:// 或 https:// 开头"}, status_code=400)
+    for url_val, url_name in [(base_url, "base_url"), (image_base_url, "image_base_url")]:
+        if url_val and not (url_val.startswith("http://") or url_val.startswith("https://")):
+            return JSONResponse({"error": f"{url_name} 必须以 http:// 或 https:// 开头"}, status_code=400)
     
     ok = await save_user_llm_config(
         user_id,
@@ -190,6 +187,7 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
         image_provider,
         image_model,
         image_api_key,
+        image_base_url=image_base_url,
     )
     if not ok:
         return JSONResponse({"error": "保存配置失败"}, status_code=500)
