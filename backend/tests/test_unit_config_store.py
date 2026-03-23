@@ -27,6 +27,23 @@ async def use_memory_db(tmp_path):
     with patch.object(db_mod, "_MAIN_DB_PATH", db_path), \
          patch("core.config_store.DB_PATH", db_path), \
          patch("core.stats_store.DB_PATH", db_path):
+        # Ensure base schema exists and add any missing columns used by current code
+        await init_db()
+        from core.db import get_main_db
+        db = await get_main_db()
+        cur = await db.execute("PRAGMA table_info(configs)")
+        cols = {row[1] for row in await cur.fetchall()}
+        async def _add(col: str, ddl: str):
+            if col not in cols:
+                await db.execute(f"ALTER TABLE configs ADD COLUMN {col} {ddl}")
+        await _add("focus_listening", "INTEGER DEFAULT 0")
+        await _add("latitude", "REAL")
+        await _add("longitude", "REAL")
+        await _add("timezone", "TEXT DEFAULT ''")
+        await _add("admin1", "TEXT DEFAULT ''")
+        await _add("country", "TEXT DEFAULT ''")
+        await _add("is_active", "INTEGER DEFAULT 1")
+        await db.commit()
         yield db_path
     await db_mod.close_all()
 

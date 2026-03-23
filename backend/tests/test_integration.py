@@ -34,6 +34,22 @@ async def client(tmp_path):
     from core import db as db_mod
     await db_mod.close_all()
 
+    async def _normalize_configs_table():
+        db = await get_main_db()
+        cur = await db.execute("PRAGMA table_info(configs)")
+        cols = {row[1] for row in await cur.fetchall()}
+        async def _add(col: str, ddl: str):
+            if col not in cols:
+                await db.execute(f"ALTER TABLE configs ADD COLUMN {col} {ddl}")
+        await _add("focus_listening", "INTEGER DEFAULT 0")
+        await _add("latitude", "REAL")
+        await _add("longitude", "REAL")
+        await _add("timezone", "TEXT DEFAULT ''")
+        await _add("admin1", "TEXT DEFAULT ''")
+        await _add("country", "TEXT DEFAULT ''")
+        await _add("is_active", "INTEGER DEFAULT 1")
+        await db.commit()
+
     # Redirect all database paths to temp files
     test_main_db = str(tmp_path / "test_inksight.db")
     test_cache_db = str(tmp_path / "test_cache.db")
@@ -47,6 +63,7 @@ async def client(tmp_path):
         await init_db()
         await init_stats_db()
         await init_cache_db()
+        await _normalize_configs_table()
 
         # httpx compatibility wrapper for different versions
         try:
