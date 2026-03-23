@@ -448,14 +448,26 @@ export default function ProfilePage() {
                   <button
                     onClick={() => {
                       setLlmAccessMode("preset");
-                      if (!llmProvider.trim() || llmProvider === "openai_compat") setLlmProvider("deepseek");
-                      setLlmApiKey("");
-                      setLlmModel("");
-                      setLlmBaseUrl("");
-                      setImageApiKey("");
-                      setImageModel("");
-                      setImageBaseUrl("");
-                      setImageProvider("aliyun");
+                      if (savedAccessMode === "preset" && profileData?.llm_config) {
+                        const c = profileData.llm_config;
+                        setLlmProvider(c.provider || "deepseek");
+                        setLlmModel(c.model || "");
+                        setLlmApiKey(c.api_key || "");
+                        setLlmBaseUrl("");
+                        setImageProvider("aliyun");
+                        setImageModel(c.image_model || "");
+                        setImageApiKey(c.image_api_key || "");
+                        setImageBaseUrl("");
+                      } else {
+                        if (!llmProvider.trim() || llmProvider === "openai_compat") setLlmProvider("deepseek");
+                        setLlmApiKey("");
+                        setLlmModel("");
+                        setLlmBaseUrl("");
+                        setImageApiKey("");
+                        setImageModel("");
+                        setImageBaseUrl("");
+                        setImageProvider("aliyun");
+                      }
                     }}
                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                       llmAccessMode === "preset"
@@ -468,14 +480,26 @@ export default function ProfilePage() {
                   <button
                     onClick={() => {
                       setLlmAccessMode("custom_openai");
-                      setLlmProvider("openai_compat");
-                      setLlmApiKey("");
-                      setLlmModel("");
-                      setLlmBaseUrl("");
-                      setImageApiKey("");
-                      setImageModel("");
-                      setImageBaseUrl("");
-                      setImageProvider("");
+                      if (savedAccessMode === "custom_openai" && profileData?.llm_config) {
+                        const c = profileData.llm_config;
+                        setLlmProvider("openai_compat");
+                        setLlmModel(c.model || "");
+                        setLlmApiKey(c.api_key || "");
+                        setLlmBaseUrl(c.base_url || "");
+                        setImageProvider(c.image_provider || "");
+                        setImageModel(c.image_model || "");
+                        setImageApiKey(c.image_api_key || "");
+                        setImageBaseUrl(c.image_base_url || "");
+                      } else {
+                        setLlmProvider("openai_compat");
+                        setLlmApiKey("");
+                        setLlmModel("");
+                        setLlmBaseUrl("");
+                        setImageApiKey("");
+                        setImageModel("");
+                        setImageBaseUrl("");
+                        setImageProvider("");
+                      }
                     }}
                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                       llmAccessMode === "custom_openai"
@@ -539,7 +563,7 @@ export default function ProfilePage() {
                     <Field label={tr("图像 API 服务商", "Image API Provider")}>
                       <input
                         type="text"
-                        value="aliyun"
+                        value={tr("阿里百炼", "Alibaba Bailian")}
                         disabled
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-ink/5 text-ink-light"
                       />
