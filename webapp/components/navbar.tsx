@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Menu, X, Github, User, LogOut } from "lucide-react";
+import { Menu, X, Github, User } from "lucide-react";
 import { authHeaders, clearToken, fetchCurrentUser, onAuthChanged } from "@/lib/auth";
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
+import { UserDropdown } from "@/components/user-dropdown";
 
 export function Navbar() {
   const router = useRouter();
@@ -53,6 +54,7 @@ export function Navbar() {
     await fetch("/api/auth/logout", { method: "POST", headers: authHeaders() });
     clearToken();
     setUsername(null);
+    router.replace(withLocalePath(locale, "/login"));
     router.refresh();
   };
 
@@ -89,6 +91,9 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
+          <Link href={withLocalePath(otherLocale, pathname || "/")} className="text-sm text-ink-light hover:text-ink transition-colors">
+            {t(locale, "nav.language")}
+          </Link>
           <a
             href="https://github.com/datascale-ai/inksight"
             target="_blank"
@@ -98,26 +103,12 @@ export function Navbar() {
             <Github size={18} />
           </a>
           {username ? (
-            <div className="flex items-center gap-3 text-sm">
-              <Link
-                href={withLocalePath(locale, "/profile")}
-                className="flex items-center gap-1 text-ink-light hover:text-ink transition-colors"
-              >
-                <User size={14} />
-                {username}
-              </Link>
-              <button onClick={handleLogout} className="text-ink-light hover:text-ink transition-colors" title={t(locale, "nav.logout")}>
-                <LogOut size={16} />
-              </button>
-            </div>
+            <UserDropdown locale={locale} username={username} onLogout={handleLogout} />
           ) : (
             <Link href={withLocalePath(locale, "/login")} className="text-sm text-ink-light hover:text-ink transition-colors">
               {t(locale, "nav.login")}
             </Link>
           )}
-          <Link href={withLocalePath(otherLocale, pathname || "/")} className="text-sm text-ink-light hover:text-ink transition-colors">
-            {t(locale, "nav.language")}
-          </Link>
         </div>
 
         {/* Mobile toggle */}
