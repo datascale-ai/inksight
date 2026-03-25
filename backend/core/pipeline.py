@@ -71,6 +71,7 @@ async def generate_and_render(
     screen_w: int = SCREEN_WIDTH,
     screen_h: int = SCREEN_HEIGHT,
     mac: str = "",
+    colors: int = 2,
 ) -> tuple[Image.Image, dict | None]:
     """Generate content for a persona and render to an e-ink image.
 
@@ -108,6 +109,7 @@ async def generate_and_render(
         screen_w=screen_w,
         screen_h=screen_h,
         mac=mac or "",
+        colors=colors,
     )
     return img, content
 
@@ -266,6 +268,7 @@ def _render_for_persona(
     screen_w: int = SCREEN_WIDTH,
     screen_h: int = SCREEN_HEIGHT,
     mac: str = "",
+    colors: int = 2,
 ) -> Image.Image:
     """Dispatch rendering to the appropriate handler."""
     from .mode_registry import get_registry
@@ -289,7 +292,7 @@ def _render_for_persona(
             jm.definition, content,
             date_str=date_str, weather_str=weather_str_for_bar, battery_pct=battery_pct,
             weather_code=weather_code_for_bar, time_str=time_str,
-            screen_w=screen_w, screen_h=screen_h,
+            screen_w=screen_w, screen_h=screen_h, colors=colors,
         )
 
     # Builtin Python mode - use original render_mode dispatcher

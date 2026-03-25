@@ -1,0 +1,74 @@
+{
+  "mode_id": "TIMETABLE",
+  "display_name": "课程表",
+  "icon": "school",
+  "cacheable": false,
+  "description": "今日课程安排，四色屏高亮当前课程",
+  "content": {
+    "type": "composite",
+    "steps": [
+      {
+        "type": "computed",
+        "provider": "daily_meta",
+        "fallback": {
+          "year": 2026,
+          "day": 23,
+          "month_cn": "三月",
+          "weekday_cn": "周一",
+          "day_of_year": 82,
+          "days_in_year": 365
+        }
+      },
+      {
+        "type": "computed",
+        "provider": "timetable",
+        "fallback": {
+          "style": "daily",
+          "timetable_title": "周一 · 今日课程",
+          "slots": [
+            { "time": "08:00", "name": "高等数学", "location": "A201", "current": false },
+            { "time": "10:00", "name": "大学英语", "location": "B305", "current": true },
+            { "time": "14:00", "name": "数据结构", "location": "C102", "current": false },
+            { "time": "16:00", "name": "体育", "location": "操场", "current": false }
+          ],
+          "slot_count": 4,
+          "current_day": 0,
+          "current_period": 1
+        }
+      }
+    ],
+    "fallback": {},
+    "fallback_pool": [
+      {
+        "style": "daily",
+        "timetable_title": "周一 · 今日课程",
+        "slots": [
+          { "time": "08:00", "name": "高等数学", "location": "A201", "current": false },
+          { "time": "10:00", "name": "大学英语", "location": "B305", "current": true },
+          { "time": "14:00", "name": "数据结构", "location": "C102", "current": false },
+          { "time": "16:00", "name": "体育", "location": "操场", "current": false }
+        ],
+        "slot_count": 4,
+        "current_day": 0,
+        "current_period": 1
+      }
+    ]
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body_align": "top",
+    "body": [
+      {
+        "type": "timetable_grid",
+        "field": "slots",
+        "font_size": 11,
+        "margin_x": 6,
+        "row_height": 28
+      }
+    ],
+    "footer": {
+      "label": "TIMETABLE",
+      "attribution_template": "— InkSight"
+    }
+  }
+}

@@ -153,6 +153,7 @@ class ContentCache:
     async def check_and_regenerate_all(
         self, mac: str, config: dict, v: float = 3.3,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+        colors: int = 2,
     ) -> bool:
         """Check if all modes are cached, if not, regenerate all modes"""
         if DISABLE_CACHE or DISABLE_BATCH_REGEN:
@@ -186,7 +187,7 @@ class ContentCache:
             self._regenerating.add(mac)
             logger.info(f"[CACHE] Spawning background regeneration of all {len(modes)} modes for {mac}...")
             asyncio.create_task(
-                self._regenerate_background(mac, config, modes, v, screen_w, screen_h)
+                self._regenerate_background(mac, config, modes, v, screen_w, screen_h, colors=colors)
             )
         else:
             logger.debug(f"[CACHE] Background regeneration already in progress for {mac}")
@@ -196,6 +197,7 @@ class ContentCache:
     async def force_regenerate_all(
         self, mac: str, config: dict, v: float = 3.3,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+        colors: int = 2,
     ) -> bool:
         """Force background regeneration for all cacheable modes."""
         cacheable = get_cacheable_modes()
@@ -208,17 +210,18 @@ class ContentCache:
         self._regenerating.add(mac)
         logger.info(f"[CACHE] Force regenerating all {len(modes)} modes for {mac}...")
         asyncio.create_task(
-            self._regenerate_background(mac, config, modes, v, screen_w, screen_h)
+            self._regenerate_background(mac, config, modes, v, screen_w, screen_h, colors=colors)
         )
         return True
 
     async def _regenerate_background(
         self, mac: str, config: dict, modes: list[str], v: float,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+        colors: int = 2,
     ):
         """Background task that wraps _generate_all_modes with cleanup of _regenerating."""
         try:
-            await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h)
+            await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h, colors=colors)
         except (OSError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"[CACHE] Background regeneration failed for {mac}: {e}")
         finally:
@@ -227,6 +230,7 @@ class ContentCache:
     async def _generate_all_modes(
         self, mac: str, config: dict, modes: list[str], v: float,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
+        colors: int = 2,
     ):
         """Generate and cache all modes"""
         battery_pct = calc_battery_pct(v)
@@ -235,7 +239,7 @@ class ContentCache:
         tasks = [
             self._render_single_mode_for_batch(
                 mac, persona, battery_pct, copy.deepcopy(config), copy.deepcopy(date_ctx),
-                screen_w, screen_h,
+                screen_w, screen_h, colors=colors,
             )
             for persona in modes
         ]
@@ -276,6 +280,7 @@ class ContentCache:
         date_ctx: dict,
         screen_w: int = SCREEN_WIDTH,
         screen_h: int = SCREEN_HEIGHT,
+        colors: int = 2,
     ) -> tuple[str, Image.Image] | None:
         try:
             logger.info(f"[CACHE] Generating {mac}:{persona}...")
@@ -284,7 +289,7 @@ class ContentCache:
 
             img, _content = await generate_and_render(
                 persona, config, date_ctx, weather, battery_pct,
-                screen_w=screen_w, screen_h=screen_h,
+                screen_w=screen_w, screen_h=screen_h, colors=colors,
             )
             logger.info(f"[CACHE] ✓ {mac}:{persona}")
             return persona, img
@@ -302,6 +307,7 @@ class ContentCache:
         *args,
         screen_w: int = SCREEN_WIDTH,
         screen_h: int = SCREEN_HEIGHT,
+        colors: int = 2,
     ) -> bool:
         """Generate and cache a single mode via the unified pipeline."""
         try:
@@ -322,7 +328,7 @@ class ContentCache:
 
             img, _content = await generate_and_render(
                 persona, config, date_ctx, weather, battery_pct,
-                screen_w=screen_w, screen_h=screen_h,
+                screen_w=screen_w, screen_h=screen_h, colors=colors,
             )
 
             await self.set(mac, persona, img, screen_w, screen_h)

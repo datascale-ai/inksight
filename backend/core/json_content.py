@@ -454,6 +454,177 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             logger.warning("[JSONContent] Failed to load habit status for %s", mac, exc_info=True)
             return dict(fallback)
 
+    if provider == "calendar_grid":
+        import calendar as cal_mod
+        from datetime import datetime
+        from zhdate import ZhDate
+        from .config import SOLAR_FESTIVALS, LUNAR_FESTIVALS, SOLAR_TERMS
+
+        LUNAR_DAY_NAMES = [
+            "", "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+            "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+            "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十",
+        ]
+
+        now = datetime.now()
+        year, month, day = now.year, now.month, now.day
+        first_weekday, days_in_month = cal_mod.monthrange(year, month)
+        rows: list[list[str]] = []
+        week: list[str] = [""] * first_weekday
+        for d in range(1, days_in_month + 1):
+            week.append(str(d))
+            if len(week) == 7:
+                rows.append(week)
+                week = []
+        if week:
+            week.extend([""] * (7 - len(week)))
+            rows.append(week)
+
+        config = kwargs.get("config") or {}
+        mode_settings = config.get("mode_settings", {})
+        if not isinstance(mode_settings, dict):
+            mode_settings = {}
+        reminders = mode_settings.get("reminders", {})
+        if not isinstance(reminders, dict):
+            reminders = {}
+
+        day_labels: dict[str, str] = {}
+        day_label_types: dict[str, str] = {}
+        today_lunar = ""
+        today_festival = ""
+        for d in range(1, days_in_month + 1):
+            ds = str(d)
+            reminder_key = f"{month}-{d}"
+            if reminder_key in reminders:
+                text = str(reminders[reminder_key])
+                day_labels[ds] = (text[:5] + "…") if len(text) > 5 else text
+                day_label_types[ds] = "reminder"
+                continue
+            solar_fest = SOLAR_FESTIVALS.get((month, d), "")
+            solar_term = SOLAR_TERMS.get((year, month, d), "")
+            try:
+                zh = ZhDate.from_datetime(datetime(year, month, d))
+                lunar_fest = LUNAR_FESTIVALS.get((zh.lunar_month, zh.lunar_day), "")
+                lunar_name = LUNAR_DAY_NAMES[zh.lunar_day] if zh.lunar_day < len(LUNAR_DAY_NAMES) else ""
+            except (ValueError, OverflowError):
+                lunar_fest = ""
+                lunar_name = ""
+
+            if solar_fest or lunar_fest:
+                day_labels[ds] = solar_fest or lunar_fest
+                day_label_types[ds] = "festival"
+            elif solar_term:
+                day_labels[ds] = solar_term
+                day_label_types[ds] = "solar_term"
+            else:
+                day_labels[ds] = lunar_name
+                day_label_types[ds] = "lunar"
+
+            if d == day:
+                try:
+                    zh_today = ZhDate.from_datetime(now)
+                    today_lunar = f"农历{zh_today.chinese()}"
+                except (ValueError, OverflowError):
+                    today_lunar = ""
+                today_festival = solar_fest or lunar_fest or solar_term
+
+        today_key = f"{month}-{day}"
+        reminder_hint = f"今天的提醒: {reminders[today_key]}" if today_key in reminders else ""
+
+        return {
+            "calendar_title": f"{year}年{month}月",
+            "weekday_headers": ["一", "二", "三", "四", "五", "六", "日"],
+            "calendar_rows": rows,
+            "today_day": str(day),
+            "day_labels": day_labels,
+            "day_label_types": day_label_types,
+            "lunar_date": today_lunar,
+            "festival": today_festival,
+            "reminder_hint": reminder_hint,
+        }
+
+    if provider == "timetable":
+        from datetime import datetime
+        now = datetime.now()
+        config = kwargs.get("config") or {}
+        mode_settings = config.get("mode_settings", {})
+        if not isinstance(mode_settings, dict):
+            mode_settings = {}
+
+        style = str(mode_settings.get("style", "daily"))
+        periods = mode_settings.get("periods")
+        courses = mode_settings.get("courses")
+
+        if not isinstance(periods, list) or not isinstance(courses, dict):
+            style = "weekly"
+            periods = ["08:00-09:30", "10:00-11:30", "14:00-15:30", "16:00-17:30"]
+            courses = {
+                "0-0": "高等数学/A201", "0-2": "线性代数/A201",
+                "1-1": "大学英语/B305", "1-3": "体育/操场",
+                "2-0": "数据结构/C102", "2-2": "计算机网络/C102",
+                "3-1": "概率论/A201", "3-3": "毛概/D405",
+                "4-0": "操作系统/C102",
+            }
+
+        weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        wd = now.weekday()
+        current_day = wd if wd < 5 else -1
+
+        current_period = -1
+        for pi, p_label in enumerate(periods):
+            try:
+                start_part = p_label.split("-")[0].strip()
+                parts = start_part.replace("：", ":").split(":")
+                h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+                if now.hour > h or (now.hour == h and now.minute >= m):
+                    current_period = pi
+            except (ValueError, IndexError):
+                pass
+
+        weekdays_short = ["一", "二", "三", "四", "五"]
+
+        if style == "weekly":
+            grid: list[list[str]] = []
+            for pi in range(len(periods)):
+                row = []
+                for di in range(5):
+                    row.append(str(courses.get(f"{di}-{pi}", "")))
+                grid.append(row)
+            return {
+                "style": "weekly",
+                "periods": periods,
+                "grid": grid,
+                "current_day": current_day,
+                "current_period": current_period,
+                "weekdays": weekdays_short,
+                "timetable_title": f"{weekday_names[wd]} · 本周课程" if wd < 7 else "本周课程",
+            }
+
+        slots = []
+        if current_day >= 0:
+            for pi, p_label in enumerate(periods):
+                val = str(courses.get(f"{current_day}-{pi}", ""))
+                if not val:
+                    continue
+                if "/" in val:
+                    name, location = val.split("/", 1)
+                else:
+                    name, location = val, ""
+                slots.append({
+                    "time": p_label,
+                    "name": name,
+                    "location": location,
+                    "current": pi == current_period,
+                })
+        return {
+            "style": "daily",
+            "timetable_title": f"{weekday_names[wd]} · 今日课程" if wd < 7 else "今日课程",
+            "slots": slots,
+            "slot_count": len(slots),
+            "current_day": current_day,
+            "current_period": current_period,
+        }
+
     return dict(fallback)
 
 
@@ -629,9 +800,20 @@ async def _generate_composite_content(mode_def: dict, content_cfg: dict, fallbac
     
     for step in steps:
         try:
+            resolved_step = step
+            if result and step.get("type") == "llm":
+                pt = step.get("prompt_template", "")
+                if pt and "{" in pt:
+                    import re as _re
+                    def _repl(m: _re.Match, _acc=result) -> str:
+                        if m.group(1) == "context":
+                            return m.group(0)
+                        v = _acc.get(m.group(1), "")
+                        return str(v) if v else ""
+                    resolved_step = {**step, "prompt_template": _re.sub(r"\{(\w+)\}", _repl, pt)}
             step_mode_def = {
                 "mode_id": mode_def.get("mode_id", "COMPOSITE"),
-                "content": step,
+                "content": resolved_step,
             }
             part = await generate_json_mode_content(step_mode_def, **kwargs)
             if isinstance(part, dict):

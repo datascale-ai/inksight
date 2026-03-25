@@ -3,7 +3,6 @@ import { randomUUID } from "crypto";
 
 type Stored = { bytes: Uint8Array; contentType: string };
 
-// In-memory store (dev/local preview). Restarting dev server clears it.
 const store: Map<string, Stored> = (globalThis as unknown as { __inksight_uploads?: Map<string, Stored> })
   .__inksight_uploads || new Map();
 (globalThis as unknown as { __inksight_uploads?: Map<string, Stored> }).__inksight_uploads = store;
@@ -30,7 +29,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid_file", message: "only image/* is allowed" }, { status: 400 });
     }
     const buf = new Uint8Array(await file.arrayBuffer());
-    // simple size guard (10MB)
     if (buf.byteLength > 10 * 1024 * 1024) {
       return NextResponse.json({ error: "file_too_large", message: "max 10MB" }, { status: 413 });
     }
@@ -43,4 +41,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "upload_failed", message: msg }, { status: 500 });
   }
 }
-

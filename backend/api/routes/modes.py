@@ -262,6 +262,7 @@ async def custom_mode_preview(
         mode_def = dict(mode_def, mode_id="PREVIEW")
     screen_w = body.get("w", SCREEN_WIDTH)
     screen_h = body.get("h", SCREEN_HEIGHT)
+    colors = int(body.get("colors", 2))
     response_type = str(body.get("responseType", body.get("response_type", "image"))).strip().lower()
 
     # 解析 API key：优先使用用户级别配置，其次使用设备配置中的加密 key
@@ -411,6 +412,7 @@ async def custom_mode_preview(
             battery_pct=100.0,
             screen_w=screen_w,
             screen_h=screen_h,
+            colors=colors,
         )
 
         buf = io.BytesIO()

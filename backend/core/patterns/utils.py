@@ -16,6 +16,8 @@ from ..config import (
     SCREEN_HEIGHT,
     EINK_BACKGROUND,
     EINK_FOREGROUND,
+    EINK_COLOR_NAME_MAP,
+    EINK_COLOR_AVAILABILITY,
     WEATHER_ICON_MAP,
     ICON_SIZES,
     FONTS,
@@ -31,6 +33,15 @@ SCREEN_W = SCREEN_WIDTH
 SCREEN_H = SCREEN_HEIGHT
 EINK_BG = EINK_BACKGROUND
 EINK_FG = EINK_FOREGROUND
+
+
+def paste_icon_onto(target: Image.Image, icon: Image.Image, pos: tuple[int, int], fill: int = EINK_FG) -> None:
+    """Paste a 1-bit icon handling palette mode transparency."""
+    if target.mode == "P":
+        mask = icon.convert("L").point(lambda p: 255 - p)
+        target.paste(fill, pos, mask)
+    else:
+        target.paste(icon, pos)
 
 _font_warned: set[str] = set()
 _bitmap_warned: set[str] = set()
@@ -245,6 +256,7 @@ def draw_status_bar(
     time_str: str = "",
     screen_w: int = SCREEN_WIDTH,
     screen_h: int = SCREEN_HEIGHT,
+    colors: int = 2,
 ):
     """绘制顶部状态栏"""
     scale = screen_w / 400.0
@@ -296,7 +308,8 @@ def draw_status_bar(
     wx = screen_w // 2 - int(28 * scale)
     weather_icon = get_weather_icon(weather_code) if weather_code >= 0 else None
     if weather_icon:
-        img.paste(weather_icon, (wx, y - 1))
+        icon_fill = EINK_COLOR_NAME_MAP.get("red", EINK_FG) if colors >= 3 else EINK_FG
+        paste_icon_onto(img, weather_icon, (wx, y - 1), fill=icon_fill)
         draw.text((wx + int(18 * scale), y), weather_str, fill=EINK_FG, font=font_cn)
     else:
         draw.text((wx, y), weather_str, fill=EINK_FG, font=font_cn)
@@ -305,17 +318,24 @@ def draw_status_bar(
     bbox = draw.textbbox((0, 0), batt_text, font=font_en)
     batt_text_w = bbox[2] - bbox[0]
 
+    batt_fill = EINK_FG
+    available = EINK_COLOR_AVAILABILITY.get(colors, frozenset())
+    if battery_pct < 20 and "red" in available:
+        batt_fill = EINK_COLOR_NAME_MAP["red"]
+    elif battery_pct < 50 and "yellow" in available:
+        batt_fill = EINK_COLOR_NAME_MAP["yellow"]
+
     batt_box_w = int(22 * scale)
     batt_box_h = int(11 * scale)
     bx = screen_w - pad_x - batt_text_w - int(6 * scale) - batt_box_w
     by = y + 1
-    draw.rectangle([bx, by, bx + batt_box_w, by + batt_box_h], outline=EINK_FG, width=1)
-    draw.rectangle([bx + batt_box_w, by + int(3 * scale), bx + batt_box_w + int(2 * scale), by + int(8 * scale)], fill=EINK_FG)
+    draw.rectangle([bx, by, bx + batt_box_w, by + batt_box_h], outline=batt_fill, width=1)
+    draw.rectangle([bx + batt_box_w, by + int(3 * scale), bx + batt_box_w + int(2 * scale), by + int(8 * scale)], fill=batt_fill)
     fill_w = int((batt_box_w - 4) * battery_pct / 100)
     if fill_w > 0:
-        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + batt_box_h - 2], fill=EINK_FG)
+        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + batt_box_h - 2], fill=batt_fill)
 
-    draw.text((bx + batt_box_w + int(6 * scale), y), batt_text, fill=EINK_FG, font=font_en)
+    draw.text((bx + batt_box_w + int(6 * scale), y), batt_text, fill=batt_fill, font=font_en)
 
     line_y = int(screen_h * 0.11)
     if dashed:
@@ -340,6 +360,7 @@ def draw_footer(
     attr_font_size: int | None = None,
     screen_w: int = SCREEN_WIDTH,
     screen_h: int = SCREEN_HEIGHT,
+    colors: int = 2,
 ):
     """绘制底部页脚"""
     scale = screen_w / 400.0
@@ -368,7 +389,8 @@ def draw_footer(
     icon_y = y_line + int(9 * scale)
     mode_icon = get_mode_icon(mode)
     if mode_icon:
-        img.paste(mode_icon, (icon_x, icon_y))
+        icon_fill = EINK_COLOR_NAME_MAP.get("red", EINK_FG) if colors >= 3 else EINK_FG
+        paste_icon_onto(img, mode_icon, (icon_x, icon_y), fill=icon_fill)
         label_x = icon_x + int(15 * scale)
     else:
         label_x = icon_x

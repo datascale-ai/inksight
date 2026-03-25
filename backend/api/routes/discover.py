@@ -108,6 +108,7 @@ async def publish_mode(
     category = body.get("category", "").strip()
     mac = body.get("mac", "").strip().upper()
     thumbnail_base64 = body.get("thumbnail_base64")
+    colors = int(body.get("colors", 2))
 
     # 参数验证
     if not source_custom_mode_id:
@@ -280,6 +281,7 @@ async def publish_mode(
             battery_pct=100.0,
             screen_w=SCREEN_WIDTH,
             screen_h=SCREEN_HEIGHT,
+            colors=colors,
         )
 
         # 转换为 base64

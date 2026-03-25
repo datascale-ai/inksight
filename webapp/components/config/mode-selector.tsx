@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, Eye, LayoutGrid, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ColorSelect } from "@/components/ui/color-select";
 
 type ModeMeta = Record<string, { name: string; tip: string }>;
 
@@ -20,6 +21,8 @@ type ModeSelectorProps = {
   setCustomDesc: (value: string) => void;
   setCustomModeName: (value: string) => void;
   setCustomJson: (value: string) => void;
+  previewColors?: number;
+  onColorsChange?: (v: number) => void;
 };
 
 export function ModeSelector({
@@ -36,13 +39,20 @@ export function ModeSelector({
   setCustomDesc,
   setCustomModeName,
   setCustomJson,
+  previewColors,
+  onColorsChange,
 }: ModeSelectorProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LayoutGrid size={18} /> {tr("内容模式", "Content Modes")}
-        </CardTitle>
+        <div className="flex items-center gap-3">
+          <CardTitle className="flex items-center gap-2">
+            <LayoutGrid size={18} /> {tr("内容模式", "Content Modes")}
+          </CardTitle>
+          {onColorsChange && previewColors !== undefined && (
+            <ColorSelect value={previewColors} onChange={onColorsChange} tr={tr} />
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <ModeGrid

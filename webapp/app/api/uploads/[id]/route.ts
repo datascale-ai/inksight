@@ -24,4 +24,3 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     },
   });
 }
-

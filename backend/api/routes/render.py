@@ -36,7 +36,7 @@ from core.config_store import (
 )
 from core.context import extract_location_settings, get_date_context, get_weather
 from core.pipeline import generate_and_render
-from core.renderer import image_to_bmp_bytes, image_to_png_bytes, render_error
+from core.renderer import image_to_bmp_bytes, image_to_png_bytes, image_to_raw_2bpp, render_error
 from core.schemas import RenderQuery
 from core.stats_store import get_latest_heartbeat
 
@@ -99,10 +99,18 @@ async def render(
             if pushed_payload and pushed_payload.get("image"):
                 try:
                     with Image.open(io.BytesIO(pushed_payload["image"])) as pushed_img:
-                        img = pushed_img.convert("1")
+                        if params.colors >= 3 and pushed_img.mode == "P":
+                            img = pushed_img.copy()
+                        else:
+                            img = pushed_img.convert("1")
                         if img.size != (params.w, params.h):
                             img = img.resize((params.w, params.h), Image.NEAREST)
-                    bmp_bytes = image_to_bmp_bytes(img)
+                    if params.colors >= 3 and img.mode == "P":
+                        out_bytes = image_to_raw_2bpp(img)
+                        out_media = "application/octet-stream"
+                    else:
+                        out_bytes = image_to_bmp_bytes(img)
+                        out_media = "image/bmp"
                     elapsed_ms = int((time.time() - start_time) * 1000)
                     resolved_persona = pushed_payload.get("mode") or params.persona or "PUSH_PREVIEW"
                     await log_render_stats(
@@ -120,7 +128,7 @@ async def render(
                         headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)
                     if await consume_pending_refresh(mac):
                         headers["X-Pending-Refresh"] = "1"
-                    return Response(content=bmp_bytes, media_type="image/bmp", headers=headers)
+                    return Response(content=out_bytes, media_type=out_media, headers=headers)
                 except (OSError, TypeError, UnidentifiedImageError, ValueError) as exc:
                     logger.warning("[RENDER] Failed to deliver pushed preview for %s: %s", mac, exc)
 
@@ -150,7 +158,8 @@ async def render(
                                 mac, last_reconnect_regen_at=now_dt.isoformat()
                             )
                             await content_cache.force_regenerate_all(
-                                mac, cfg, params.v, params.w, params.h
+                                mac, cfg, params.v, params.w, params.h,
+                                colors=params.colors,
                             )
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
@@ -163,6 +172,7 @@ async def render(
             screen_h=params.h,
             force_next=force_next,
             skip_cache=skip_cache_for_this_render,
+            colors=params.colors,
         )
 
         if img.size != (params.w, params.h):
@@ -177,7 +187,12 @@ async def render(
             )
             img = img.resize((params.w, params.h), Image.NEAREST)
 
-        bmp_bytes = image_to_bmp_bytes(img)
+        if params.colors >= 3:
+            out_bytes = image_to_raw_2bpp(img)
+            out_media = "application/octet-stream"
+        else:
+            out_bytes = image_to_bmp_bytes(img)
+            out_media = "image/bmp"
         elapsed_ms = int((time.time() - start_time) * 1000)
         if mac:
             await log_render_stats(
@@ -203,7 +218,7 @@ async def render(
         if content_fallback:
             headers["X-Content-Fallback"] = "1"
 
-        return Response(content=bmp_bytes, media_type="image/bmp", headers=headers)
+        return Response(content=out_bytes, media_type=out_media, headers=headers)
     except (OSError, RuntimeError, TypeError, UnidentifiedImageError, ValueError) as exc:
         elapsed_ms = int((time.time() - start_time) * 1000)
         logger.error("[RENDER] Failed: %s", exc, exc_info=True)
@@ -280,6 +295,7 @@ async def preview(
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
     intent: Optional[int] = Query(default=None),
+    colors: int = Query(default=2, ge=2, le=4),
     x_device_token: Optional[str] = Header(default=None),
     x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
@@ -325,6 +341,7 @@ async def preview(
             current_user_id=current_user_id,
             user_api_key=x_inksight_llm_api_key,
             intent_only=(intent == 1),
+            colors=colors,
         )
         if intent == 1:
             from fastapi.responses import JSONResponse
@@ -407,6 +424,7 @@ async def preview_stream(
     w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600),
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
+    colors: int = Query(default=2, ge=2, le=4),
     x_device_token: Optional[str] = Header(default=None),
     x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
@@ -452,6 +470,7 @@ async def preview_stream(
                 preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
                 current_user_id=current_user_id,
                 user_api_key=x_inksight_llm_api_key,
+                colors=colors,
             )
             # 如果 API key 无效，返回错误事件
             if api_key_invalid:

@@ -139,38 +139,46 @@ static int textWidth(int charCount, int scale) {
     return charCount * (5 * scale + scale) - scale;
 }
 
+static void fillRect(int x, int y, int w, int h) {
+    int rowBytes = W / 8;
+    for (int py = y; py < y + h; py++) {
+        if (py < 0 || py >= H) continue;
+        for (int px = x; px < x + w; px++) {
+            if (px < 0 || px >= W) continue;
+            imgBuf[py * rowBytes + px / 8] &= ~(0x80 >> (px % 8));
+        }
+    }
+}
+
 // ── Show WiFi setup screen ──────────────────────────────────
 
 void showSetupScreen(const char *apName) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    // Adaptive text scale based on screen height
-    int titleScale = (H < 200) ? 2 : 3;
-    int bodyScale  = (H < 200) ? 1 : 2;
+    fillRect(0, 0, W, H * 12 / 100);
+    fillRect(W * 8 / 100, H * 28 / 100, W * 84 / 100, H * 2 / 100);
+    fillRect(W * 8 / 100, H * 72 / 100, W * 84 / 100, H * 2 / 100);
 
-    // Proportional Y positions (percentage of screen height)
-    int titleY = H * 13 / 100;
-    int line1Y = H * 37 / 100;
-    int apY    = H * 48 / 100;
-    int line3Y = H * 67 / 100;
-
-    // Title: "Setup WiFi" (centered)
-    const char *title = "Setup WiFi";
+    const char *title = "SETUP WIFI";
+    int titleScale = (H < 200) ? 2 : 4;
     int titleX = (W - textWidth(strlen(title), titleScale)) / 2;
+    int titleY = H * 15 / 100;
     drawText(title, titleX, titleY, titleScale);
 
-    // "Connect phone to" (centered)
-    const char *line1 = "Connect phone to";
+    const char *line1 = "CONNECT TO";
+    int bodyScale = (H < 200) ? 1 : 2;
     int line1X = (W - textWidth(strlen(line1), bodyScale)) / 2;
+    int line1Y = H * 36 / 100;
     drawText(line1, line1X, line1Y, bodyScale);
 
-    // AP name (centered)
-    int apX = (W - textWidth(strlen(apName), titleScale)) / 2;
-    drawText(apName, apX, apY, titleScale);
+    int apScale = (H < 200) ? 2 : 3;
+    int apX = (W - textWidth(strlen(apName), apScale)) / 2;
+    int apY = H * 46 / 100;
+    drawText(apName, apX, apY, apScale);
 
-    // "Open browser" (centered)
-    const char *line3 = "Open browser";
+    const char *line3 = "OPEN BROWSER";
     int line3X = (W - textWidth(strlen(line3), bodyScale)) / 2;
+    int line3Y = H * 62 / 100;
     drawText(line3, line3X, line3Y, bodyScale);
 
     epdDisplay(imgBuf);

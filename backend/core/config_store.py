@@ -101,11 +101,11 @@ async def init_db():
                         time_slot_rules TEXT DEFAULT '[]',
                         memo_text TEXT DEFAULT '',
                         mode_overrides TEXT DEFAULT '{}',
+                        focus_listening INTEGER DEFAULT 0,
                         is_active INTEGER DEFAULT 1,
                         created_at TEXT NOT NULL
                     )
                 """)
-                # 从旧表拷贝数据（忽略 llm_api_key / image_api_key）
                 await db.execute("""
                     INSERT INTO configs_new (
                         id, mac, nickname, modes, refresh_strategy,
@@ -113,7 +113,7 @@ async def init_db():
                         refresh_interval, llm_provider, llm_model,
                         image_provider, image_model,
                         countdown_events, time_slot_rules, memo_text,
-                        mode_overrides, is_active, created_at
+                        mode_overrides, focus_listening, is_active, created_at
                     )
                     SELECT
                         id, mac, nickname, modes, refresh_strategy,
@@ -121,7 +121,7 @@ async def init_db():
                         refresh_interval, llm_provider, llm_model,
                         image_provider, image_model,
                         countdown_events, time_slot_rules, memo_text,
-                        mode_overrides, is_active, created_at
+                        mode_overrides, 0, is_active, created_at
                     FROM configs
                 """)
                 await db.execute("DROP TABLE configs")
@@ -131,6 +131,34 @@ async def init_db():
                 logger.info("[MIGRATION] configs table migration completed")
         except Exception as e:
             logger.warning(f"[MIGRATION] Failed to migrate configs table: {e}", exc_info=True)
+            await db.rollback()
+
+        _EXPECTED_COLUMNS = {
+            "llm_provider": "TEXT DEFAULT 'deepseek'",
+            "llm_model": "TEXT DEFAULT 'deepseek-chat'",
+            "image_provider": "TEXT DEFAULT 'aliyun'",
+            "image_model": "TEXT DEFAULT 'qwen-image-max'",
+            "countdown_events": "TEXT DEFAULT '[]'",
+            "time_slot_rules": "TEXT DEFAULT '[]'",
+            "memo_text": "TEXT DEFAULT ''",
+            "mode_overrides": "TEXT DEFAULT '{}'",
+            "focus_listening": "INTEGER DEFAULT 0",
+            "latitude": "REAL",
+            "longitude": "REAL",
+            "timezone": "TEXT DEFAULT ''",
+            "admin1": "TEXT DEFAULT ''",
+            "country": "TEXT DEFAULT ''",
+        }
+        try:
+            cursor = await db.execute("PRAGMA table_info(configs)")
+            existing = {row[1] for row in await cursor.fetchall()}
+            for col, typedef in _EXPECTED_COLUMNS.items():
+                if col not in existing:
+                    await db.execute(f"ALTER TABLE configs ADD COLUMN {col} {typedef}")
+                    logger.info("[MIGRATION] Added column configs.%s", col)
+            await db.commit()
+        except Exception as e:
+            logger.warning("[MIGRATION] Failed to add missing columns: %s", e, exc_info=True)
             await db.rollback()
 
         # Device state table for persisting runtime state (cycle_index, etc.)

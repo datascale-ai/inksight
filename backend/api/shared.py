@@ -335,6 +335,7 @@ async def build_image(
     current_user_id: Optional[int] = None,
     user_api_key: Optional[str] = None,
     intent_only: bool = False,
+    colors: int = 2,
 ):
     from core.mode_registry import get_registry
 
@@ -629,7 +630,7 @@ async def build_image(
 
     if mac and config and is_mode_cacheable and not skip_cache:
         if not intent_only:
-            await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h)
+            await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h, colors=colors)
         cached_img = await content_cache.get(
             mac,
             persona,
@@ -856,6 +857,7 @@ async def build_image(
             screen_w=screen_w,
             screen_h=screen_h,
             mac=mac or "",
+            colors=colors,
         )
         if isinstance(content_data, dict):
             logger.debug(

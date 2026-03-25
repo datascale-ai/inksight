@@ -343,7 +343,10 @@ async def apply_preview_to_device(
     try:
         with Image.open(io.BytesIO(body)) as incoming:
             normalized = io.BytesIO()
-            incoming.convert("L").save(normalized, format="PNG")
+            if incoming.mode == "P":
+                incoming.save(normalized, format="PNG")
+            else:
+                incoming.convert("L").save(normalized, format="PNG")
             normalized_bytes = normalized.getvalue()
     except (UnidentifiedImageError, OSError, ValueError):
         logger.warning("[DEVICE] Invalid preview payload for %s", mac, exc_info=True)

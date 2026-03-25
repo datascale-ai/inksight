@@ -1,0 +1,88 @@
+{
+  "mode_id": "CALENDAR",
+  "display_name": "月历",
+  "icon": "calendar",
+  "cacheable": true,
+  "description": "当月日历，标注今日与节假日，四色屏显示红色今日与周末",
+  "content": {
+    "type": "composite",
+    "steps": [
+      {
+        "type": "computed",
+        "provider": "daily_meta",
+        "fallback": {
+          "year": 2026,
+          "day": 19,
+          "month_cn": "三月",
+          "weekday_cn": "周四",
+          "day_of_year": 78,
+          "days_in_year": 365
+        }
+      },
+      {
+        "type": "computed",
+        "provider": "calendar_grid",
+        "fallback": {
+          "calendar_title": "2026年3月",
+          "weekday_headers": ["一", "二", "三", "四", "五", "六", "日"],
+          "calendar_rows": [
+            ["", "", "", "", "", "", "1"],
+            ["2", "3", "4", "5", "6", "7", "8"],
+            ["9", "10", "11", "12", "13", "14", "15"],
+            ["16", "17", "18", "19", "20", "21", "22"],
+            ["23", "24", "25", "26", "27", "28", "29"],
+            ["30", "31", "", "", "", "", ""]
+          ],
+          "today_day": "19",
+          "lunar_date": "",
+          "festival": ""
+        }
+      },
+      {
+        "type": "llm",
+        "prompt_template": "今天是{context}。{reminder_hint}请用一句话(15字以内)给出今天的提醒或小知识，如果有提醒事项请优先围绕提醒事项来说。只输出文字。",
+        "output_format": "text",
+        "fallback": { "text": "日拱一卒 功不唐捐" }
+      }
+    ],
+    "fallback": {},
+    "fallback_pool": [
+      {
+        "calendar_title": "2026年3月",
+        "weekday_headers": ["一", "二", "三", "四", "五", "六", "日"],
+        "calendar_rows": [["", "", "", "", "", "", "1"], ["2", "3", "4", "5", "6", "7", "8"], ["9", "10", "11", "12", "13", "14", "15"], ["16", "17", "18", "19", "20", "21", "22"], ["23", "24", "25", "26", "27", "28", "29"], ["30", "31", "", "", "", "", ""]],
+        "today_day": "19",
+        "lunar_date": "",
+        "festival": "",
+        "text": "日拱一卒 功不唐捐"
+      }
+    ]
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body_align": "top",
+    "body": [
+      {
+        "type": "calendar_grid",
+        "font_size": 16,
+        "header_font_size": 11,
+        "sub_font_size": 8,
+        "margin_x": 10,
+        "cell_height": 30
+      },
+      { "type": "spacer", "height": 1 },
+      { "type": "separator", "style": "dashed", "margin_x": 10 },
+      {
+        "type": "text",
+        "field": "text",
+        "font_size": 13,
+        "align": "center",
+        "max_lines": 1
+      }
+    ],
+    "footer": {
+      "label": "CALENDAR",
+      "attribution_template": "— InkSight"
+    }
+  }
+}

@@ -7,6 +7,8 @@ import { DeviceInfo } from "@/components/config/device-info";
 import { LocationPicker } from "@/components/config/location-picker";
 import { ModeSelector } from "@/components/config/mode-selector";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
+import { CalendarReminders } from "@/components/config/calendar-reminders";
+import { TimetableEditor, type TimetableData } from "@/components/config/timetable-editor";
 import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
 import { Button } from "@/components/ui/button";
@@ -210,7 +212,7 @@ interface PendingPreviewConfirm {
   usageSource?: string;
 }
 
-type ParamModalType = "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar";
+type ParamModalType = "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar" | "calendar" | "timetable";
 interface ParamModalState {
   type: ParamModalType;
   mode: string;
@@ -518,6 +520,7 @@ function ConfigPageInner() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewStatusText, setPreviewStatusText] = useState("");
   const [previewMode, setPreviewMode] = useState("");
+  const [previewColors, setPreviewColors] = useState(2);
   const [previewNoCacheOnce, setPreviewNoCacheOnce] = useState(false);
   const [previewCacheHit, setPreviewCacheHit] = useState<boolean | null>(null);
   const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
@@ -543,6 +546,17 @@ function ConfigPageInner() {
   ]);
   const [userAge, setUserAge] = useState(30);
   const [lifeExpectancy, setLifeExpectancy] = useState<100 | 120>(100);
+  const [timetableData, setTimetableData] = useState<TimetableData>({
+    style: "weekly",
+    periods: ["08:00-09:30", "10:00-11:30", "14:00-15:30", "16:00-17:30"],
+    courses: {
+      "0-0": "高等数学/A201", "0-2": "线性代数/A201",
+      "1-1": "大学英语/B305", "1-3": "体育/操场",
+      "2-0": "数据结构/C102", "2-2": "计算机网络/C102",
+      "3-1": "概率论/A201", "3-3": "毛概/D405",
+      "4-0": "操作系统/C102",
+    },
+  });
   // 邀请码弹窗状态
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -791,7 +805,7 @@ function ConfigPageInner() {
 
   const requiresParamModal = useCallback((modeId: string) => {
     const m = (modeId || "").toUpperCase();
-    return m === "WEATHER" || m === "MEMO" || m === "MY_QUOTE" || m === "COUNTDOWN" || m === "HABIT" || m === "LIFEBAR";
+    return m === "WEATHER" || m === "MEMO" || m === "MY_QUOTE" || m === "COUNTDOWN" || m === "HABIT" || m === "LIFEBAR" || m === "CALENDAR" || m === "TIMETABLE";
   }, []);
 
   const openParamModal = useCallback((modeId: string, action: "preview" | "apply") => {
@@ -823,6 +837,22 @@ function ConfigPageInner() {
     }
     if (m === "LIFEBAR") {
       setParamModal({ type: "lifebar", mode: m, action });
+      return;
+    }
+    if (m === "CALENDAR") {
+      setParamModal({ type: "calendar", mode: m, action });
+      return;
+    }
+    if (m === "TIMETABLE") {
+      const existing = (modeOverrides[m] || {}) as Record<string, unknown>;
+      if (existing.periods && existing.courses) {
+        setTimetableData({
+          style: (existing.style as "daily" | "weekly") || "daily",
+          periods: existing.periods as string[],
+          courses: existing.courses as Record<string, string>,
+        });
+      }
+      setParamModal({ type: "timetable", mode: m, action });
       return;
     }
   }, [memoText, modeOverrides]);
@@ -1015,9 +1045,10 @@ function ConfigPageInner() {
       }
     }
     if (locationChanged && effectiveLocation.city) params.set("city_override", effectiveLocation.city);
+    if (previewColors > 2) params.set("colors", String(previewColors));
     if (forceFresh || locationChanged || hasModeOverride) params.set("no_cache", "1");
     return { m, params, consumeNoCacheOnce };
-  }, [config, currentLocation, mac, memoText, modeOverrides, previewMode, previewNoCacheOnce, sanitizeModeOverride]);
+  }, [config, currentLocation, mac, memoText, modeOverrides, previewColors, previewMode, previewNoCacheOnce, sanitizeModeOverride]);
 
   const ownerUsername = useMemo(
     () => deviceMembers.find((member) => member.role === "owner")?.username || "",
@@ -1405,7 +1436,7 @@ function ConfigPageInner() {
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode_def: def, mac: mac || undefined }),
+        body: JSON.stringify({ mode_def: def, mac: mac || undefined, colors: previewColors }),
       });
 
       // 额度不足：返回 402
@@ -2039,6 +2070,8 @@ function ConfigPageInner() {
                     setCustomDesc={setCustomDesc}
                     setCustomModeName={setCustomModeName}
                     setCustomJson={setCustomJson}
+                    previewColors={previewColors}
+                    onColorsChange={setPreviewColors}
                   />
 
                   <div ref={previewPanelRef}>
@@ -2834,6 +2867,10 @@ function ConfigPageInner() {
                   ? tr("倒计时设置", "Countdown Settings")
                   : paramModal.type === "habit"
                   ? tr("习惯打卡", "Habit Tracker")
+                  : paramModal.type === "calendar"
+                  ? tr("日历提醒", "Calendar Reminders")
+                  : paramModal.type === "timetable"
+                  ? tr("课程表设置", "Timetable Settings")
                   : tr("人生进度条", "Life Progress")}
               </div>
               <button className="text-ink-light hover:text-ink" onClick={() => setParamModal(null)}>
@@ -2863,6 +2900,7 @@ function ConfigPageInner() {
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <Button
+                      variant="outline"
                       onClick={() => {
                         commitModalAction(paramModal.mode, paramModal.action);
                       }}
@@ -2922,6 +2960,7 @@ function ConfigPageInner() {
                         );
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {tr("预览天气", "Preview weather")}
                     </Button>
@@ -2950,6 +2989,7 @@ function ConfigPageInner() {
                         );
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {tr("预览便签", "Preview memo")}
                     </Button>
@@ -3009,6 +3049,7 @@ function ConfigPageInner() {
                         } as ModeOverride);
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {tr("预览倒计时", "Preview Countdown")}
                     </Button>
@@ -3074,12 +3115,13 @@ function ConfigPageInner() {
                         } as ModeOverride);
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {tr("预览打卡", "Preview Habits")}
                     </Button>
                   </div>
                 </>
-              ) : (
+              ) : paramModal.type === "lifebar" ? (
                 <>
                   <div className="text-xs text-ink-light mb-3">
                     {tr("设置你的年龄和预期寿命", "Set your age and life expectancy")}
@@ -3145,12 +3187,92 @@ function ConfigPageInner() {
                         } as ModeOverride);
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {tr("预览进度", "Preview Progress")}
                     </Button>
                   </div>
                 </>
-              )}
+              ) : paramModal.type === "calendar" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr(
+                      "为日历中的特定日期添加提醒事项，提醒会显示在日期下方。",
+                      "Add reminders for specific dates. They appear below each date in the calendar.",
+                    )}
+                  </div>
+                  <CalendarReminders
+                    reminders={
+                      (getModeOverride("CALENDAR") as Record<string, unknown>)?.reminders as Record<string, string> ?? {}
+                    }
+                    onChange={(r) => {
+                      updateModeOverride("CALENDAR", {
+                        reminders: Object.keys(r).length > 0 ? r : undefined,
+                      } as Record<string, unknown>);
+                    }}
+                    tr={tr}
+                  />
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("跳过预览", "Skip Preview")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const reminders = (getModeOverride("CALENDAR") as Record<string, unknown>)?.reminders as Record<string, string> | undefined;
+                        commitModalAction(paramModal.mode, paramModal.action,
+                          reminders && Object.keys(reminders).length > 0
+                            ? { reminders } as ModeOverride
+                            : undefined,
+                        );
+                      }}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("预览日历", "Preview Calendar")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "timetable" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr(
+                      "选择课表类型并编辑课程安排，点击单元格即可修改。",
+                      "Choose timetable type and edit courses. Click any cell to modify.",
+                    )}
+                  </div>
+                  <TimetableEditor
+                    data={timetableData}
+                    onChange={setTimetableData}
+                    tr={tr}
+                  />
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("使用默认", "Use Default")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        commitModalAction(paramModal.mode, paramModal.action, {
+                          style: timetableData.style,
+                          periods: timetableData.periods,
+                          courses: timetableData.courses,
+                        } as ModeOverride);
+                      }}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {tr("预览课程表", "Preview Timetable")}
+                    </Button>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </div>

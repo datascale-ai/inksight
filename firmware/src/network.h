@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+extern bool g_userAborted;
+
 // ── Time state (updated by syncNTP / tickTime) ──────────────
 extern int curHour, curMin, curSec;
 

@@ -11,6 +11,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
 import { cleanLocationValue, type LocationValue } from "@/lib/locations";
 import { authHeaders, fetchCurrentUser } from "@/lib/auth";
+import { ColorSelect } from "@/components/ui/color-select";
+import { CalendarReminders } from "@/components/config/calendar-reminders";
+import { TimetableEditor, type TimetableData } from "@/components/config/timetable-editor";
 
 type ModeCatalogItem = {
   mode_id: string;
@@ -109,6 +112,7 @@ export default function ExperiencePage() {
   const [modesError, setModesError] = useState<string | null>(null);
   // do not preselect any mode
   const [previewMode, setPreviewMode] = useState("");
+  const [previewColors, setPreviewColors] = useState(2);
   const [previewModeNameOverride, setPreviewModeNameOverride] = useState<string | null>(null);
 
   const [city] = useState("杭州");
@@ -126,14 +130,26 @@ export default function ExperiencePage() {
   const lastObjectUrlRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
-  const [modal, setModal] = useState<null | { type: "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar"; modeId: string }>(null);
+  const [modal, setModal] = useState<null | { type: "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar" | "calendar" | "timetable"; modeId: string }>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_imageUploadLoading, setImageUploadLoading] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
   const [weatherDraftLocation, setWeatherDraftLocation] = useState<LocationValue>({ city: "杭州" });
   const [memoDraft, setMemoDraft] = useState("");
-  
+  const [calendarReminders, setCalendarReminders] = useState<Record<string, string>>({});
+  const [timetableData, setTimetableData] = useState<TimetableData>({
+    style: "weekly",
+    periods: ["08:00-09:30", "10:00-11:30", "14:00-15:30", "16:00-17:30"],
+    courses: {
+      "0-0": "高等数学/A201", "0-2": "线性代数/A201",
+      "1-1": "大学英语/B305", "1-3": "体育/操场",
+      "2-0": "数据结构/C102", "2-2": "计算机网络/C102",
+      "3-1": "概率论/A201", "3-3": "毛概/D405",
+      "4-0": "操作系统/C102",
+    },
+  });
+
   // 倒计时状态
   const [countdownName, setCountdownName] = useState("元旦");
   const [countdownDate, setCountdownDate] = useState("2027-01-01");
@@ -284,6 +300,14 @@ export default function ExperiencePage() {
         setModal({ type: "lifebar", modeId: targetMode });
         return;
       }
+      if (targetMode === "CALENDAR") {
+        setModal({ type: "calendar", modeId: targetMode });
+        return;
+      }
+      if (targetMode === "TIMETABLE") {
+        setModal({ type: "timetable", modeId: targetMode });
+        return;
+      }
     }
 
     // 普通模式预览时，清除上次 LLM 状态提示
@@ -294,6 +318,7 @@ export default function ExperiencePage() {
     try {
       const params = new URLSearchParams();
       params.set("persona", targetMode);
+      if (previewColors > 2) params.set("colors", String(previewColors));
       
       // 处理城市覆盖：优先使用 override 中的 city，否则使用全局 city
       const cityOverride = override?.city ? String(override.city) : city.trim();
@@ -309,8 +334,17 @@ export default function ExperiencePage() {
         params.set("memo_text", memoOverride);
       }
       
-      if (override && Object.keys(override).length > 0) {
-        params.set("mode_override", JSON.stringify(override));
+      const mergedOverride: Record<string, unknown> = { ...(override || {}) };
+      if (targetMode.toUpperCase() === "CALENDAR" && Object.keys(calendarReminders).length > 0) {
+        mergedOverride.reminders = calendarReminders;
+      }
+      if (targetMode.toUpperCase() === "TIMETABLE" && !override) {
+        mergedOverride.style = timetableData.style;
+        mergedOverride.periods = timetableData.periods;
+        mergedOverride.courses = timetableData.courses;
+      }
+      if (Object.keys(mergedOverride).length > 0) {
+        params.set("mode_override", JSON.stringify(mergedOverride));
       }
 
       const res = await fetch(`/api/preview?${params.toString()}`, {
@@ -422,8 +456,18 @@ export default function ExperiencePage() {
     }
     if (modeId === "MEMO") {
       setPreviewMode(modeId);
-      setMemoDraft(memoText); // 使用当前便签内容作为默认值
+      setMemoDraft(memoText);
       setModal({ type: "memo", modeId });
+      return;
+    }
+    if (modeId === "CALENDAR") {
+      setPreviewMode(modeId);
+      setModal({ type: "calendar", modeId });
+      return;
+    }
+    if (modeId === "TIMETABLE") {
+      setPreviewMode(modeId);
+      setModal({ type: "timetable", modeId });
       return;
     }
 
@@ -452,7 +496,7 @@ export default function ExperiencePage() {
       const res = await fetch("/api/modes/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode_def: def }),
+        body: JSON.stringify({ mode_def: def, colors: previewColors }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -602,7 +646,10 @@ export default function ExperiencePage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>{t(locale, "preview.panel.modes", "Modes")}</CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle>{t(locale, "preview.panel.modes", "Modes")}</CardTitle>
+                <ColorSelect value={previewColors} onChange={setPreviewColors} tr={(zh, en) => locale === "zh" ? zh : en} />
+              </div>
             </CardHeader>
             <CardContent>
               {modesError ? (
@@ -716,6 +763,15 @@ export default function ExperiencePage() {
                   </div>
                 )}
               </div>
+              {previewMode?.toUpperCase() === "CALENDAR" && (
+                <div className="px-4 pb-3">
+                  <CalendarReminders
+                    reminders={calendarReminders}
+                    onChange={setCalendarReminders}
+                    tr={(zh, en) => (locale === "zh" ? zh : en)}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -751,6 +807,10 @@ export default function ExperiencePage() {
                   ? locale === "zh" ? "倒计时设置" : "Countdown Settings"
                   : modal.type === "habit"
                   ? locale === "zh" ? "习惯打卡" : "Habit Tracker"
+                  : modal.type === "calendar"
+                  ? locale === "zh" ? "日历提醒" : "Calendar Reminders"
+                  : modal.type === "timetable"
+                  ? locale === "zh" ? "课程表设置" : "Timetable Settings"
                   : locale === "zh" ? "人生进度条" : "Life Progress"}
               </div>
               <button className="text-ink-light hover:text-ink" onClick={() => setModal(null)}>
@@ -777,6 +837,7 @@ export default function ExperiencePage() {
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                     <Button
+                      variant="outline"
                       onClick={async () => {
                         setModal(null);
                         // random generate via LLM (no override)
@@ -837,6 +898,7 @@ export default function ExperiencePage() {
                         }
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {locale === "zh" ? "预览天气" : "Preview weather"}
                     </Button>
@@ -868,6 +930,7 @@ export default function ExperiencePage() {
                         }
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {locale === "zh" ? "预览便签" : "Preview memo"}
                     </Button>
@@ -908,7 +971,7 @@ export default function ExperiencePage() {
                     <Button
                       onClick={async () => {
                         setModal(null);
-                        await handlePreview(modal.modeId);
+                        await handlePreview(modal.modeId, {});
                       }}
                       disabled={previewLoading}
                       variant="outline"
@@ -931,6 +994,7 @@ export default function ExperiencePage() {
                         });
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {locale === "zh" ? "预览倒计时" : "Preview Countdown"}
                     </Button>
@@ -1009,6 +1073,7 @@ export default function ExperiencePage() {
                         });
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {locale === "zh" ? "预览打卡" : "Preview Habits"}
                     </Button>
@@ -1086,8 +1151,87 @@ export default function ExperiencePage() {
                         });
                       }}
                       disabled={previewLoading}
+                      variant="outline"
                     >
                       {locale === "zh" ? "预览进度" : "Preview Progress"}
+                    </Button>
+                  </div>
+                </>
+              ) : modal.type === "calendar" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {locale === "zh"
+                      ? "为日历中的特定日期添加提醒事项，提醒会显示在日期下方。"
+                      : "Add reminders for specific dates. They appear below each date in the calendar."}
+                  </div>
+                  <CalendarReminders
+                    reminders={calendarReminders}
+                    onChange={setCalendarReminders}
+                    tr={(zh, en) => (locale === "zh" ? zh : en)}
+                  />
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={async () => {
+                        setModal(null);
+                        await handlePreview(modal.modeId);
+                      }}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {locale === "zh" ? "跳过预览" : "Skip Preview"}
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        setModal(null);
+                        const override: Record<string, unknown> = {};
+                        if (Object.keys(calendarReminders).length > 0) {
+                          override.reminders = calendarReminders;
+                        }
+                        await handlePreview(modal.modeId, override);
+                      }}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {locale === "zh" ? "预览日历" : "Preview Calendar"}
+                    </Button>
+                  </div>
+                </>
+              ) : modal.type === "timetable" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {locale === "zh"
+                      ? "选择课表类型并编辑课程安排，点击单元格即可修改。"
+                      : "Choose timetable type and edit courses. Click any cell to modify."}
+                  </div>
+                  <TimetableEditor
+                    data={timetableData}
+                    onChange={setTimetableData}
+                    tr={(zh, en) => (locale === "zh" ? zh : en)}
+                  />
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={async () => {
+                        setModal(null);
+                        await handlePreview(modal.modeId);
+                      }}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {locale === "zh" ? "使用默认" : "Use Default"}
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        setModal(null);
+                        await handlePreview(modal.modeId, {
+                          style: timetableData.style,
+                          periods: timetableData.periods,
+                          courses: timetableData.courses,
+                        });
+                      }}
+                      disabled={previewLoading}
+                      variant="outline"
+                    >
+                      {locale === "zh" ? "预览课程表" : "Preview Timetable"}
                     </Button>
                   </div>
                 </>

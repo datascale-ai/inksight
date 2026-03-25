@@ -12,7 +12,7 @@
 #include "portal.h"
 #include "offline_cache.h"
 
-// ── Shared framebuffer (referenced by other modules via extern) ──
+// ── Shared framebuffers (referenced by other modules via extern) ──
 uint8_t imgBuf[IMG_BUF_LEN];
 
 // ── Device state machine ────────────────────────────────────
@@ -32,6 +32,7 @@ struct DeviceContext {
 
     // Button state
     unsigned long btnPressStart = 0;
+    bool ignoreConfigButtonUntilRelease = false;
     bool liveMode = false;
     unsigned long lastLivePollAt = 0;
     unsigned long lastLiveWiFiRetryAt = 0;
@@ -65,6 +66,7 @@ static void handleLiveMode();
 static bool waitForContentReady();
 static void handleFailure(const char *reason);
 static void enterDeepSleep(int minutes);
+static void enterPortalMode();
 
 // ── LED feedback ────────────────────────────────────────────
 
@@ -105,6 +107,26 @@ static void ledFeedback(const char *pattern) {
     }
 }
 
+static void enterPortalMode() {
+    String mac = WiFi.macAddress();
+    String apName = "InkSight-" + mac.substring(mac.length() - 5);
+    apName.replace(":", "");
+
+    ctx.liveMode = false;
+    ctx.wantEnterLiveMode = false;
+    ctx.wantRefresh = false;
+    ctx.btnPressStart = 0;
+
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+
+    ledFeedback("portal");
+    showSetupScreen(apName.c_str());
+    startCaptivePortal();
+    ctx.state = DeviceState::PORTAL;
+    ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
+}
+
 // ═════════════════════════════════════════════════════════════
 // setup()
 // ═════════════════════════════════════════════════════════════
@@ -116,45 +138,32 @@ void setup() {
 
     gpioInit();
     ledInit();
-    epdInit();
-    cacheInit();
-    Serial.println("EPD ready");
 
-    loadConfig();
-
-    // Only force portal if BOOT is held for a moment (avoids RST bounce triggering portal)
     bool forcePortal = false;
     if (digitalRead(PIN_CFG_BTN) == LOW) {
         delay(400);
         forcePortal = (digitalRead(PIN_CFG_BTN) == LOW);
     }
+
+    cacheInit();
+    Serial.println("EPD ready");
+
+    loadConfig();
+
     bool hasConfig   = (cfgSSID.length() > 0);
 
     if (forcePortal || !hasConfig) {
         Serial.println(forcePortal ? "Config button held -> portal"
                                    : "No WiFi config -> portal");
-
-        String mac = WiFi.macAddress();
-        String apName = "InkSight-" + mac.substring(mac.length() - 5);
-        apName.replace(":", "");
-
-        ledFeedback("portal");
-        showSetupScreen(apName.c_str());
-        startCaptivePortal();
-        ctx.state = DeviceState::PORTAL;
+        delay(5000);
+        enterPortalMode();
         return;
     }
 
     // Check server URL is configured
     if (cfgServer.length() == 0) {
         Serial.println("No server URL configured -> portal");
-        String mac = WiFi.macAddress();
-        String apName = "InkSight-" + mac.substring(mac.length() - 5);
-        apName.replace(":", "");
-        ledFeedback("portal");
-        showSetupScreen(apName.c_str());
-        startCaptivePortal();
-        ctx.state = DeviceState::PORTAL;
+        enterPortalMode();
         return;
     }
 
@@ -164,6 +173,11 @@ void setup() {
 
     ledFeedback("connecting");
     if (!connectWiFi()) {
+        if (g_userAborted) {
+            Serial.println("User aborted during WiFi connect -> portal");
+            enterPortalMode();
+            return;
+        }
         ledFeedback("fail");
         handleFailure("WiFi failed");
         return;
@@ -176,11 +190,21 @@ void setup() {
     } else {
         focusListening = false;
     }
+    if (g_userAborted) {
+        Serial.println("User aborted during focus fetch -> portal");
+        enterPortalMode();
+        return;
+    }
 
     Serial.println("Fetching image...");
     ledFeedback("downloading");
     bool gotFallback = false;
     bool ok = fetchBMP(false, &gotFallback);
+    if (g_userAborted) {
+        Serial.println("User aborted during fetch -> portal");
+        enterPortalMode();
+        return;
+    }
     if (!ok || gotFallback) {
         if (!waitForContentReady()) {
             ledFeedback("fail");
@@ -538,9 +562,24 @@ static bool waitForContentReady() {
     for (int i = 0; i < maxRetries; i++) {
         Serial.printf("[BOOT] Content not ready, retry %d/%d\n", i + 1, maxRetries);
         showError("Generating...");
-        delay(waitMs);
+        unsigned long t0 = millis();
+        while (millis() - t0 < (unsigned long)waitMs) {
+            if (digitalRead(PIN_CFG_BTN) == LOW) {
+                delay(400);
+                if (digitalRead(PIN_CFG_BTN) == LOW) {
+                    Serial.println("[BOOT] Config button held during wait -> portal");
+                    enterPortalMode();
+                    return false;
+                }
+            }
+            delay(50);
+        }
         if (WiFi.status() != WL_CONNECTED) {
             if (!connectWiFi()) {
+                if (g_userAborted) {
+                    enterPortalMode();
+                    return false;
+                }
                 continue;
             }
         }
@@ -549,6 +588,10 @@ static bool waitForContentReady() {
         if (fetchBMP(false, &gotFallback) && !gotFallback) {
             Serial.println("[BOOT] Content is ready");
             return true;
+        }
+        if (g_userAborted) {
+            enterPortalMode();
+            return false;
         }
     }
     return false;
@@ -561,6 +604,14 @@ static bool waitForContentReady() {
 static void checkConfigButton() {
     bool isPressed = (digitalRead(PIN_CFG_BTN) == LOW);
 
+    if (ctx.ignoreConfigButtonUntilRelease) {
+        if (!isPressed) {
+            ctx.ignoreConfigButtonUntilRelease = false;
+        }
+        ctx.btnPressStart = 0;
+        return;
+    }
+
     if (isPressed) {
         if (ctx.btnPressStart == 0) {
             ctx.btnPressStart = millis();
@@ -568,9 +619,6 @@ static void checkConfigButton() {
             unsigned long holdTime = millis() - ctx.btnPressStart;
             if (holdTime >= (unsigned long)CFG_BTN_HOLD_MS) {
                 Serial.printf("Config button held for %dms, restarting...\n", CFG_BTN_HOLD_MS);
-                ledFeedback("ack");
-                showError("Restarting");
-                delay(1000);
                 ESP.restart();
             }
         }

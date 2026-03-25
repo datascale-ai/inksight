@@ -249,6 +249,7 @@ class RenderQuery(BaseModel):
     w: int = Field(default=400, ge=100, le=1600, description="Screen width in pixels")
     h: int = Field(default=300, ge=100, le=1200, description="Screen height in pixels")
     next_mode: Optional[int] = Field(default=None, alias="next", description="1 = advance to next mode")
+    colors: int = Field(default=2, ge=2, le=4, description="Device color capability (2=BW, 3=BWR, 4=BWRY)")
 
     @field_validator("mac")
     @classmethod
