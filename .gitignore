@@ -17,6 +17,7 @@ eggs/
 lib/
 !webapp/lib/
 !webapp/lib/auth.ts
+!inksight-mobile/lib/
 lib64/
 parts/
 sdist/
