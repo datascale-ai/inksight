@@ -332,6 +332,7 @@ async def build_image(
     preview_city_override: Optional[str] = None,
     preview_mode_override: Optional[dict] = None,
     preview_memo_text: Optional[str] = None,
+    preview_ui_language: Optional[str] = None,
     current_user_id: Optional[int] = None,
     user_api_key: Optional[str] = None,
     intent_only: bool = False,
@@ -618,6 +619,12 @@ async def build_image(
                 config["modeOverrides"] = mode_overrides
                 config["memo_text"] = memo_clean
                 config["memoText"] = memo_clean
+
+    # Web 配置页 / 体验页：按站点语言（中/英）预览墨水屏文案，不依赖设备「个性化-语言」保存值。
+    if preview_ui_language in ("zh", "en"):
+        config = copy.deepcopy(config or {})
+        config["mode_language"] = preview_ui_language
+        config["modeLanguage"] = preview_ui_language
 
     cache_hit = False
     quota_exhausted = False

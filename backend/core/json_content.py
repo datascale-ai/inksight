@@ -9,7 +9,9 @@ import json
 import logging
 import random
 from json import JSONDecodeError
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import os
 
@@ -33,6 +35,33 @@ if DISABLE_DEDUP:
     logger.warning("[EXP] Deduplication is DISABLED via INKSIGHT_DISABLE_DEDUP")
 
 DEDUP_MAX_RETRIES = 2
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+_UPLOAD_DIR = _BACKEND_ROOT / "runtime_uploads"
+
+
+def _resolve_uploaded_image_bytes(url: str) -> bytes | None:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    path = parsed.path or ""
+    if not path.startswith("/api/uploads/"):
+        return None
+    upload_id = path.rsplit("/", 1)[-1].strip()
+    if not upload_id:
+        return None
+    try:
+        __import__("uuid").UUID(upload_id)
+    except ValueError:
+        return None
+    file_path = _UPLOAD_DIR / f"{upload_id}.bin"
+    if not file_path.exists() or not file_path.is_file():
+        return None
+    try:
+        return file_path.read_bytes()
+    except OSError:
+        return None
 
 def _collect_image_fields(blocks: list, fields: set):
     """Recursively collect image field names from layout blocks."""
@@ -59,6 +88,10 @@ async def _prefetch_images(content: dict, mode_def: dict) -> dict:
         for field_name in image_fields:
             url = content.get(field_name)
             if url and isinstance(url, str) and url.startswith("http"):
+                local_bytes = _resolve_uploaded_image_bytes(url)
+                if local_bytes:
+                    content[f"_prefetched_{field_name}"] = local_bytes
+                    continue
                 try:
                     resp = await client.get(url)
                     if resp.status_code < 400:

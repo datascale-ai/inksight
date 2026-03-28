@@ -7,7 +7,9 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from PIL import Image, ImageDraw, UnidentifiedImageError
@@ -32,6 +34,9 @@ from .patterns.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+_UPLOAD_DIR = _BACKEND_ROOT / "runtime_uploads"
 
 STATUS_BAR_BOTTOM_DEFAULT = 36  # Used when screen_h unknown (e.g. dataclass default)
 
@@ -1081,11 +1086,27 @@ def _render_icon_list(ctx: RenderContext, block: dict) -> None:
 
 
 def _resolve_local_asset(url: str) -> str | None:
-    """Resolve /webconfig/... URLs to local filesystem paths."""
+    """Resolve known local URLs to local filesystem paths."""
     if url.startswith("/webconfig/"):
-        from pathlib import Path
         project_root = Path(__file__).resolve().parent.parent.parent
         local = project_root / "webconfig" / url[len("/webconfig/"):]
+        if local.exists() and local.is_file():
+            return str(local)
+        return None
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    path = parsed.path or ""
+    if path.startswith("/api/uploads/"):
+        upload_id = path.rsplit("/", 1)[-1].strip()
+        if not upload_id:
+            return None
+        try:
+            __import__("uuid").UUID(upload_id)
+        except ValueError:
+            return None
+        local = _UPLOAD_DIR / f"{upload_id}.bin"
         if local.exists() and local.is_file():
             return str(local)
     return None

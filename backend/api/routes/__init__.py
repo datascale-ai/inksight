@@ -9,6 +9,7 @@ from .modes import router as modes_router
 from .pages import router as pages_router
 from .render import router as render_router
 from .stats import router as stats_router
+from .uploads import router as uploads_router
 from .user import router as user_router
 
 api_routers = [
@@ -23,6 +24,7 @@ api_routers = [
     firmware_router,
     discover_router,
     locations_router,
+    uploads_router,
 ]
 
 page_routers = [pages_router]
