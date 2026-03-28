@@ -255,7 +255,6 @@ def _preview_payload(content: dict) -> dict:
 async def custom_mode_preview(
     body: dict,
     user_id: int = Depends(optional_user),
-    admin_auth: None = Depends(require_admin),
 ):
     mode_def = body.get("mode_def", body)
     if not mode_def.get("mode_id"):

@@ -4,14 +4,26 @@ export type TodayItem = {
   mode_id: string;
   display_name: string;
   icon: string;
+  title?: string;
   summary: string;
   content: Record<string, unknown>;
   preview_url: string;
   image_url: string;
+  recommendation_reason?: string;
+};
+
+export type TodayHeaderMeta = {
+  date_label: string;
+  weather_summary: string;
+  season_label: string;
+  daily_keyword: string;
 };
 
 export type TodayPayload = {
   generated_at: string;
+  header_meta?: TodayHeaderMeta;
+  hero_item?: TodayItem | null;
+  secondary_items?: TodayItem[];
   items: TodayItem[];
   date?: Record<string, unknown>;
   weather?: {

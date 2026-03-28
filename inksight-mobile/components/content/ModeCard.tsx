@@ -121,7 +121,7 @@ function WeatherBody({ content }: { content: Record<string, unknown> }) {
       {forecast.length > 0 ? (
         <View style={styles.forecastRow}>
           {forecast.map((f, i) => (
-            <View key={i} style={styles.forecastItem}>
+            <View key={i} style={[styles.forecastItem, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}>
               <InkText dimmed style={styles.forecastDay}>{f.day}</InkText>
               <InkText style={styles.forecastTemp}>{f.temp_range}</InkText>
               <InkText dimmed style={styles.forecastDesc}>{f.desc}</InkText>
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   forecastDay: { fontSize: 12, fontWeight: '600' },
   forecastTemp: { fontSize: 13 },
-  forecastDesc: { fontSize: 12 },
+  forecastDesc: { fontSize: 12, maxWidth: 60 },
   sunRow: { flexDirection: 'row', gap: theme.spacing.lg },
   sunItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   sunText: { fontSize: 12 },

@@ -2,9 +2,12 @@ import { ThemeProvider, DefaultTheme } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect, useLayoutEffect } from 'react';
 import { useFonts } from 'expo-font';
+import { View } from 'react-native';
 import 'react-native-reanimated';
+
 import { I18nProvider, useI18n } from '@/lib/i18n';
 import { useAuthStore } from '@/features/auth/store';
 import { ensureLocalNotificationHandler } from '@/features/notifications/local';
@@ -27,6 +30,13 @@ export default function RootLayout() {
     SpaceMono: require('@/assets/fonts/SpaceMono-Regular.ttf'),
   });
   const bootstrap = useAuthStore((state) => state.bootstrap);
+
+  // Defer until native Activity is attached — module-level preventAutoHideAsync()
+  // can reject on Android Expo Go: "ExpoKeepAwake.activate ... activity is no longer available".
+  useLayoutEffect(() => {
+    void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     bootstrap();
     ensureLocalNotificationHandler();
@@ -46,8 +56,14 @@ export default function RootLayout() {
 function RootShell() {
   const { t, ready } = useI18n();
 
+  useEffect(() => {
+    if (ready) {
+      void SplashScreen.hideAsync();
+    }
+  }, [ready]);
+
   if (!ready) {
-    return null;
+    return <View style={{ flex: 1, backgroundColor: theme.colors.background }} />;
   }
 
   return (
@@ -76,7 +92,6 @@ function RootShell() {
               <Stack.Screen name="browse/modes" options={{ title: t('nav.modeCatalog') }} />
               <Stack.Screen name="browse/[id]" options={{ title: t('nav.detail') }} />
               <Stack.Screen name="create/generate" options={{ title: t('nav.aiGenerate') }} />
-              <Stack.Screen name="create/editor" options={{ title: t('nav.modeEditor') }} />
               <Stack.Screen name="device/[mac]" options={{ title: t('nav.deviceDetail') }} />
               <Stack.Screen name="device/[mac]/config" options={{ title: t('nav.deviceConfig') }} />
               <Stack.Screen name="device/[mac]/members" options={{ title: t('nav.deviceMembers') }} />

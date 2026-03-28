@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Alert, StyleSheet, TextInput } from 'react-native';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkButton } from '@/components/ui/InkButton';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
 import { useAuthStore } from '@/features/auth/store';
-import { getBleAvailability, scanProvisionDevices } from '@/features/device/ble';
 import { claimDevice } from '@/features/device/api';
 import { useI18n } from '@/lib/i18n';
 import { theme } from '@/lib/theme';
@@ -16,18 +15,9 @@ export default function ProvisionScreen() {
   const { t } = useI18n();
   const token = useAuthStore((state) => state.token);
   const [pairCode, setPairCode] = useState('');
-  const [claimToken, setClaimToken] = useState('');
-  const bleAvailabilityQuery = useQuery({
-    queryKey: ['ble-availability'],
-    queryFn: getBleAvailability,
-  });
-  const bleScanQuery = useQuery({
-    queryKey: ['ble-provision-devices'],
-    queryFn: scanProvisionDevices,
-    enabled: false,
-  });
+  const [mac, setMac] = useState('');
   const mutation = useMutation({
-    mutationFn: async () => claimDevice(token || '', { pair_code: pairCode.trim(), token: claimToken.trim() }),
+    mutationFn: async () => claimDevice(token || '', { pair_code: pairCode.trim() }),
     onSuccess: (result) => {
       Alert.alert(t('device.provisionSuccessTitle'), t('device.provisionSuccess', { mac: result.mac || '-' }));
       router.replace('/(tabs)/device');
@@ -44,35 +34,30 @@ export default function ProvisionScreen() {
         <InkText style={{ fontWeight: '600', fontSize: 16 }}>{t('device.provisionGuide')}</InkText>
         <InkText dimmed style={{ marginTop: 8 }}>{t('device.provisionStep1')}</InkText>
         <InkText dimmed>{t('device.provisionStep2')}</InkText>
-        <InkText dimmed>{t('device.provisionStep3')}</InkText>
-        <InkText dimmed>{t('device.provisionStep4')}</InkText>
-        <InkText dimmed style={{ marginTop: 12 }}>
-          {bleAvailabilityQuery.data?.supported ? t('device.provisionBleSupported') : t('device.provisionBleUnsupported')}
-        </InkText>
-        <InkButton
-          label={bleScanQuery.isFetching ? t('common.loading') : t('device.provisionScan')}
-          block
-          variant="secondary"
-          onPress={() => bleScanQuery.refetch()}
-          style={styles.scanButton}
-        />
-        {bleScanQuery.data?.map((device) => (
-          <InkText key={device.id} dimmed style={styles.scanResult}>
-            {device.name} · RSSI {device.rssi}
-          </InkText>
-        ))}
       </InkCard>
 
       <InkCard>
         <InkText style={styles.label}>{t('device.provisionPairCode')}</InkText>
         <TextInput value={pairCode} onChangeText={setPairCode} placeholder={t('device.provisionPairCode')} style={styles.input} autoCapitalize="characters" />
-        <InkText style={styles.label}>{t('device.provisionClaimToken')}</InkText>
-        <TextInput value={claimToken} onChangeText={setClaimToken} placeholder={t('device.provisionClaimToken')} style={styles.input} autoCapitalize="none" />
+        <InkText style={styles.label}>{t('device.provisionMacOptional')}</InkText>
+        <TextInput value={mac} onChangeText={setMac} placeholder={t('device.provisionMacOptional')} style={styles.input} autoCapitalize="characters" />
         <InkButton
           label={mutation.isPending ? t('common.loading') : t('device.provisionSubmit')}
           block
           onPress={() => mutation.mutate()}
-          disabled={!token || (!pairCode.trim() && !claimToken.trim()) || mutation.isPending}
+          disabled={!token || !pairCode.trim() || mutation.isPending}
+        />
+        <InkButton
+          label={t('device.provisionOpenByMac')}
+          block
+          variant="secondary"
+          onPress={() => {
+            const value = mac.trim().toUpperCase();
+            if (!value) return;
+            router.push(`/device/${encodeURIComponent(value)}`);
+          }}
+          disabled={!mac.trim()}
+          style={{ marginTop: 12 }}
         />
       </InkCard>
     </AppScreen>
@@ -91,11 +76,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 14,
     color: theme.colors.ink,
-  },
-  scanButton: {
-    marginTop: 12,
-  },
-  scanResult: {
-    marginTop: 10,
   },
 });

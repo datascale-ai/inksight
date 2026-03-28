@@ -500,7 +500,7 @@ class TestLlmPrecheckBehavior:
         monkeypatch.setattr("api.routes.modes.get_user_role", fake_get_role)
 
         # 依赖中的 admin_auth 直接传 None 即可
-        resp = await custom_mode_preview(body, user_id=user_id, admin_auth=None)
+        resp = await custom_mode_preview(body, user_id=user_id)
 
         assert isinstance(resp, JSONResponse)
         assert resp.status_code == 402

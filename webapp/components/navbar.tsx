@@ -43,7 +43,6 @@ export function Navbar() {
   }, [pathname, refreshUser]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
 

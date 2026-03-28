@@ -5,30 +5,56 @@ import { useQuery } from '@tanstack/react-query';
 import { Clock, Heart, Layers } from 'lucide-react-native';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
-import { InkText } from '@/components/ui/InkText';
+import { InkChip } from '@/components/ui/InkChip';
 import { InkEmptyState } from '@/components/ui/InkEmptyState';
+import { InkText } from '@/components/ui/InkText';
 import { ModeIcon } from '@/components/content/ModeIcon';
 import { theme } from '@/lib/theme';
 import { useAuthStore } from '@/features/auth/store';
+import { getTodayContent } from '@/features/content/api';
 import { getLocalFavorites, getLocalHistory } from '@/features/content/storage';
 import { listUserDevices, getDeviceFavorites, getDeviceHistory } from '@/features/device/api';
 import { listModes } from '@/features/modes/api';
 import { useI18n } from '@/lib/i18n';
+import { localizeCatalogMode } from '@/lib/mode-display';
 import { lightImpact, successFeedback } from '@/features/feedback/haptics';
 
-const segments = ['history', 'favorites', 'modes'] as const;
+const segments = ['recommended', 'history', 'favorites', 'modes'] as const;
+
+function tf(t: (key: string, vars?: Record<string, string | number>) => string, key: string, fallback: string, vars?: Record<string, string | number>) {
+  const resolved = t(key, vars);
+  return resolved === key ? fallback : resolved;
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <InkText style={styles.sectionTitle}>{title}</InkText>
+      {subtitle ? <InkText dimmed style={styles.sectionSubtitle}>{subtitle}</InkText> : null}
+    </View>
+  );
+}
 
 export default function BrowseScreen() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { width: screenWidth } = useWindowDimensions();
-  const COLUMNS = 3;
-  const GAP = 10;
+  const GAP = 12;
   const PADDING = theme.spacing.lg;
-  const modeCardWidth = (screenWidth - PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
-  const [segment, setSegment] = useState<(typeof segments)[number]>('history');
+  const cardWidth = (screenWidth - PADDING * 2 - GAP) / 2;
+  const [segment, setSegment] = useState<(typeof segments)[number]>('recommended');
   const [localFavorites, setLocalFavorites] = useState<Awaited<ReturnType<typeof getLocalFavorites>>>([]);
   const [localHistory, setLocalHistory] = useState<Awaited<ReturnType<typeof getLocalHistory>>>([]);
   const token = useAuthStore((state) => state.token);
+
+  const todayQuery = useQuery({
+    queryKey: ['browse-recommended-today'],
+    queryFn: () => getTodayContent(['DAILY', 'POETRY', 'WEATHER']),
+    staleTime: 10 * 60 * 1000,
+  });
+  const modesQuery = useQuery({
+    queryKey: ['mode-catalog'],
+    queryFn: listModes,
+  });
   const devicesQuery = useQuery({
     queryKey: ['browse-devices', token],
     queryFn: () => listUserDevices(token || ''),
@@ -36,10 +62,6 @@ export default function BrowseScreen() {
   });
   const activeMac = devicesQuery.data?.devices?.[0]?.mac;
 
-  const modesQuery = useQuery({
-    queryKey: ['mode-catalog'],
-    queryFn: listModes,
-  });
   const historyQuery = useQuery({
     queryKey: ['device-history', activeMac, token],
     queryFn: () => getDeviceHistory(activeMac || '', token || ''),
@@ -58,28 +80,7 @@ export default function BrowseScreen() {
     getLocalHistory().then(setLocalHistory);
   }, [segment]);
 
-  const items = useMemo(() => {
-    if (segment === 'modes') {
-      return (modesQuery.data?.modes || []).map((item) => ({
-        title: item.mode_id,
-        summary: item.description || item.display_name,
-        time: item.source === 'custom' ? 'custom' : 'builtin',
-      }));
-    }
-    if (segment === 'favorites') {
-      if (!token) {
-        return localFavorites.map((item) => ({
-          title: item.display_name,
-          summary: item.summary,
-          time: item.saved_at,
-        }));
-      }
-      return (favoritesQuery.data?.favorites || []).map((item) => ({
-        title: item.mode_id,
-        summary: String(item.content?.text || item.content?.quote || item.content?.summary || 'favorited content'),
-        time: item.time,
-      }));
-    }
+  const historyItems = useMemo(() => {
     if (!token) {
       return localHistory.map((item) => ({
         title: item.display_name,
@@ -92,13 +93,57 @@ export default function BrowseScreen() {
       summary: String(item.content?.text || item.content?.quote || item.content?.summary || 'history content'),
       time: item.time,
     }));
-  }, [segment, token, modesQuery.data, favoritesQuery.data, historyQuery.data, localFavorites, localHistory]);
+  }, [token, localHistory, historyQuery.data]);
 
-  const isRefreshing = modesQuery.isRefetching || historyQuery.isRefetching || favoritesQuery.isRefetching;
+  const favoriteItems = useMemo(() => {
+    if (!token) {
+      return localFavorites.map((item) => ({
+        title: item.display_name,
+        summary: item.summary,
+        time: item.saved_at,
+      }));
+    }
+    return (favoritesQuery.data?.favorites || []).map((item) => ({
+      title: item.mode_id,
+      summary: String(item.content?.text || item.content?.quote || item.content?.summary || tf(t, 'browse.favoriteFallback', 'favorited content')),
+      time: item.time,
+    }));
+  }, [token, localFavorites, favoritesQuery.data, t]);
+
+  const modeItems = modesQuery.data?.modes || [];
+  const featuredModes = modeItems.slice(0, 6);
+  const customModes = modeItems.filter((mode) => mode.source === 'custom').slice(0, 4);
+  const recommendedItems = todayQuery.data?.items || [];
+
+  function modeDisplayName(modeId: string) {
+    return localizeCatalogMode({ mode_id: modeId, display_name: modeId, description: '' }, locale).display_name;
+  }
+
+  function localizeMode(mode: { mode_id: string; display_name: string; description: string }) {
+    return localizeCatalogMode(mode, locale);
+  }
+
+  function localizedTitle(mode: { mode_id: string; display_name: string; description: string }) {
+    const l = localizeCatalogMode(mode, locale);
+    return encodeURIComponent(l.display_name);
+  }
+
+  function localizedSummary(mode: { mode_id: string; display_name: string; description: string }) {
+    const l = localizeCatalogMode(mode, locale);
+    return encodeURIComponent(l.description || l.display_name);
+  }
+
+  const isRefreshing =
+    todayQuery.isRefetching ||
+    modesQuery.isRefetching ||
+    historyQuery.isRefetching ||
+    favoritesQuery.isRefetching;
 
   const handleRefresh = useCallback(async () => {
     await lightImpact();
-    if (segment === 'modes') {
+    if (segment === 'recommended') {
+      await Promise.all([todayQuery.refetch(), modesQuery.refetch()]);
+    } else if (segment === 'modes') {
       await modesQuery.refetch();
     } else if (segment === 'favorites') {
       if (token) await favoritesQuery.refetch();
@@ -108,70 +153,173 @@ export default function BrowseScreen() {
       else getLocalHistory().then(setLocalHistory);
     }
     await successFeedback();
-  }, [segment, token, modesQuery, favoritesQuery, historyQuery]);
+  }, [segment, token, todayQuery, modesQuery, favoritesQuery, historyQuery]);
 
   return (
     <AppScreen
-      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.colors.ink} />}
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.colors.accent} />}
       header={
         <View>
-          <InkText serif style={styles.title}>{t('browse.title')}</InkText>
-          <InkText dimmed style={styles.subtitle}>{t('browse.subtitle')}</InkText>
+          <InkText serif style={styles.title}>{tf(t, 'browse.title', 'Browse')}</InkText>
+          <InkText dimmed style={styles.subtitle}>{tf(t, 'browse.subtitle', 'Discover modes, history, favorites, and recommended content.')}</InkText>
         </View>
       }
     >
-
       <View style={styles.segmentWrap}>
         {segments.map((item) => {
           const selected = item === segment;
           return (
-            <Pressable key={item} onPress={() => setSegment(item)} style={[styles.segmentButton, selected ? styles.segmentSelected : null]}>
-              <InkText style={selected ? styles.segmentTextSelected : styles.segmentText}>{t(`browse.segment.${item}`)}</InkText>
+            <Pressable
+              key={item}
+              onPress={() => setSegment(item)}
+              style={[styles.segmentButton, selected ? styles.segmentSelected : null]}
+            >
+              <InkText style={selected ? styles.segmentTextSelected : styles.segmentText}>
+                {item === 'recommended'
+                  ? tf(t, 'browse.segment.recommended', 'Recommended')
+                  : tf(t, `browse.segment.${item}`, item)}
+              </InkText>
             </Pressable>
           );
         })}
       </View>
 
+      {segment === 'recommended' ? (
+        <>
+          <View style={styles.sectionBlock}>
+            <SectionHeader
+              title={tf(t, 'browse.section.today', 'Today suggestions')}
+              subtitle={tf(t, 'browse.section.todayDesc', 'The current mobile today feed, repacked as a richer browse entry.')}
+            />
+            {recommendedItems.map((item) => (
+              <Pressable
+                key={`recommended-${item.mode_id}`}
+                onPress={() =>
+                  router.push(
+                    `/browse/${encodeURIComponent(item.mode_id)}?kind=content&segment=${encodeURIComponent('recommended')}&title=${encodeURIComponent(localizeCatalogMode({ mode_id: item.mode_id, display_name: item.display_name, description: '' }, locale).display_name)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(todayQuery.data?.generated_at || '')}`,
+                  )
+                }
+              >
+                <InkCard style={styles.editorialCard}>
+                  <View style={styles.editorialTop}>
+                    <View style={styles.editorialTitleRow}>
+                      <View style={styles.modeIconWrap}>
+                        <ModeIcon modeId={item.mode_id} color={theme.colors.brandInk} />
+                      </View>
+                      <View style={styles.editorialText}>
+                        <InkText style={styles.editorialTitle}>{localizeCatalogMode({ mode_id: item.mode_id, display_name: item.display_name, description: '' }, locale).display_name}</InkText>
+                        <InkText dimmed style={styles.editorialDesc}>{item.summary}</InkText>
+                      </View>
+                    </View>
+                    <InkChip label={item.mode_id} active />
+                  </View>
+                </InkCard>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.sectionBlock}>
+            <SectionHeader
+              title={tf(t, 'browse.featuredModes', 'Featured modes')}
+              subtitle={tf(t, 'browse.featuredModesDesc', 'Pulled from the current mode catalog endpoint.')}
+            />
+            <View style={styles.grid}>
+              {featuredModes.map((mode) => (
+                <Pressable
+                  key={`featured-${mode.mode_id}`}
+                  style={{ width: cardWidth }}
+                  onPress={() =>
+                    router.push(
+                      `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
+                    )
+                  }
+                >
+                  <InkCard style={styles.modeCard}>
+                    <View style={styles.modeIconWrap}>
+                      <ModeIcon modeId={mode.mode_id} />
+                    </View>
+                    <InkText style={styles.modeTitle}>{localizeMode(mode).display_name}</InkText>
+                    <InkText dimmed style={styles.modeSummary}>{localizeMode(mode).description || mode.mode_id}</InkText>
+                  </InkCard>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {customModes.length > 0 ? (
+            <View style={styles.sectionBlock}>
+              <SectionHeader
+                title={tf(t, 'browse.customModes', 'Custom modes')}
+                subtitle={tf(t, 'browse.customModesDesc', 'Saved or generated modes from the current account/device scope.')}
+              />
+              {customModes.map((mode) => (
+                <Pressable
+                  key={`custom-${mode.mode_id}`}
+                  onPress={() =>
+                    router.push(
+                      `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
+                    )
+                  }
+                >
+                  <InkCard style={styles.editorialCard}>
+                    <View style={styles.editorialTop}>
+                      <View style={styles.editorialTitleRow}>
+                        <View style={styles.modeIconWrap}>
+                          <ModeIcon modeId={mode.mode_id} color={theme.colors.brandInk} />
+                        </View>
+                        <View style={styles.editorialText}>
+                          <InkText style={styles.editorialTitle}>{localizeMode(mode).display_name}</InkText>
+                          <InkText dimmed style={styles.editorialDesc}>{localizeMode(mode).description || mode.mode_id}</InkText>
+                        </View>
+                      </View>
+                      <InkChip label={tf(t, 'browse.customBadge', 'Custom')} />
+                    </View>
+                  </InkCard>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
       {segment === 'modes' ? (
         <View style={styles.grid}>
-          {items.length === 0 ? (
-            <InkEmptyState icon={Layers} title={t('browse.emptyModes')} subtitle={t('browse.emptyModesDesc')} />
+          {modeItems.length === 0 ? (
+            <InkEmptyState icon={Layers} title={tf(t, 'browse.emptyModes', 'No modes yet')} subtitle={tf(t, 'browse.emptyModesDesc', 'Wait for the mode catalog to load.')} />
           ) : null}
-          {items.map((item) => (
+          {modeItems.map((mode) => (
             <Pressable
-              key={item.title}
-              style={{ width: modeCardWidth }}
+              key={mode.mode_id}
+              style={{ width: cardWidth }}
               onPress={() =>
                 router.push(
-                  `/browse/${encodeURIComponent(item.title)}?kind=mode&title=${encodeURIComponent(item.title)}&summary=${encodeURIComponent(item.summary)}`,
+                  `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
                 )
               }
             >
               <InkCard style={styles.modeCard}>
-                <View style={styles.modeIcon}>
-                  <ModeIcon modeId={item.title} />
+                <View style={styles.modeIconWrap}>
+                  <ModeIcon modeId={mode.mode_id} />
                 </View>
-                <InkText style={styles.modeTitle}>{item.title}</InkText>
-                <InkText dimmed style={styles.modeSummary}>{item.summary}</InkText>
+                <InkText style={styles.modeTitle}>{localizeMode(mode).display_name}</InkText>
+                <InkText dimmed style={styles.modeSummary}>{localizeMode(mode).description || mode.mode_id}</InkText>
               </InkCard>
             </Pressable>
           ))}
         </View>
-      ) : (
+      ) : null}
+
+      {segment === 'history' ? (
         <View style={styles.list}>
           {!token ? (
             <InkCard>
-              <InkText dimmed>{t('browse.localFallback')}</InkText>
+              <InkText dimmed>{tf(t, 'browse.localFallback', 'When not signed in, this area shows local cached history and favorites.')}</InkText>
             </InkCard>
           ) : null}
-          {items.length === 0 ? (
-            <InkEmptyState
-              icon={segment === 'favorites' ? Heart : Clock}
-              title={t(segment === 'favorites' ? 'browse.emptyFavorites' : 'browse.emptyHistory')}
-              subtitle={t(segment === 'favorites' ? 'browse.emptyFavoritesDesc' : 'browse.emptyHistoryDesc')}
-            />
+          {historyItems.length === 0 ? (
+            <InkEmptyState icon={Clock} title={tf(t, 'browse.emptyHistory', 'No history yet')} subtitle={tf(t, 'browse.emptyHistoryDesc', 'Cards you open will appear here.')} />
           ) : null}
-          {items.map((item) => (
+          {historyItems.map((item) => (
             <Pressable
               key={`${segment}-${item.title}-${item.time}`}
               onPress={() =>
@@ -188,13 +336,42 @@ export default function BrowseScreen() {
             </Pressable>
           ))}
         </View>
-      )}
+      ) : null}
+
+      {segment === 'favorites' ? (
+        <View style={styles.list}>
+          {!token ? (
+            <InkCard>
+              <InkText dimmed>{tf(t, 'browse.localFallback', 'When not signed in, this area shows local cached history and favorites.')}</InkText>
+            </InkCard>
+          ) : null}
+          {favoriteItems.length === 0 ? (
+            <InkEmptyState icon={Heart} title={tf(t, 'browse.emptyFavorites', 'No favorites yet')} subtitle={tf(t, 'browse.emptyFavoritesDesc', 'Long press a card on Today to save it.')} />
+          ) : null}
+          {favoriteItems.map((item) => (
+            <Pressable
+              key={`${item.title}-${item.time}`}
+              onPress={() =>
+                router.push(
+                  `/browse/${encodeURIComponent(item.title)}?kind=content&segment=${encodeURIComponent('favorites')}&title=${encodeURIComponent(item.title)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(item.time)}`,
+                )
+              }
+            >
+              <InkCard style={styles.listCard}>
+                <InkText style={styles.listTitle}>{item.title}</InkText>
+                <InkText dimmed style={styles.listSummary}>{item.summary}</InkText>
+                <InkText dimmed style={styles.listTime}>{item.time}</InkText>
+              </InkCard>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <InkCard>
-        <InkText style={styles.listTitle}>{t('browse.moreModes')}</InkText>
-        <InkText dimmed style={styles.listSummary}>{t('browse.moreModesDesc')}</InkText>
+        <InkText style={styles.listTitle}>{tf(t, 'browse.moreModes', 'More modes')}</InkText>
+        <InkText dimmed style={styles.listSummary}>{tf(t, 'browse.moreModesDesc', 'Open the full catalog to inspect builtin and custom modes.')}</InkText>
         <Pressable onPress={() => router.push('/browse/modes')}>
-          <InkText style={styles.catalogLink}>{t('browse.moreModesLink')}</InkText>
+          <InkText style={styles.catalogLink}>{tf(t, 'browse.moreModesLink', 'Open full catalog')}</InkText>
         </Pressable>
       </InkCard>
     </AppScreen>
@@ -203,7 +380,7 @@ export default function BrowseScreen() {
 
 const styles = StyleSheet.create({
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '600',
   },
   subtitle: {
@@ -211,15 +388,20 @@ const styles = StyleSheet.create({
   },
   segmentWrap: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.border,
-    borderRadius: 14,
+    flexWrap: 'wrap',
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
     padding: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 4,
   },
   segmentButton: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     borderRadius: 12,
     paddingVertical: 10,
+    paddingHorizontal: 8,
   },
   segmentSelected: {
     backgroundColor: theme.colors.card,
@@ -229,49 +411,90 @@ const styles = StyleSheet.create({
   },
   segmentTextSelected: {
     fontWeight: '600',
+    color: theme.colors.brandInk,
+  },
+  sectionBlock: {
+    gap: 10,
+  },
+  sectionHeader: {
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  sectionSubtitle: {
+    lineHeight: 20,
+  },
+  editorialCard: {
+    backgroundColor: theme.colors.surface,
+  },
+  editorialTop: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  editorialTitleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    flex: 1,
+  },
+  editorialText: {
+    flex: 1,
+  },
+  editorialTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  editorialDesc: {
+    marginTop: 4,
+    lineHeight: 20,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   modeCard: {
     width: '100%',
-    alignItems: 'center',
-    paddingHorizontal: 6,
+    minHeight: 166,
   },
-  modeIcon: {
+  modeIconWrap: {
     width: 42,
     height: 42,
+    borderRadius: theme.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 999,
     backgroundColor: theme.colors.surface,
   },
   modeTitle: {
-    marginTop: 10,
-    fontSize: 12,
+    marginTop: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   modeSummary: {
-    marginTop: 4,
-    fontSize: 11,
-    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+    fontSize: 13,
   },
   list: {
     gap: 12,
   },
   listCard: {
-    gap: 6,
+    backgroundColor: theme.colors.surface,
   },
   listTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   listSummary: {
+    marginTop: 8,
     lineHeight: 22,
   },
   listTime: {
+    marginTop: 10,
     fontSize: 12,
   },
   catalogLink: {

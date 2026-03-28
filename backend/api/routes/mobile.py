@@ -62,10 +62,24 @@ def _pick_summary(content: dict) -> str:
         "daily_word",
         "event_title",
         "advice",
+        "note",
+        "title",
     ):
         text = _first_text(content.get(key))
         if text:
+            # For poetry: prefer "title — author" when only title matches,
+            # otherwise show title or first poem line (truncated at 120 chars).
+            if key == "title" and content.get("author"):
+                author = _first_text(content.get("author"))
+                if author:
+                    return f"{text} — {author}"
             return text[:120]
+    # Poetry stores lines as a list; fall back to first line.
+    lines = content.get("lines")
+    if isinstance(lines, list) and lines:
+        first = _first_text(lines[0])
+        if first:
+            return first[:120]
     return ""
 
 

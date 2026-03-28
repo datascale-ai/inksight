@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,7 +53,7 @@ export default function DiscoverPage() {
   const pathname = usePathname();
   const locale = localeFromPathname(pathname || "/");
   const isEn = locale === "en";
-  const tr = (zh: string, en: string) => (isEn ? en : zh);
+  const tr = useMemo(() => (zh: string, en: string) => (isEn ? en : zh), [isEn]);
   const [selectedCategory, setSelectedCategory] = useState("全部");
   const [searchQuery, setSearchQuery] = useState("");
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -93,10 +93,10 @@ export default function DiscoverPage() {
   }>({ open: false, modeId: null });
 
   // 获取模式列表
-  const fetchModes = async (category: string) => {
+  const fetchModes = useCallback(async (category: string) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const params = new URLSearchParams();
       if (category && category !== "全部") {
@@ -104,13 +104,13 @@ export default function DiscoverPage() {
       }
       params.append("page", "1");
       params.append("limit", "100"); // 获取足够多的数据
-      
+
       const response = await fetch(`/api/discover/modes?${params.toString()}`);
-      
+
       if (!response.ok) {
         throw new Error(isEn ? `Failed to fetch modes: ${response.status}` : `获取模式列表失败: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setModes(data.modes || []);
     } catch (err) {
@@ -120,20 +120,20 @@ export default function DiscoverPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isEn, tr]);
 
   // 获取设备列表
-  const fetchDevices = async () => {
+  const fetchDevices = useCallback(async () => {
     setIsLoadingDevices(true);
     try {
       const response = await fetch("/api/user/devices", {
         headers: authHeaders(),
       });
-      
+
       if (!response.ok) {
         throw new Error(isEn ? `Failed to fetch devices: ${response.status}` : `获取设备列表失败: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setDevices(data.devices || []);
     } catch (err) {
@@ -142,25 +142,25 @@ export default function DiscoverPage() {
     } finally {
       setIsLoadingDevices(false);
     }
-  };
+  }, [isEn]);
 
   // 获取用户自定义模式列表（按设备过滤）
-  const fetchCustomModes = async (mac?: string) => {
+  const fetchCustomModes = useCallback(async (mac?: string) => {
     setIsLoadingCustomModes(true);
     try {
       const params = new URLSearchParams();
       if (mac) {
         params.append("mac", mac);
       }
-      
+
       const response = await fetch(`/api/modes?${params.toString()}`, {
         headers: authHeaders(),
       });
-      
+
       if (!response.ok) {
         throw new Error(isEn ? `Failed to fetch custom modes: ${response.status}` : `获取自定义模式失败: ${response.status}`);
       }
-      
+
       const data = await response.json();
       // 过滤出自定义模式（source === "custom"）
       const custom = (data.modes || []).filter(
@@ -173,20 +173,20 @@ export default function DiscoverPage() {
     } finally {
       setIsLoadingCustomModes(false);
     }
-  };
+  }, [isEn]);
 
   // 当分类改变时重新获取数据
   useEffect(() => {
     fetchModes(selectedCategory);
-  }, [selectedCategory]);
+  }, [selectedCategory, fetchModes]);
 
   // 当打开发布弹窗时，获取设备列表和用户自定义模式列表
   useEffect(() => {
     if (isPublishModalOpen) {
       fetchDevices();
     }
-  }, [isPublishModalOpen]);
-  
+  }, [isPublishModalOpen, fetchDevices]);
+
   // 当选择设备时，获取该设备的自定义模式
   useEffect(() => {
     if (isPublishModalOpen && publishForm.mac) {
@@ -194,7 +194,7 @@ export default function DiscoverPage() {
     } else if (isPublishModalOpen && !publishForm.mac) {
       setCustomModes([]);
     }
-  }, [isPublishModalOpen, publishForm.mac]);
+  }, [isPublishModalOpen, publishForm.mac, fetchCustomModes]);
 
   // 打开安装设备选择弹窗
   const handleInstallClick = (modeId: number) => {

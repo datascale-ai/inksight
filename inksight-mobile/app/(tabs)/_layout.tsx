@@ -42,7 +42,7 @@ export default function TabLayout() {
                 <View style={center ? styles.centerWrap : styles.iconWrap}>
                   <View style={center ? styles.centerButton : undefined}>
                     <Icon
-                      color={focused ? (center ? '#FFFFFF' : theme.colors.ink) : theme.colors.secondary}
+                      color={focused ? (center ? theme.colors.background : theme.colors.ink) : theme.colors.secondary}
                       size={center ? 22 : 20}
                       strokeWidth={theme.strokeWidth}
                     />
@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   bar: {
     height: 72,
     paddingTop: 4,
-    backgroundColor: 'rgba(250, 250, 248, 0.96)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderTopColor: theme.colors.border,
   },
   tabButton: {

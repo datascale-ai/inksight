@@ -1,18 +1,29 @@
+import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
 import type { TodayItem } from '@/features/content/api';
 import { clearLocalNotificationId, getLocalNotificationId, setLocalNotificationId } from '@/lib/storage';
 
 let isHandlerConfigured = false;
 
-async function loadNotifications() {
+export function isNotificationRuntimeAvailable() {
   if (Platform.OS === 'web') {
+    return false;
+  }
+  if (Platform.OS === 'android' && isRunningInExpoGo()) {
+    return false;
+  }
+  return true;
+}
+
+async function loadNotifications() {
+  if (!isNotificationRuntimeAvailable()) {
     return null;
   }
   return import('expo-notifications');
 }
 
 export function ensureLocalNotificationHandler() {
-  if (Platform.OS === 'web' || isHandlerConfigured) {
+  if (!isNotificationRuntimeAvailable() || isHandlerConfigured) {
     return;
   }
   loadNotifications()
@@ -48,8 +59,8 @@ export async function syncLocalDailyNotification(input: {
   title?: string;
   body?: string;
 }) {
-  if (Platform.OS === 'web') {
-    return { ok: false, reason: 'web_unsupported' as const };
+  if (!isNotificationRuntimeAvailable()) {
+    return { ok: false, reason: 'runtime_unsupported' as const };
   }
 
   ensureLocalNotificationHandler();

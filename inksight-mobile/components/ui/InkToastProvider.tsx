@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { InkToast, type ToastConfig, type ToastVariant } from './InkToast';
+import { LoadingIndicator } from './LoadingIndicator';
 
 type ShowToastFn = (message: string, variant?: ToastVariant) => void;
 
@@ -12,7 +13,7 @@ export function InkToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastConfig[]>([]);
   const queueRef = useRef<ToastConfig[]>([]);
   const activeRef = useRef<boolean>(false);
-  const gapTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const gapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -64,6 +65,7 @@ export function InkToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((toast) => (
           <InkToast key={toast.id} toast={toast} onDismiss={handleDismiss} />
         ))}
+        <LoadingIndicator />
       </View>
     </ToastContext.Provider>
   );

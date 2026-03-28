@@ -16,6 +16,7 @@ type Props = {
 
 type FormErrors = {
   username?: string;
+  contact?: string;
   password?: string;
   confirm?: string;
 };
@@ -23,6 +24,8 @@ type FormErrors = {
 export function AuthFormScreen({ initialMode = 'login' }: Props) {
   const { t } = useI18n();
   const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -44,6 +47,21 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     if (password.length < 6) {
       errs.password = t('auth.errorPasswordMin');
     }
+    if (mode === 'register') {
+      const p = phone.trim();
+      const e = email.trim();
+      const hasPhone = Boolean(p);
+      const hasEmail = Boolean(e);
+      if (!hasPhone && !hasEmail) {
+        errs.contact = t('auth.errorContactRequired');
+      }
+      if (hasPhone && !/^\+?[0-9][0-9\s\-]{6,20}$/.test(p)) {
+        errs.contact = t('auth.errorPhoneFormat');
+      }
+      if (hasEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+        errs.contact = t('auth.errorEmailFormat');
+      }
+    }
     if (mode === 'register' && password !== confirmPassword) {
       errs.confirm = t('auth.errorPasswordMatch');
     }
@@ -58,7 +76,7 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     }
     setErrors({});
     try {
-      await signIn(username.trim(), password, mode);
+      await signIn(username.trim(), password, mode, mode === 'register' ? { phone: phone.trim(), email: email.trim() } : undefined);
       router.replace('/(tabs)/me');
     } catch (error) {
       Alert.alert(mode === 'login' ? t('auth.loginError') : t('auth.registerError'), error instanceof Error ? error.message : t('common.loading'));
@@ -69,6 +87,8 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     setMode((current) => (current === 'login' ? 'register' : 'login'));
     setErrors({});
     setConfirmPassword('');
+    setPhone('');
+    setEmail('');
   }
 
   return (
@@ -90,6 +110,28 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
           autoCapitalize="none"
         />
         {errors.username ? <InkText style={styles.errorText}>{errors.username}</InkText> : null}
+
+        {mode === 'register' ? (
+          <>
+            <TextInput
+              value={phone}
+              onChangeText={(text) => { setPhone(text); if (errors.contact) setErrors((prev) => ({ ...prev, contact: undefined })); }}
+              placeholder={t('auth.phoneOptional')}
+              style={[styles.input, errors.contact ? styles.inputError : null]}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+            />
+            <TextInput
+              value={email}
+              onChangeText={(text) => { setEmail(text); if (errors.contact) setErrors((prev) => ({ ...prev, contact: undefined })); }}
+              placeholder={t('auth.emailOptional')}
+              style={[styles.input, errors.contact ? styles.inputError : null]}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            {errors.contact ? <InkText style={styles.errorText}>{errors.contact}</InkText> : null}
+          </>
+        ) : null}
 
         <View style={styles.passwordWrap}>
           <TextInput

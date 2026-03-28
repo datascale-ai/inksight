@@ -93,6 +93,74 @@ npm run dev
 - 后端：`http://127.0.0.1:8080`
 - 前端：`http://127.0.0.1:3000`
 
+## 6 移动端（Expo）启动
+
+移动端工程位于：`inksight-mobile/`，使用 Expo（`expo-router`）开发。
+
+### 安装依赖
+
+```bash
+cd inksight-mobile
+npm install
+```
+
+### 启动命令（package.json scripts）
+
+- 启动开发模式（Metro）：
+
+```bash
+cd inksight-mobile
+npm run start
+```
+
+- 启动 Web（浏览器）：
+
+```bash
+cd inksight-mobile
+npm run web
+```
+
+- 启动 Android（需要本机 Android 环境/设备）：
+
+```bash
+cd inksight-mobile
+npm run android
+```
+
+- 启动 iOS（需要 macOS/Xcode）：
+
+```bash
+cd inksight-mobile
+npm run ios
+```
+
+### 常用补充（不在 scripts，但可直接运行）
+
+- 指定 dev server 端口（避免与后端端口混淆/冲突）：
+
+```bash
+cd inksight-mobile
+npx expo start --port 19006
+```
+
+- Web 模式下同样指定端口：
+
+```bash
+cd inksight-mobile
+npx expo start --web --port 19006
+```
+
+### 移动端环境变量（重点）
+
+移动端的 `.env` 中常用：
+
+- `EXPO_PUBLIC_INKSIGHT_API_BASE`: **移动端请求后端 API 的基地址**（代码会自动补上 `/api` 后缀）。
+
+说明：
+
+- 该变量只影响移动端向后端发起的 HTTP 请求（例如 `${EXPO_PUBLIC_INKSIGHT_API_BASE}/api/...`）。
+- 它**不会决定** Expo/Metro/Web 开发服务监听的端口；Expo dev server 端口由 `expo start` 的 `--port` 控制（默认 8081）。
+
 ## 6. 本地入口
 
 启动完成后，通常使用以下入口：

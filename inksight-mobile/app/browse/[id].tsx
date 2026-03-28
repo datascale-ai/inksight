@@ -54,19 +54,12 @@ export default function BrowseDetailScreen() {
       </InkCard>
 
       {kind === 'mode' ? (
-        <>
-          <InkButton
-            label={t('browse.detail.create')}
-            block
-            onPress={() => router.push(`/create/editor?template=${encodeURIComponent(modeId)}`)}
-          />
-          <InkButton
-            label={token ? t('browse.detail.rewrite') : t('browse.detail.loginToSave')}
-            block
-            variant="secondary"
-            onPress={() => router.push(token ? `/create/generate?template=${encodeURIComponent(modeId)}` : '/login')}
-          />
-        </>
+        <InkButton
+          label={token ? t('browse.detail.rewrite') : t('browse.detail.loginToSave')}
+          variant="secondary"
+          block
+          onPress={() => router.push(token ? `/create/generate?template=${encodeURIComponent(modeId)}` : '/login')}
+        />
       ) : (
         <InkButton label={t('browse.detail.back')} block onPress={() => router.back()} />
       )}

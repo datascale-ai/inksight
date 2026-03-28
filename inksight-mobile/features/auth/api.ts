@@ -21,10 +21,14 @@ export async function login(username: string, password: string) {
   });
 }
 
-export async function register(username: string, password: string) {
+export async function register(
+  username: string,
+  password: string,
+  extra?: { phone?: string; email?: string },
+) {
   return apiRequest<AuthResponse>('/auth/register', {
     method: 'POST',
-    body: { username, password },
+    body: { username, password, ...(extra || {}) },
     token: null,
   });
 }

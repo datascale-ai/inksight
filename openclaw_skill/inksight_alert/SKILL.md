@@ -1,51 +1,50 @@
----
+﻿---
 name: send_to_inksight_focus_mode
-description: Use this skill only for high-priority QQ emergency escalation. It pushes a critical alert to Inksight e-ink Focus mode after strict policy checks.
+description: 仅在高优先级 QQ 紧急升级场景下使用此技能。它会在严格策略校验通过后，将关键告警推送到 Inksight 墨水屏的专注模式。
 ---
 
-# Inksight Focus Alert Skill
+# Inksight 专注告警技能
 
-## Purpose
+## 用途
 
-This skill pushes emergency alerts to Inksight devices for Focus mode.
+此技能用于将紧急告警推送到 Inksight 设备的专注模式。
 
-## Strict Trigger Policy
+## 严格触发策略
 
-Call this skill only when all required conditions are satisfied:
+仅当以下所有条件都满足时，才可调用此技能：
 
-1. Sender ID is in VIP whitelist (`FOCUS_VIP_USER_IDS`).
-2. Message is urgent (contains outage/incident semantics).
-3. Message explicitly @mentions configured target users.
+1. 发送者 ID 位于 VIP 白名单中（`FOCUS_VIP_USER_IDS`）。
+2. 消息具有紧急性质（包含故障 / 事故等语义）。
+3. 消息中明确 @ 提到了已配置的目标用户。
 
-If any condition is not met, do not call this skill.
+任一条件不满足时，都不得调用此技能。
 
-Note:
-- Gate checks rely on stable `sender_id` (not nickname).
-- Outgoing `sender` display can be mapped by `FOCUS_VIP_USER_NAME_MAP`.
+注意：
+- 准入校验依赖稳定的 `sender_id`，而不是昵称。
+- 对外展示的 `sender` 名称可通过 `FOCUS_VIP_USER_NAME_MAP` 进行映射。
 
-## Input Rules
+## 输入规则
 
-- `mac_address`: target device MAC. If unavailable, runtime may use `FOCUS_DEFAULT_MAC_ADDRESS`.
-- `sender`: QQ sender nickname.
-- `message_summary`: required. Must be concise and less than or equal to 20 chars.
-- `raw_message` (optional): original message text for policy checking.
-- `mentioned_users` (optional): list of usernames that were @mentioned.
+- `mac_address`：目标设备的 MAC 地址。若未提供，运行时可使用 `FOCUS_DEFAULT_MAC_ADDRESS`。
+- `sender`：QQ 发送者昵称。
+- `message_summary`：必填。必须简洁，且长度小于等于 20 个字符。
+- `raw_message`（可选）：用于策略校验的原始消息文本。
+- `mentioned_users`（可选）：消息中被 @ 的用户名列表。
 
-## Summary Formatting
+## 摘要格式要求
 
-Before calling:
+调用前需要：
 
-- remove emotional words and filler words
-- keep actionable content only
-- produce a neutral command sentence in Chinese
-- two-level summary strategy:
-  - level-1: rule-based compression
-  - level-2: optional LLM compression (if available)
-  - fallback: hard trim to <= 20 chars
+- 去除情绪化措辞和口头填充词
+- 只保留可执行的信息
+- 产出一条中文、中性、指令式的句子
+- 使用两级摘要策略：
+  - level-1：基于规则的压缩
+  - level-2：可选的 LLM 压缩（若可用）
+  - 回退方案：强制截断至 <= 20 个字符
 
-## Expected Outcome
+## 预期结果
 
-- Success: returns `status=SUCCESS`
-- Policy mismatch or upstream failure: returns `status=FAILED`
-- Exception safety fallback: returns `status=ERROR`
-
+- 成功：返回 `status=SUCCESS`
+- 策略不匹配或上游失败：返回 `status=FAILED`
+- 异常安全回退：返回 `status=ERROR`

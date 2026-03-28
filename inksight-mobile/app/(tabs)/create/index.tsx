@@ -1,10 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Sparkles, LayoutTemplate, PenSquare } from 'lucide-react-native';
+import { Sparkles } from 'lucide-react-native';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
-import { InkButton } from '@/components/ui/InkButton';
 import { useI18n } from '@/lib/i18n';
 import { theme } from '@/lib/theme';
 
@@ -12,8 +11,6 @@ export default function CreateScreen() {
   const { t } = useI18n();
   const options = [
     { title: t('create.option.aiTitle'), desc: t('create.option.aiDesc'), icon: Sparkles, route: '/create/generate' },
-    { title: t('create.option.templateTitle'), desc: t('create.option.templateDesc'), icon: LayoutTemplate, route: '/create/editor' },
-    { title: t('create.option.blankTitle'), desc: t('create.option.blankDesc'), icon: PenSquare, route: '/create/editor' },
   ];
 
   return (
@@ -39,18 +36,6 @@ export default function CreateScreen() {
           </View>
         </InkCard>
       ))}
-
-      <InkCard>
-        <InkText style={styles.previewTitle}>{t('create.previewTitle')}</InkText>
-        <InkText dimmed style={styles.previewText}>{t('create.previewText')}</InkText>
-        <View style={styles.previewPanel}>
-          <InkText serif style={styles.previewSerif}>{t('create.previewQuote')}</InkText>
-        </View>
-        <View style={styles.previewActions}>
-          <InkButton label={t('create.openEditor')} block onPress={() => router.push('/create/editor')} />
-          <InkButton label={t('create.aiGenerate')} block variant="secondary" onPress={() => router.push('/create/generate')} />
-        </View>
-      </InkCard>
     </AppScreen>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Image, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppScreen } from '@/components/layout/AppScreen';
@@ -12,16 +12,37 @@ import { getDeviceConfig, getDeviceShareImageUrl, getDeviceState, refreshDevice,
 import { lightImpact, successFeedback } from '@/features/feedback/haptics';
 import { shareRemoteImage } from '@/features/sharing/share';
 import { getWidgetData } from '@/features/widgets/api';
+import { buildApiUrl } from '@/lib/api-client';
 import { useI18n } from '@/lib/i18n';
+import { modeDisplayName } from '@/lib/mode-display';
 import { theme } from '@/lib/theme';
 
+function firstWidgetSnippet(content: Record<string, unknown> | undefined) {
+  if (!content) {
+    return '-';
+  }
+  const raw =
+    content.text ??
+    content.summary ??
+    content.quote ??
+    content.word ??
+    content.title ??
+    content.question;
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
+  }
+  return '-';
+}
+
 export default function DeviceDetailScreen() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { mac } = useLocalSearchParams<{ mac: string }>();
   const token = useAuthStore((state) => state.token);
+  const hydrated = useAuthStore((state) => state.hydrated);
   const showToast = useToast();
   const [selectedWidgetMode, setSelectedWidgetMode] = useState('STOIC');
   const [lastWidgetRefreshAt, setLastWidgetRefreshAt] = useState(0);
+  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
 
   const stateQuery = useQuery({
     queryKey: ['device-state', mac, token],
@@ -58,6 +79,13 @@ export default function DeviceDetailScreen() {
     },
     onError: (error) => Alert.alert(t('common.refresh'), error instanceof Error ? error.message : t('common.refresh')),
   });
+
+  function confirmRefreshNow() {
+    Alert.alert(t('device.refreshNowTitle'), t('device.refreshNowHint'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.confirm'), onPress: () => refreshMutation.mutate() },
+    ]);
+  }
   const switchMutation = useMutation({
     mutationFn: async () => switchDeviceMode(mac || '', token || '', config?.modes?.[0] || 'DAILY'),
     onSuccess: (result) => showToast(result.message, 'success'),
@@ -73,7 +101,29 @@ export default function DeviceDetailScreen() {
     }
     await lightImpact();
     setLastWidgetRefreshAt(now);
-    await widgetQuery.refetch();
+    const result = await widgetQuery.refetch();
+    if (result.error) {
+      showToast(result.error instanceof Error ? result.error.message : t('device.widgetError'), 'error');
+      return;
+    }
+    // Fetch PNG preview image after data refresh
+    setPreviewImageUri(null);
+    const data = result.data;
+    if (data?.preview_url) {
+      try {
+        const url = buildApiUrl(data.preview_url);
+        const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const reader = new FileReader();
+          reader.onload = () => setPreviewImageUri(reader.result as string);
+          reader.readAsDataURL(blob);
+        }
+      } catch {
+        // Non-critical: keep data without image
+      }
+    }
+    showToast(t('device.previewUpdated'), 'success');
   }
 
   async function handleShareImage() {
@@ -81,10 +131,12 @@ export default function DeviceDetailScreen() {
       return;
     }
     try {
-      const shareUrl = getDeviceShareImageUrl(mac);
       if (!token) {
         throw new Error(t('device.shareMissing'));
       }
+      const previewPath = widget?.preview_url?.trim();
+      const shareUrl =
+        previewPath && previewPath.length > 0 ? buildApiUrl(previewPath) : getDeviceShareImageUrl(mac);
       await shareRemoteImage({
         url: shareUrl,
         token,
@@ -95,6 +147,30 @@ export default function DeviceDetailScreen() {
       Alert.alert(t('device.shareFailed'), error instanceof Error ? error.message : t('device.shareFailed'));
     }
   }
+
+  function widgetStatusText() {
+    if (!hydrated) {
+      return t('common.loading');
+    }
+    if (!token) {
+      return t('device.widgetLoginPrompt');
+    }
+    if (widgetQuery.isError) {
+      const message = widgetQuery.error instanceof Error ? widgetQuery.error.message : '';
+      return message ? t('device.widgetError', { message }) : t('device.widgetErrorGeneric');
+    }
+    if (widgetQuery.isPending && !widget) {
+      return t('device.widgetLoading');
+    }
+    if (widget) {
+      const label = modeDisplayName(widget.mode_id, locale, widget.display_name);
+      return `${label} · ${firstWidgetSnippet(widget.content)}`;
+    }
+    return t('device.widgetEmpty');
+  }
+
+  const configModesLabel =
+    config?.modes?.map((id) => modeDisplayName(id, locale, id)).join(', ') ?? '';
 
   return (
     <AppScreen>
@@ -120,7 +196,7 @@ export default function DeviceDetailScreen() {
           {config
             ? t('device.configBody', {
                 city: config.city || 'Hangzhou',
-                modes: config.modes.join(', '),
+                modes: configModesLabel || config.modes.join(', '),
                 strategy: config.refreshStrategy || 'random',
               })
             : t('device.configLoading')}
@@ -133,17 +209,20 @@ export default function DeviceDetailScreen() {
           {(config?.modes || []).map((mode) => (
             <InkButton
               key={mode}
-              label={mode}
+              label={modeDisplayName(mode, locale, mode)}
               variant={selectedWidgetMode === mode ? 'primary' : 'secondary'}
               onPress={() => setSelectedWidgetMode(mode)}
             />
           ))}
         </View>
         <InkText dimmed style={styles.cardBody}>
-          {widget
-            ? `${widget.display_name} · ${String(widget.content?.text || widget.content?.summary || widget.content?.quote || '-')}`
-            : t('device.widgetFallback')}
+          {widgetStatusText()}
         </InkText>
+        {previewImageUri ? (
+          <View style={styles.previewWrap}>
+            <Image source={{ uri: previewImageUri }} style={styles.previewImage} resizeMode="contain" />
+          </View>
+        ) : null}
         <View style={styles.widgetActions}>
           <InkButton label={t('device.previewRefresh')} variant="secondary" onPress={handleRefreshWidget} />
           <InkButton label={t('device.shareImage')} variant="secondary" onPress={handleShareImage} />
@@ -151,7 +230,11 @@ export default function DeviceDetailScreen() {
       </InkCard>
 
       <View style={styles.actionStack}>
-        <InkButton label={refreshMutation.isPending ? t('common.loading') : t('device.refreshNow')} onPress={() => refreshMutation.mutate()} />
+        <InkButton
+          label={refreshMutation.isPending ? t('common.loading') : t('device.refreshNow')}
+          variant="secondary"
+          onPress={confirmRefreshNow}
+        />
         <InkButton label={switchMutation.isPending ? t('common.loading') : t('device.switchMode')} variant="secondary" onPress={() => switchMutation.mutate()} />
         <InkButton label={t('device.editConfig')} variant="secondary" onPress={() => router.push(`/device/${encodeURIComponent(mac || '')}/config`)} />
         <InkButton label={t('device.manageMembers')} variant="secondary" onPress={() => router.push(`/device/${encodeURIComponent(mac || '')}/members`)} />
@@ -187,5 +270,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 16,
+  },
+  previewWrap: {
+    marginTop: 12,
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.surface,
+  },
+  previewImage: {
+    width: '100%',
+    aspectRatio: 400 / 300,
   },
 });

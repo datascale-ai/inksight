@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
@@ -9,13 +9,15 @@ import { InkButton } from '@/components/ui/InkButton';
 import { useAuthStore } from '@/features/auth/store';
 import { getDeviceConfig, saveDeviceConfig } from '@/features/device/api';
 import { useI18n } from '@/lib/i18n';
+import { modeDisplayName } from '@/lib/mode-display';
 import { listModes } from '@/features/modes/api';
 import { theme } from '@/lib/theme';
 
 export default function DeviceConfigScreen() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { mac } = useLocalSearchParams<{ mac: string }>();
   const token = useAuthStore((state) => state.token);
+  const queryClient = useQueryClient();
   const configQuery = useQuery({
     queryKey: ['edit-device-config', mac, token],
     queryFn: () => getDeviceConfig(mac || '', token || ''),
@@ -53,7 +55,15 @@ export default function DeviceConfigScreen() {
         llmProvider: configQuery.data?.llmProvider || 'deepseek',
         llmModel: configQuery.data?.llmModel || 'deepseek-chat',
       }),
-    onSuccess: () => Alert.alert(t('common.saved'), t('settings.savedBody')),
+    onSuccess: () => {
+      if (mac) {
+        queryClient.invalidateQueries({ queryKey: ['device-state', mac] });
+        queryClient.invalidateQueries({ queryKey: ['device-config', mac] });
+        queryClient.invalidateQueries({ queryKey: ['device-widget', mac] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['edit-device-config', mac, token] });
+      Alert.alert(t('common.saved'), t('settings.savedBody'));
+    },
     onError: (error) => Alert.alert(t('settings.saveFailed'), error instanceof Error ? error.message : t('settings.saveFailed')),
   });
 
@@ -85,7 +95,7 @@ export default function DeviceConfigScreen() {
             return (
               <InkButton
                 key={mode.mode_id}
-                label={mode.mode_id}
+                label={modeDisplayName(mode.mode_id, locale, mode.display_name)}
                 variant={active ? 'primary' : 'secondary'}
                 onPress={() => toggleMode(mode.mode_id)}
               />

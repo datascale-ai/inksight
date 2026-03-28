@@ -45,6 +45,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: 14,
+    flexShrink: 1,
   },
   block: {
     width: '100%',
