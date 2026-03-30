@@ -105,6 +105,14 @@ const BUILTIN: Record<string, CatalogRow> = {
     zh: { name: '自适应照片', tip: '上传本地照片，自适应 4.2" 墨水屏显示' },
     en: { name: 'Adaptive Photo', tip: 'Upload a local photo and auto-fit it to the 4.2" e-ink screen' },
   },
+  CALENDAR: {
+    zh: { name: '日历', tip: '展示月历、日期与相关日程信息' },
+    en: { name: 'Calendar', tip: 'Show calendar, date, and related schedule info' },
+  },
+  TIMETABLE: {
+    zh: { name: '课程表', tip: '展示今日或本周课程安排' },
+    en: { name: 'Timetable', tip: 'Show today or weekly class schedule' },
+  },
 };
 
 export function modeDisplayName(modeId: string, locale: 'zh' | 'en', apiFallback: string) {

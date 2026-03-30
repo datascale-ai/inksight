@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, TextInput, View } from 'react-native';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
@@ -54,6 +54,7 @@ export default function AIGenerateScreen() {
   const { t } = useI18n();
   const params = useLocalSearchParams<{ template?: string | string[] }>();
   const token = useAuthStore((state) => state.token);
+  const queryClient = useQueryClient();
   const templateModeId = queryParamToDecodedString(params.template);
   const [description, setDescription] = useState('');
   const [generatedMode, setGeneratedMode] = useState<CustomModeDefinition | null>(null);
@@ -144,6 +145,8 @@ export default function AIGenerateScreen() {
     },
     onSuccess: (result) => {
       if (!result) return;
+      queryClient.invalidateQueries({ queryKey: ['mode-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['browse-modes-catalog'] });
       Alert.alert(t('generate.saveSuccess'), t('generate.saveBody', { modeId: result.mode_id }));
       router.replace('/(tabs)/browse');
     },

@@ -18,7 +18,6 @@ export default function BrowseDetailScreen() {
     title?: string;
     summary?: string;
     time?: string;
-    segment?: string;
   }>();
   const token = useAuthStore((state) => state.token);
   const modeId = decodeURIComponent(params.id || '');
@@ -40,12 +39,11 @@ export default function BrowseDetailScreen() {
       <InkText serif style={{ fontSize: 32, fontWeight: '600' }}>
         {decodeURIComponent(params.title || mode?.display_name || modeId || t('nav.detail'))}
       </InkText>
-      <InkText dimmed>{kind === 'mode' ? t('browse.detail.mode') : t('browse.detail.content')}</InkText>
 
       <InkCard>
         {kind === 'mode' ? <ModeIcon modeId={modeId} /> : null}
         <InkText style={{ marginTop: kind === 'mode' ? 12 : 0, fontSize: 16, fontWeight: '600' }}>
-          {kind === 'mode' ? mode?.display_name || modeId : decodeURIComponent(params.segment || t('nav.detail'))}
+          {kind === 'mode' ? mode?.display_name || modeId : decodeURIComponent(params.title || t('nav.detail'))}
         </InkText>
         <InkText dimmed style={{ marginTop: 8, lineHeight: 24 }}>
           {decodeURIComponent(params.summary || mode?.description || t('browse.detail.default'))}

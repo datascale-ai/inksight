@@ -88,7 +88,6 @@ function RootShell() {
               <Stack.Screen name="onboarding" options={{ title: t('nav.welcome'), headerBackVisible: false }} />
               <Stack.Screen name="login" options={{ title: t('nav.login') }} />
               <Stack.Screen name="register" options={{ title: t('nav.register') }} />
-              <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
               <Stack.Screen name="browse/modes" options={{ title: t('nav.modeCatalog') }} />
               <Stack.Screen name="browse/[id]" options={{ title: t('nav.detail') }} />
               <Stack.Screen name="create/generate" options={{ title: t('nav.aiGenerate') }} />
@@ -96,6 +95,7 @@ function RootShell() {
               <Stack.Screen name="device/[mac]/config" options={{ title: t('nav.deviceConfig') }} />
               <Stack.Screen name="device/[mac]/members" options={{ title: t('nav.deviceMembers') }} />
               <Stack.Screen name="device/[mac]/firmware" options={{ title: t('nav.firmware') }} />
+              <Stack.Screen name="device/[mac]/mode-settings" options={{ title: t('device.modeSettings') }} />
               <Stack.Screen name="device/provision" options={{ title: t('nav.provision') }} />
               <Stack.Screen name="device/requests" options={{ title: t('nav.requests') }} />
             </Stack>

@@ -54,6 +54,7 @@ export default function DeviceConfigScreen() {
         contentTone: configQuery.data?.contentTone || 'neutral',
         llmProvider: configQuery.data?.llmProvider || 'deepseek',
         llmModel: configQuery.data?.llmModel || 'deepseek-chat',
+        modeOverrides: configQuery.data?.modeOverrides,
       }),
     onSuccess: () => {
       if (mac) {

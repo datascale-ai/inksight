@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { ClipboardCheck, Compass, Globe, History, Settings2 } from 'lucide-react-native';
+import { ClipboardCheck, Compass, Globe, History } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkButton } from '@/components/ui/InkButton';
@@ -81,7 +81,6 @@ export default function MeScreen() {
   };
 
   const entries: Entry[] = [
-    { title: tf(t, 'me.settings', 'Settings'), subtitle: tf(t, 'me.settingsDesc', 'Preferences, cache, and experiments'), icon: Settings2, route: '/settings' },
     { title: tf(t, 'me.onboarding', 'Onboarding'), subtitle: tf(t, 'me.onboardingDesc', 'Replay product intro and guidance'), icon: Compass, route: '/onboarding' },
     { title: tf(t, 'me.requests', 'Requests'), subtitle: tf(t, 'me.requestsDesc', 'Review device sharing requests'), icon: ClipboardCheck, route: '/device/requests' },
   ];
@@ -119,7 +118,6 @@ export default function MeScreen() {
           </>
         ) : (
           <View style={styles.row}>
-            <InkButton label={tf(t, 'me.settings', 'Settings')} variant="secondary" onPress={() => router.push('/settings')} />
             <InkButton label={tf(t, 'me.logout', 'Sign out')} onPress={handleLogout} />
           </View>
         )}

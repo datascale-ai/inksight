@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { Clock, Heart, Layers } from 'lucide-react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Clock, Heart, Trash2 } from 'lucide-react-native';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkChip } from '@/components/ui/InkChip';
@@ -14,12 +14,14 @@ import { useAuthStore } from '@/features/auth/store';
 import { getTodayContent } from '@/features/content/api';
 import { getLocalFavorites, getLocalHistory } from '@/features/content/storage';
 import { listUserDevices, getDeviceFavorites, getDeviceHistory } from '@/features/device/api';
-import { listModes } from '@/features/modes/api';
+import { listModes, deleteCustomMode } from '@/features/modes/api';
 import { useI18n } from '@/lib/i18n';
 import { localizeCatalogMode } from '@/lib/mode-display';
 import { lightImpact, successFeedback } from '@/features/feedback/haptics';
 
-const segments = ['recommended', 'history', 'favorites', 'modes'] as const;
+const segments = ['modes', 'history', 'favorites'] as const;
+
+const FEATURED_MODE_IDS = ['DAILY', 'WEATHER', 'BRIEFING', 'POETRY', 'ARTWALL', 'ALMANAC'];
 
 function tf(t: (key: string, vars?: Record<string, string | number>) => string, key: string, fallback: string, vars?: Record<string, string | number>) {
   const resolved = t(key, vars);
@@ -41,19 +43,16 @@ export default function BrowseScreen() {
   const GAP = 12;
   const PADDING = theme.spacing.lg;
   const cardWidth = (screenWidth - PADDING * 2 - GAP) / 2;
-  const [segment, setSegment] = useState<(typeof segments)[number]>('recommended');
+  const [segment, setSegment] = useState<(typeof segments)[number]>('modes');
   const [localFavorites, setLocalFavorites] = useState<Awaited<ReturnType<typeof getLocalFavorites>>>([]);
   const [localHistory, setLocalHistory] = useState<Awaited<ReturnType<typeof getLocalHistory>>>([]);
   const token = useAuthStore((state) => state.token);
+  const queryClient = useQueryClient();
 
   const todayQuery = useQuery({
     queryKey: ['browse-recommended-today'],
     queryFn: () => getTodayContent(['DAILY', 'POETRY', 'WEATHER']),
     staleTime: 10 * 60 * 1000,
-  });
-  const modesQuery = useQuery({
-    queryKey: ['mode-catalog'],
-    queryFn: listModes,
   });
   const devicesQuery = useQuery({
     queryKey: ['browse-devices', token],
@@ -61,6 +60,40 @@ export default function BrowseScreen() {
     enabled: Boolean(token),
   });
   const activeMac = devicesQuery.data?.devices?.[0]?.mac;
+  const deviceNicknames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of devicesQuery.data?.devices || []) {
+      map[d.mac] = d.nickname || d.mac;
+    }
+    return map;
+  }, [devicesQuery.data]);
+  const modesQuery = useQuery({
+    queryKey: ['mode-catalog', token],
+    queryFn: () => listModes({ token: token || undefined }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ modeId, mac }: { modeId: string; mac?: string }) => deleteCustomMode(token || '', modeId, mac),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mode-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['browse-modes-catalog'] });
+      modesQuery.refetch();
+    },
+    onError: (err: Error) => {
+      Alert.alert(tf(t, 'browse.deleteFailed', 'Delete failed'), err.message);
+    },
+  });
+
+  function confirmDeleteMode(modeId: string, displayName: string, mac?: string) {
+    Alert.alert(
+      tf(t, 'browse.deleteConfirmTitle', 'Delete mode'),
+      tf(t, 'browse.deleteConfirmMessage', 'Are you sure you want to delete "{name}"?', { name: displayName }),
+      [
+        { text: tf(t, 'common.cancel', 'Cancel'), style: 'cancel' },
+        { text: tf(t, 'browse.deleteAction', 'Delete'), style: 'destructive', onPress: () => deleteMutation.mutate({ modeId, mac }) },
+      ],
+    );
+  }
 
   const historyQuery = useQuery({
     queryKey: ['device-history', activeMac, token],
@@ -111,7 +144,9 @@ export default function BrowseScreen() {
   }, [token, localFavorites, favoritesQuery.data, t]);
 
   const modeItems = modesQuery.data?.modes || [];
-  const featuredModes = modeItems.slice(0, 6);
+  const featuredModes = FEATURED_MODE_IDS
+    .map((id) => modeItems.find((m) => m.mode_id === id))
+    .filter(Boolean) as typeof modeItems;
   const customModes = modeItems.filter((mode) => mode.source === 'custom').slice(0, 4);
   const recommendedItems = todayQuery.data?.items || [];
 
@@ -141,10 +176,8 @@ export default function BrowseScreen() {
 
   const handleRefresh = useCallback(async () => {
     await lightImpact();
-    if (segment === 'recommended') {
+    if (segment === 'modes') {
       await Promise.all([todayQuery.refetch(), modesQuery.refetch()]);
-    } else if (segment === 'modes') {
-      await modesQuery.refetch();
     } else if (segment === 'favorites') {
       if (token) await favoritesQuery.refetch();
       else getLocalFavorites().then(setLocalFavorites);
@@ -175,28 +208,23 @@ export default function BrowseScreen() {
               style={[styles.segmentButton, selected ? styles.segmentSelected : null]}
             >
               <InkText style={selected ? styles.segmentTextSelected : styles.segmentText}>
-                {item === 'recommended'
-                  ? tf(t, 'browse.segment.recommended', 'Recommended')
-                  : tf(t, `browse.segment.${item}`, item)}
+                {tf(t, `browse.segment.${item}`, item)}
               </InkText>
             </Pressable>
           );
         })}
       </View>
 
-      {segment === 'recommended' ? (
+      {segment === 'modes' ? (
         <>
           <View style={styles.sectionBlock}>
-            <SectionHeader
-              title={tf(t, 'browse.section.today', 'Today suggestions')}
-              subtitle={tf(t, 'browse.section.todayDesc', 'The current mobile today feed, repacked as a richer browse entry.')}
-            />
+            <SectionHeader title={tf(t, 'browse.section.today', 'Today suggestions')} />
             {recommendedItems.map((item) => (
               <Pressable
                 key={`recommended-${item.mode_id}`}
                 onPress={() =>
                   router.push(
-                    `/browse/${encodeURIComponent(item.mode_id)}?kind=content&segment=${encodeURIComponent('recommended')}&title=${encodeURIComponent(localizeCatalogMode({ mode_id: item.mode_id, display_name: item.display_name, description: '' }, locale).display_name)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(todayQuery.data?.generated_at || '')}`,
+                    `/browse/${encodeURIComponent(item.mode_id)}?kind=content&title=${encodeURIComponent(localizeCatalogMode({ mode_id: item.mode_id, display_name: item.display_name, description: '' }, locale).display_name)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(todayQuery.data?.generated_at || '')}`,
                   )
                 }
               >
@@ -219,10 +247,7 @@ export default function BrowseScreen() {
           </View>
 
           <View style={styles.sectionBlock}>
-            <SectionHeader
-              title={tf(t, 'browse.featuredModes', 'Featured modes')}
-              subtitle={tf(t, 'browse.featuredModesDesc', 'Pulled from the current mode catalog endpoint.')}
-            />
+            <SectionHeader title={tf(t, 'browse.featuredModes', 'Featured modes')} />
             <View style={styles.grid}>
               {featuredModes.map((mode) => (
                 <Pressable
@@ -248,65 +273,43 @@ export default function BrowseScreen() {
 
           {customModes.length > 0 ? (
             <View style={styles.sectionBlock}>
-              <SectionHeader
-                title={tf(t, 'browse.customModes', 'Custom modes')}
-                subtitle={tf(t, 'browse.customModesDesc', 'Saved or generated modes from the current account/device scope.')}
-              />
+              <SectionHeader title={tf(t, 'browse.customModes', 'Custom modes')} />
               {customModes.map((mode) => (
-                <Pressable
-                  key={`custom-${mode.mode_id}`}
-                  onPress={() =>
-                    router.push(
-                      `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
-                    )
-                  }
-                >
-                  <InkCard style={styles.editorialCard}>
-                    <View style={styles.editorialTop}>
-                      <View style={styles.editorialTitleRow}>
-                        <View style={styles.modeIconWrap}>
-                          <ModeIcon modeId={mode.mode_id} color={theme.colors.brandInk} />
-                        </View>
-                        <View style={styles.editorialText}>
-                          <InkText style={styles.editorialTitle}>{localizeMode(mode).display_name}</InkText>
-                          <InkText dimmed style={styles.editorialDesc}>{localizeMode(mode).description || mode.mode_id}</InkText>
-                        </View>
+                <InkCard key={`custom-${mode.mode_id}-${mode.mac || ''}`} style={styles.editorialCard}>
+                  <View style={styles.editorialTop}>
+                    <Pressable
+                      style={styles.editorialTitleRow}
+                      onPress={() =>
+                        router.push(
+                          `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
+                        )
+                      }
+                    >
+                      <View style={styles.modeIconWrap}>
+                        <ModeIcon modeId={mode.mode_id} color={theme.colors.brandInk} />
                       </View>
+                      <View style={styles.editorialText}>
+                        <InkText style={styles.editorialTitle}>{localizeMode(mode).display_name}</InkText>
+                        <InkText dimmed style={styles.editorialDesc}>
+                          {mode.mac ? (deviceNicknames[mode.mac] || mode.mac) : (localizeMode(mode).description || mode.mode_id)}
+                        </InkText>
+                      </View>
+                    </Pressable>
+                    <View style={styles.customActions}>
                       <InkChip label={tf(t, 'browse.customBadge', 'Custom')} />
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => confirmDeleteMode(mode.mode_id, localizeMode(mode).display_name, mode.mac)}
+                      >
+                        <Trash2 size={18} color={theme.colors.secondary} />
+                      </Pressable>
                     </View>
-                  </InkCard>
-                </Pressable>
+                  </View>
+                </InkCard>
               ))}
             </View>
           ) : null}
         </>
-      ) : null}
-
-      {segment === 'modes' ? (
-        <View style={styles.grid}>
-          {modeItems.length === 0 ? (
-            <InkEmptyState icon={Layers} title={tf(t, 'browse.emptyModes', 'No modes yet')} subtitle={tf(t, 'browse.emptyModesDesc', 'Wait for the mode catalog to load.')} />
-          ) : null}
-          {modeItems.map((mode) => (
-            <Pressable
-              key={mode.mode_id}
-              style={{ width: cardWidth }}
-              onPress={() =>
-                router.push(
-                  `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
-                )
-              }
-            >
-              <InkCard style={styles.modeCard}>
-                <View style={styles.modeIconWrap}>
-                  <ModeIcon modeId={mode.mode_id} />
-                </View>
-                <InkText style={styles.modeTitle}>{localizeMode(mode).display_name}</InkText>
-                <InkText dimmed style={styles.modeSummary}>{localizeMode(mode).description || mode.mode_id}</InkText>
-              </InkCard>
-            </Pressable>
-          ))}
-        </View>
       ) : null}
 
       {segment === 'history' ? (
@@ -324,7 +327,7 @@ export default function BrowseScreen() {
               key={`${segment}-${item.title}-${item.time}`}
               onPress={() =>
                 router.push(
-                  `/browse/${encodeURIComponent(item.title)}?kind=content&segment=${encodeURIComponent(segment)}&title=${encodeURIComponent(item.title)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(item.time)}`,
+                  `/browse/${encodeURIComponent(item.title)}?kind=content&title=${encodeURIComponent(item.title)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(item.time)}`,
                 )
               }
             >
@@ -353,7 +356,7 @@ export default function BrowseScreen() {
               key={`${item.title}-${item.time}`}
               onPress={() =>
                 router.push(
-                  `/browse/${encodeURIComponent(item.title)}?kind=content&segment=${encodeURIComponent('favorites')}&title=${encodeURIComponent(item.title)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(item.time)}`,
+                  `/browse/${encodeURIComponent(item.title)}?kind=content&title=${encodeURIComponent(item.title)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(item.time)}`,
                 )
               }
             >
@@ -367,13 +370,11 @@ export default function BrowseScreen() {
         </View>
       ) : null}
 
-      <InkCard>
-        <InkText style={styles.listTitle}>{tf(t, 'browse.moreModes', 'More modes')}</InkText>
-        <InkText dimmed style={styles.listSummary}>{tf(t, 'browse.moreModesDesc', 'Open the full catalog to inspect builtin and custom modes.')}</InkText>
-        <Pressable onPress={() => router.push('/browse/modes')}>
-          <InkText style={styles.catalogLink}>{tf(t, 'browse.moreModesLink', 'Open full catalog')}</InkText>
-        </Pressable>
-      </InkCard>
+      <Pressable onPress={() => router.push('/browse/modes')}>
+        <InkCard>
+          <InkText style={styles.catalogLink}>{tf(t, 'browse.moreModes', 'More modes')}</InkText>
+        </InkCard>
+      </Pressable>
     </AppScreen>
   );
 }
@@ -452,6 +453,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 20,
   },
+  customActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -498,7 +504,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   catalogLink: {
-    marginTop: 12,
     color: theme.colors.accent,
     fontWeight: '600',
   },

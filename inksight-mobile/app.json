@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "InkSight Mobile",
+    "name": "inksight",
     "slug": "inksight-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/inksight-app-icon.png",
     "scheme": "inksightmobile",
     "userInterfaceStyle": "light",
     "splash": {
@@ -20,9 +20,8 @@
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/inksight-app-icon.png",
+        "monochromeImage": "./assets/images/inksight-app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.inksightmobile"
@@ -45,8 +44,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "34f01799-c965-404f-9e63-b0d4d2eb8fcc"
+        "projectId": "83188442-dfc1-4117-874e-e714997e11ad"
       }
-    }
+    },
+    "owner": "aebopi"
   }
 }

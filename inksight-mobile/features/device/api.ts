@@ -38,6 +38,7 @@ export type DeviceConfig = {
   city?: string;
   llmProvider?: string;
   llmModel?: string;
+  modeOverrides?: Record<string, Record<string, unknown>>;
 };
 
 export type DeviceMember = {
@@ -202,6 +203,28 @@ export async function pushPreviewToDevice(mac: string, token: string, previewUrl
       message = payload.message || payload.error || message;
     } catch {
       // Ignore JSON parse failures.
+    }
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<{ ok: boolean; message: string }>;
+}
+
+export async function pushPreviewImageToDevice(mac: string, token: string, previewBytes: ArrayBuffer, mode?: string) {
+  const query = mode ? `?mode=${encodeURIComponent(mode)}` : '';
+  const response = await apiFetch(`/device/${encodeURIComponent(mac)}/apply-preview${query}`, {
+    method: 'POST',
+    token,
+    contentType: 'image/png',
+    body: previewBytes,
+  });
+
+  if (!response.ok) {
+    let message = `Push preview failed: ${response.status}`;
+    try {
+      const payload = await response.json();
+      message = payload.message || payload.error || message;
+    } catch {
     }
     throw new Error(message);
   }

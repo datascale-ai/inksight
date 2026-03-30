@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { Lightbulb, Zap } from "lucide-react";
@@ -11,9 +12,11 @@ export default async function DocsPage() {
         <div className="flex items-center justify-between gap-4 mb-8">
           <h1 className="!mb-0">Quick Start</h1>
           <div className="flex-shrink-0">
-            <img 
-              src="/images/QQ_EN.jpg" 
-              alt="QQ Group" 
+            <Image
+              src="/images/QQ_EN.jpg"
+              alt="QQ Group"
+              width={192}
+              height={96}
               className="h-24 w-auto object-contain rounded-md border border-ink/10 shadow-sm"
             />
           </div>
@@ -65,9 +68,11 @@ export default async function DocsPage() {
       <div className="flex items-center justify-between gap-4 mb-8">
         <h1 className="!mb-0">快速开始</h1>
         <div className="flex-shrink-0">
-          <img 
-            src="/images/QQ.jpg" 
-            alt="QQ Group" 
+          <Image
+            src="/images/QQ.jpg"
+            alt="QQ Group"
+            width={192}
+            height={96}
             className="h-24 w-auto object-contain rounded-md border border-ink/10 shadow-sm"
           />
         </div>

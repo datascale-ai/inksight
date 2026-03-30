@@ -99,6 +99,7 @@ async def list_modes(
                 "description": definition.get("description", ""),
                 "source": "custom",
                 "settings_schema": definition.get("settings_schema", []),
+                "mac": mode_data.get("mac"),
             })
     
     # Always include builtin modes (and any custom modes now in registry for this device)

@@ -2,20 +2,52 @@ import { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import * as FileSystem from 'expo-file-system/legacy';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkButton } from '@/components/ui/InkButton';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
 import { useToast } from '@/components/ui/InkToastProvider';
 import { useAuthStore } from '@/features/auth/store';
-import { getDeviceConfig, getDeviceShareImageUrl, getDeviceState, refreshDevice, switchDeviceMode } from '@/features/device/api';
+import { getDeviceConfig, getDeviceShareImageUrl, getDeviceState, pushPreviewImageToDevice, switchDeviceMode } from '@/features/device/api';
 import { lightImpact, successFeedback } from '@/features/feedback/haptics';
 import { shareRemoteImage } from '@/features/sharing/share';
+import { listModes, type ModeCatalogItem } from '@/features/modes/api';
 import { getWidgetData } from '@/features/widgets/api';
 import { buildApiUrl } from '@/lib/api-client';
 import { useI18n } from '@/lib/i18n';
 import { modeDisplayName } from '@/lib/mode-display';
 import { theme } from '@/lib/theme';
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const table = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  let i = 0;
+  const len = bytes.length;
+  while (i < len) {
+    const b1 = bytes[i++]!;
+    const b2 = i < len ? bytes[i++] : undefined;
+    const b3 = i < len ? bytes[i++] : undefined;
+    const enc1 = b1 >> 2;
+    const enc2 = ((b1 & 3) << 4) | (b2 === undefined ? 0 : b2 >> 4);
+    out += table[enc1]! + table[enc2]!;
+    if (b2 === undefined) {
+      out += '==';
+    } else if (b3 === undefined) {
+      out += table[((b2 & 15) << 2)]! + '=';
+    } else {
+      out += table[((b2 & 15) << 2) | (b3 >> 6)]! + table[b3 & 63]!;
+    }
+  }
+  return out;
+}
+
+function buildPreviewCacheUri(mac: string, mode: string) {
+  const base = FileSystem.cacheDirectory || FileSystem.documentDirectory || '';
+  const safeMac = mac.replace(/[^a-zA-Z0-9]/g, '-');
+  const safeMode = mode.replace(/[^a-zA-Z0-9]/g, '-');
+  return `${base}device-preview-${safeMac}-${safeMode}.png`;
+}
 
 function firstWidgetSnippet(content: Record<string, unknown> | undefined) {
   if (!content) {
@@ -34,6 +66,16 @@ function firstWidgetSnippet(content: Record<string, unknown> | undefined) {
   return '-';
 }
 
+function resolveApplyPreviewMessage(
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  state: { is_online?: boolean; runtime_mode?: string } | undefined,
+) {
+  if (state?.is_online && state?.runtime_mode === 'active') {
+    return t('device.applyPreviewSuccessActive');
+  }
+  return t('device.applyPreviewSuccessQueued');
+}
+
 export default function DeviceDetailScreen() {
   const { locale, t } = useI18n();
   const { mac } = useLocalSearchParams<{ mac: string }>();
@@ -43,6 +85,7 @@ export default function DeviceDetailScreen() {
   const [selectedWidgetMode, setSelectedWidgetMode] = useState('STOIC');
   const [lastWidgetRefreshAt, setLastWidgetRefreshAt] = useState(0);
   const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+  const [previewImageBytes, setPreviewImageBytes] = useState<ArrayBuffer | null>(null);
 
   const stateQuery = useQuery({
     queryKey: ['device-state', mac, token],
@@ -54,6 +97,10 @@ export default function DeviceDetailScreen() {
     queryKey: ['device-config', mac, token],
     queryFn: () => getDeviceConfig(mac || '', token || ''),
     enabled: Boolean(mac && token),
+  });
+  const modesQuery = useQuery({
+    queryKey: ['mode-catalog-detail'],
+    queryFn: listModes,
   });
   const widgetQuery = useQuery({
     queryKey: ['device-widget', mac, token, selectedWidgetMode],
@@ -67,23 +114,38 @@ export default function DeviceDetailScreen() {
     }
   }, [configQuery.data]);
 
+  useEffect(() => {
+    setPreviewImageUri(null);
+    setPreviewImageBytes(null);
+  }, [selectedWidgetMode]);
+
   const state = stateQuery.data;
   const config = configQuery.data;
   const widget = widgetQuery.data;
 
-  const refreshMutation = useMutation({
-    mutationFn: async () => refreshDevice(mac || '', token || ''),
-    onSuccess: async (result) => {
-      await successFeedback();
-      showToast(result.message, 'success');
+  const applyPreviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!previewImageBytes) {
+        throw new Error(t('device.previewApplyMissing'));
+      }
+      return pushPreviewImageToDevice(mac || '', token || '', previewImageBytes.slice(0), selectedWidgetMode);
     },
-    onError: (error) => Alert.alert(t('common.refresh'), error instanceof Error ? error.message : t('common.refresh')),
+    onSuccess: async () => {
+      await successFeedback();
+      showToast(resolveApplyPreviewMessage(t, state), 'success');
+      await stateQuery.refetch();
+    },
+    onError: (error) => Alert.alert(t('device.applyPreview'), error instanceof Error ? error.message : t('device.applyPreview')),
   });
 
-  function confirmRefreshNow() {
-    Alert.alert(t('device.refreshNowTitle'), t('device.refreshNowHint'), [
+  function confirmApplyPreview() {
+    if (!previewImageBytes) {
+      Alert.alert(t('device.applyPreview'), t('device.previewApplyMissing'));
+      return;
+    }
+    Alert.alert(t('device.applyPreviewTitle'), t('device.applyPreviewHint'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.confirm'), onPress: () => refreshMutation.mutate() },
+      { text: t('common.confirm'), onPress: () => applyPreviewMutation.mutate() },
     ]);
   }
   const switchMutation = useMutation({
@@ -108,16 +170,23 @@ export default function DeviceDetailScreen() {
     }
     // Fetch PNG preview image after data refresh
     setPreviewImageUri(null);
+    setPreviewImageBytes(null);
     const data = result.data;
     if (data?.preview_url) {
       try {
-        const url = buildApiUrl(data.preview_url);
+        const rawUrl = buildApiUrl(data.preview_url);
+        const sep = rawUrl.includes('?') ? '&' : '?';
+        const url = `${rawUrl}${sep}no_cache=1`;
         const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (resp.ok) {
-          const blob = await resp.blob();
-          const reader = new FileReader();
-          reader.onload = () => setPreviewImageUri(reader.result as string);
-          reader.readAsDataURL(blob);
+          const bytes = await resp.arrayBuffer();
+          setPreviewImageBytes(bytes);
+          const b64 = uint8ArrayToBase64(new Uint8Array(bytes));
+          const targetUri = buildPreviewCacheUri(mac || 'device', selectedWidgetMode);
+          await FileSystem.writeAsStringAsync(targetUri, b64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          setPreviewImageUri(`${targetUri}?t=${Date.now()}`);
         }
       } catch {
         // Non-critical: keep data without image
@@ -167,6 +236,16 @@ export default function DeviceDetailScreen() {
       return `${label} · ${firstWidgetSnippet(widget.content)}`;
     }
     return t('device.widgetEmpty');
+  }
+
+  const HARDCODED_CONFIGURABLE = ['CALENDAR', 'TIMETABLE'];
+
+  function isModeConfigurable(modeId: string): boolean {
+    if (HARDCODED_CONFIGURABLE.includes(modeId.toUpperCase())) return true;
+    const catalog = modesQuery.data?.modes;
+    if (!catalog) return false;
+    const info = catalog.find((m: ModeCatalogItem) => m.mode_id === modeId);
+    return Boolean(info?.settings_schema && info.settings_schema.length > 0);
   }
 
   const configModesLabel =
@@ -225,15 +304,22 @@ export default function DeviceDetailScreen() {
         ) : null}
         <View style={styles.widgetActions}>
           <InkButton label={t('device.previewRefresh')} variant="secondary" onPress={handleRefreshWidget} />
+          {isModeConfigurable(selectedWidgetMode) && (
+            <InkButton
+              label={t('device.modeSettingsBtn')}
+              variant="secondary"
+              onPress={() => router.push(`/device/${encodeURIComponent(mac || '')}/mode-settings?mode=${encodeURIComponent(selectedWidgetMode)}`)}
+            />
+          )}
           <InkButton label={t('device.shareImage')} variant="secondary" onPress={handleShareImage} />
         </View>
       </InkCard>
 
       <View style={styles.actionStack}>
         <InkButton
-          label={refreshMutation.isPending ? t('common.loading') : t('device.refreshNow')}
+          label={applyPreviewMutation.isPending ? t('common.loading') : t('device.applyPreview')}
           variant="secondary"
-          onPress={confirmRefreshNow}
+          onPress={confirmApplyPreview}
         />
         <InkButton label={switchMutation.isPending ? t('common.loading') : t('device.switchMode')} variant="secondary" onPress={() => switchMutation.mutate()} />
         <InkButton label={t('device.editConfig')} variant="secondary" onPress={() => router.push(`/device/${encodeURIComponent(mac || '')}/config`)} />

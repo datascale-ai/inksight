@@ -1,8 +1,6 @@
 const DEFAULT_API_BASE = 'http://127.0.0.1:8080/api';
-const API_BASE_ENV_KEYS = [
-  'EXPO_PUBLIC_INKSIGHT_API_BASE',
-  'EXPO_PUBLIC_INKSIGHT_BACKEND_API_BASE',
-] as const;
+const EXPO_PUBLIC_INKSIGHT_API_BASE = process.env.EXPO_PUBLIC_INKSIGHT_API_BASE;
+const EXPO_PUBLIC_INKSIGHT_BACKEND_API_BASE = process.env.EXPO_PUBLIC_INKSIGHT_BACKEND_API_BASE;
 
 type ApiFetchOptions = {
   method?: string;
@@ -28,8 +26,7 @@ function ensureApiSuffix(value: string) {
 }
 
 function resolveApiBase() {
-  for (const key of API_BASE_ENV_KEYS) {
-    const value = process.env[key];
+  for (const value of [EXPO_PUBLIC_INKSIGHT_API_BASE, EXPO_PUBLIC_INKSIGHT_BACKEND_API_BASE]) {
     if (typeof value === 'string' && value.trim()) {
       return ensureApiSuffix(value);
     }

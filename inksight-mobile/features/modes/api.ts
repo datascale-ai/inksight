@@ -32,6 +32,7 @@ export type ModeCatalogItem = {
   description: string;
   source: string;
   settings_schema?: Array<Record<string, unknown>>;
+  mac?: string;
 };
 
 export type CustomModeDefinition = {
@@ -120,8 +121,13 @@ export async function previewCustomModeImage(
   return `data:${mime};base64,${b64}`;
 }
 
-export async function listModes() {
-  return apiRequest<{ modes: ModeCatalogItem[] }>('/modes');
+export async function listModes(opts?: { token?: string; mac?: string }) {
+  const params: string[] = [];
+  if (opts?.mac) params.push(`mac=${encodeURIComponent(opts.mac)}`);
+  const qs = params.length ? `?${params.join('&')}` : '';
+  return apiRequest<{ modes: ModeCatalogItem[] }>(`/modes${qs}`, {
+    token: opts?.token,
+  });
 }
 
 export async function generateMode(
@@ -153,6 +159,14 @@ export async function saveCustomMode(token: string, modeDef: CustomModeDefinitio
 
 export async function getCustomMode(token: string, modeId: string) {
   return apiRequest<CustomModeDefinition>(`/modes/custom/${encodeURIComponent(modeId)}`, {
+    token,
+  });
+}
+
+export async function deleteCustomMode(token: string, modeId: string, mac?: string) {
+  const qs = mac ? `?mac=${encodeURIComponent(mac)}` : '';
+  return apiRequest<{ ok: boolean }>(`/modes/custom/${encodeURIComponent(modeId)}${qs}`, {
+    method: 'DELETE',
     token,
   });
 }

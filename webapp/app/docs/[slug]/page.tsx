@@ -69,13 +69,15 @@ export default async function DocSlugPage({
       <ReactMarkdown 
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: ({node, ...props}) => (
+          h1: ({...props}) => (
             <div className="flex items-center justify-between gap-4 mb-8">
               <h1 className="!mb-0">{props.children}</h1>
               <div className="flex-shrink-0">
-                <img 
-                  src={locale === "en" ? "/images/QQ_EN.jpg" : "/images/QQ.jpg"} 
-                  alt="QQ Group" 
+                <Image
+                  src={locale === "en" ? "/images/QQ_EN.jpg" : "/images/QQ.jpg"}
+                  alt="QQ Group"
+                  width={192}
+                  height={96}
                   className="h-24 w-auto object-contain rounded-md border border-ink/10 shadow-sm"
                 />
               </div>
