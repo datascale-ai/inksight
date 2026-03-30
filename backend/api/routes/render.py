@@ -296,6 +296,7 @@ async def preview(
     no_cache: Optional[int] = Query(default=None),
     intent: Optional[int] = Query(default=None),
     colors: int = Query(default=2, ge=2, le=4),
+    ui_language: Optional[str] = Query(default=None, description="Preview only: zh|en, overrides device mode_language"),
     x_device_token: Optional[str] = Header(default=None),
     x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
@@ -328,6 +329,8 @@ async def preview(
                     parsed_mode_override = candidate
             except JSONDecodeError:
                 logger.warning("[PREVIEW] Failed to parse mode_override JSON", exc_info=True)
+        _ui_lang = (ui_language or "").strip().lower()
+        _preview_ui_lang = _ui_lang if _ui_lang in ("zh", "en") else None
         img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source = await build_image(
             effective_v,
             mac,
@@ -338,6 +341,7 @@ async def preview(
             preview_city_override=(city_override.strip() if city_override else None),
             preview_mode_override=parsed_mode_override,
             preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
+            preview_ui_language=_preview_ui_lang,
             current_user_id=current_user_id,
             user_api_key=x_inksight_llm_api_key,
             intent_only=(intent == 1),
@@ -425,6 +429,7 @@ async def preview_stream(
     h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
     no_cache: Optional[int] = Query(default=None),
     colors: int = Query(default=2, ge=2, le=4),
+    ui_language: Optional[str] = Query(default=None, description="Preview only: zh|en, overrides device mode_language"),
     x_device_token: Optional[str] = Header(default=None),
     x_inksight_llm_api_key: Optional[str] = Header(default=None),
     ink_session: Optional[str] = Cookie(default=None),
@@ -458,6 +463,8 @@ async def preview_stream(
                 except JSONDecodeError:
                     logger.warning("[PREVIEW_STREAM] Failed to parse mode_override JSON", exc_info=True)
 
+            _ui_lang = (ui_language or "").strip().lower()
+            _preview_ui_lang = _ui_lang if _ui_lang in ("zh", "en") else None
             img, resolved_persona, cache_hit, _content_fallback, quota_exhausted, api_key_invalid, llm_mode_requires_quota, usage_source = await build_image(
                 effective_v,
                 mac,
@@ -468,6 +475,7 @@ async def preview_stream(
                 preview_city_override=(city_override.strip() if city_override else None),
                 preview_mode_override=parsed_mode_override,
                 preview_memo_text=(memo_text if isinstance(memo_text, str) else None),
+                preview_ui_language=_preview_ui_lang,
                 current_user_id=current_user_id,
                 user_api_key=x_inksight_llm_api_key,
                 colors=colors,

@@ -1638,6 +1638,14 @@ async def get_active_config(mac: str, log_load: bool = True) -> dict | None:
         logger.info(
             f"[CONFIG LOAD] mac={mac}, id={config.get('id')}, refresh_strategy={config.get('refresh_strategy')}, modes={config.get('modes')}"
         )
+    if config.get("llm_provider"):
+        config["llm_provider"] = ""
+    if config.get("llm_model"):
+        config["llm_model"] = ""
+    if config.get("image_provider"):
+        config["image_provider"] = ""
+    if config.get("image_model"):
+        config["image_model"] = ""
     return config
 
 

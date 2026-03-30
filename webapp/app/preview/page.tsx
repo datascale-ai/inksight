@@ -318,6 +318,7 @@ export default function ExperiencePage() {
     try {
       const params = new URLSearchParams();
       params.set("persona", targetMode);
+      params.set("ui_language", locale === "en" ? "en" : "zh");
       if (previewColors > 2) params.set("colors", String(previewColors));
       
       // 处理城市覆盖：优先使用 override 中的 city，否则使用全局 city
@@ -646,9 +647,25 @@ export default function ExperiencePage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <CardTitle>{t(locale, "preview.panel.modes", "Modes")}</CardTitle>
-                <ColorSelect value={previewColors} onChange={setPreviewColors} tr={(zh, en) => locale === "zh" ? zh : en} />
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <CardTitle>{t(locale, "preview.panel.modes", "Modes")}</CardTitle>
+                  <ColorSelect value={previewColors} onChange={setPreviewColors} tr={(zh, en) => locale === "zh" ? zh : en} />
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCustomModeModal(true);
+                    setCustomDesc("");
+                    setCustomModeName("");
+                    setCustomJson("");
+                    setCustomGenerating(false);
+                  }}
+                  className="rounded-sm border border-dashed border-ink/20 bg-white px-3 py-2 text-sm flex items-center gap-2 text-ink-light hover:border-ink/40 hover:bg-paper-dark transition-colors"
+                  title={locale === "zh" ? "新建自定义模式" : "Create custom mode"}
+                >
+                  <Plus size={16} />
+                  <span>{locale === "zh" ? "新建自定义模式" : "Create custom mode"}</span>
+                </button>
               </div>
             </CardHeader>
             <CardContent>
@@ -687,22 +704,6 @@ export default function ExperiencePage() {
                   onPreview={applyModeAndPreview}
                   collapsible
                   customMeta={modeMeta}
-                  tailItem={
-                    <button
-                      onClick={() => {
-                        setShowCustomModeModal(true);
-                        setCustomDesc("");
-                        setCustomModeName("");
-                        setCustomJson("");
-                        setCustomGenerating(false);
-                      }}
-                      className="rounded-sm border border-dashed border-ink/20 bg-white px-3 py-2 min-h-[64px] flex flex-col items-center justify-center text-ink-light hover:border-ink/40 hover:bg-paper-dark transition-colors"
-                      title={locale === "zh" ? "新建自定义模式" : "Create custom mode"}
-                    >
-                      <Plus size={18} className="mb-1" />
-                      <div className="text-[11px]">{locale === "zh" ? "新建" : "New"}</div>
-                    </button>
-                  }
                   locale={locale}
                 />
               ) : null}

@@ -1,9 +1,12 @@
-import { Github } from "lucide-react";
-import { cookies } from "next/headers";
-import { normalizeLocale, t } from "@/lib/i18n";
+"use client";
 
-export async function Footer() {
-  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+import { usePathname } from "next/navigation";
+import { Github } from "lucide-react";
+import { localeFromPathname, t } from "@/lib/i18n";
+
+export function Footer() {
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname || "/");
   return (
     <footer className="border-t border-ink/10 bg-paper">
       <div className="mx-auto max-w-6xl px-6 py-12">
