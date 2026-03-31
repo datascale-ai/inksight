@@ -8,10 +8,22 @@
     "type": "llm_json",
     "prompt_template": "You are a language expert. Pick an interesting, uncommon but useful English word and provide its definition and usage.\nOutput JSON: {{\"word\": \"The word\", \"phonetic\": \"Phonetic transcription (optional)\", \"definition\": \"Brief definition (under 30 chars)\", \"example\": \"Short example sentence (under 40 chars)\"}}\nPick words that are elegant, useful in daily life, or have interesting etymologies.\nContext: {context}",
     "output_schema": {
-      "word": {"type": "string", "default": "Serendipity"},
-      "phonetic": {"type": "string", "default": "/ˌsɛrənˈdɪpɪti/"},
-      "definition": {"type": "string", "default": "A happy accident or pleasant surprise"},
-      "example": {"type": "string", "default": "Finding that book was pure serendipity."}
+      "word": {
+        "type": "string",
+        "default": "Serendipity"
+      },
+      "phonetic": {
+        "type": "string",
+        "default": "/ˌsɛrənˈdɪpɪti/"
+      },
+      "definition": {
+        "type": "string",
+        "default": "A happy accident or pleasant surprise"
+      },
+      "example": {
+        "type": "string",
+        "default": "Finding that book was pure serendipity."
+      }
     },
     "temperature": 0.8,
     "fallback": {
@@ -42,7 +54,10 @@
     ]
   },
   "layout": {
-    "status_bar": {"line_width": 1, "dashed": false},
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
       {
         "type": "centered_text",
@@ -52,24 +67,81 @@
         "max_width_ratio": 0.9,
         "vertical_center": true
       },
-      {"type": "spacer", "height": 6},
-      {"type": "text", "field": "phonetic", "font_size": 11, "align": "center", "max_lines": 1},
-      {"type": "spacer", "height": 16},
-      {"type": "text", "field": "definition", "font_name": "Lora-Regular.ttf", "font_size": 16, "align": "center", "max_lines": 2},
-      {"type": "spacer", "height": 12},
-      {"type": "text", "field": "example", "font_name": "Lora-Italic.ttf", "font_size": 12, "align": "center", "max_lines": 2}
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "text",
+        "field": "phonetic",
+        "font_size": 11,
+        "align": "center",
+        "max_lines": 1
+      },
+      {
+        "type": "spacer",
+        "height": 16
+      },
+      {
+        "type": "text",
+        "field": "definition",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 16,
+        "align": "center",
+        "max_lines": 2
+      },
+      {
+        "type": "spacer",
+        "height": 12
+      },
+      {
+        "type": "text",
+        "field": "example",
+        "font_name": "Lora-Italic.ttf",
+        "font_size": 12,
+        "align": "center",
+        "max_lines": 2
+      }
     ],
-    "footer": {"label": "WORD", "attribution_template": "— Expand Your Lexicon"}
+    "footer": {
+      "label": "Word of the Day",
+      "attribution_template": "— Expand Your Lexicon"
+    }
   },
   "layout_overrides": {
     "296x128": {
       "body": [
-        {"type": "text", "field": "word", "font_name": "Lora-Bold.ttf", "font_size": 22, "align": "center"},
-        {"type": "text", "field": "phonetic", "font_size": 8, "align": "center"},
-        {"type": "separator", "style": "short", "width": 30},
-        {"type": "text", "field": "definition", "font_name": "Lora-Regular.ttf", "font_size": 10, "align": "center", "max_lines": 1}
+        {
+          "type": "text",
+          "field": "word",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 22,
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "field": "phonetic",
+          "font_size": 8,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 30
+        },
+        {
+          "type": "text",
+          "field": "definition",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 10,
+          "align": "center",
+          "max_lines": 1
+        }
       ],
-      "footer": {"label": "WORD", "height": 18}
+      "footer": {
+        "label": "Word of the Day",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
@@ -81,12 +153,41 @@
           "max_width_ratio": 0.9,
           "vertical_center": true
         },
-        {"type": "spacer", "height": 10},
-        {"type": "text", "field": "phonetic", "font_size": 16, "align": "center", "max_lines": 1},
-        {"type": "spacer", "height": 24},
-        {"type": "text", "field": "definition", "font_name": "Lora-Regular.ttf", "font_size": 22, "align": "center", "max_lines": 2},
-        {"type": "spacer", "height": 16},
-        {"type": "text", "field": "example", "font_name": "Lora-Italic.ttf", "font_size": 16, "align": "center", "max_lines": 2}
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
+          "type": "text",
+          "field": "phonetic",
+          "font_size": 16,
+          "align": "center",
+          "max_lines": 1
+        },
+        {
+          "type": "spacer",
+          "height": 24
+        },
+        {
+          "type": "text",
+          "field": "definition",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 22,
+          "align": "center",
+          "max_lines": 2
+        },
+        {
+          "type": "spacer",
+          "height": 16
+        },
+        {
+          "type": "text",
+          "field": "example",
+          "font_name": "Lora-Italic.ttf",
+          "font_size": 16,
+          "align": "center",
+          "max_lines": 2
+        }
       ]
     }
   }

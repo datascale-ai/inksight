@@ -5,41 +5,72 @@
   "cacheable": false,
   "description": "Days remaining until your target date",
   "settings_schema": [
-    { "key": "countdownEvents", "label": "Countdown events" }
+    {
+      "key": "countdownEvents",
+      "label": "Countdown events"
+    }
   ],
   "content": {
     "type": "computed",
     "provider": "countdown",
     "fallback": {
       "events": [
-        { "name": "New Year", "date": "2027-01-01", "type": "countdown", "days": 100 }
+        {
+          "name": "New Year",
+          "date": "2027-01-01",
+          "type": "countdown",
+          "days": 100
+        }
       ]
     },
     "fallback_pool": [
       {
         "events": [
-          { "name": "New Year", "date": "2027-01-01", "type": "countdown", "days": 100 }
+          {
+            "name": "New Year",
+            "date": "2027-01-01",
+            "type": "countdown",
+            "days": 100
+          }
         ]
       },
       {
         "events": [
-          { "name": "Summer Vacation", "date": "2026-07-01", "type": "countdown", "days": 90 }
+          {
+            "name": "Summer Vacation",
+            "date": "2026-07-01",
+            "type": "countdown",
+            "days": 90
+          }
         ]
       },
       {
         "events": [
-          { "name": "Birthday", "date": "2026-06-15", "type": "countdown", "days": 110 }
+          {
+            "name": "Birthday",
+            "date": "2026-06-15",
+            "type": "countdown",
+            "days": 110
+          }
         ]
       },
       {
         "events": [
-          { "name": "Project Deadline", "date": "2026-03-31", "type": "countdown", "days": 34 }
+          {
+            "name": "Project Deadline",
+            "date": "2026-03-31",
+            "type": "countdown",
+            "days": 34
+          }
         ]
       }
     ]
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
       {
         "type": "list",
@@ -57,7 +88,11 @@
         "font_size": 11,
         "align": "center"
       },
-      { "type": "separator", "style": "short", "width": 70 },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 70
+      },
       {
         "type": "list",
         "field": "events",
@@ -68,10 +103,17 @@
         "item_spacing": 58,
         "align": "center"
       },
-      { "type": "text", "template": "days to go", "font_name": "Lora-Regular.ttf", "font_size": 13, "align": "center", "max_lines": 1 }
+      {
+        "type": "text",
+        "template": "days to go",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 13,
+        "align": "center",
+        "max_lines": 1
+      }
     ],
     "footer": {
-      "label": "COUNTDOWN",
+      "label": "Countdown",
       "attribution_template": "— Remember"
     }
   },
@@ -86,7 +128,11 @@
           "font_size": 12,
           "align": "center"
         },
-        { "type": "separator", "style": "short", "width": 40 },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 40
+        },
         {
           "type": "list",
           "field": "events",
@@ -97,9 +143,18 @@
           "item_spacing": 40,
           "align": "center"
         },
-        { "type": "text", "template": "days to go", "font_name": "Lora-Regular.ttf", "font_size": 9, "align": "center" }
+        {
+          "type": "text",
+          "template": "days to go",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 9,
+          "align": "center"
+        }
       ],
-      "footer": { "label": "COUNTDOWN", "height": 18 }
+      "footer": {
+        "label": "Countdown",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
@@ -119,7 +174,11 @@
           "font_size": 16,
           "align": "center"
         },
-        { "type": "separator", "style": "short", "width": 100 },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 100
+        },
         {
           "type": "list",
           "field": "events",
@@ -130,7 +189,14 @@
           "item_spacing": 88,
           "align": "center"
         },
-        { "type": "text", "template": "days to go", "font_name": "Lora-Regular.ttf", "font_size": 18, "align": "center", "max_lines": 1 }
+        {
+          "type": "text",
+          "template": "days to go",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 18,
+          "align": "center",
+          "max_lines": 1
+        }
       ]
     }
   }

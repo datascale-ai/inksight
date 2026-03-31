@@ -9,6 +9,22 @@ import { Loader2 } from "lucide-react";
 import { setToken } from "@/lib/auth";
 import { localeFromPathname } from "@/lib/i18n";
 
+const PHONE_REGION_OPTIONS = [
+  { region: "CN", code: "+86", label: "China Mainland", labelZh: "中国大陆" },
+  { region: "HK", code: "+852", label: "Hong Kong", labelZh: "中国香港" },
+  { region: "TW", code: "+886", label: "Taiwan", labelZh: "中国台湾" },
+  { region: "SG", code: "+65", label: "Singapore", labelZh: "新加坡" },
+  { region: "JP", code: "+81", label: "Japan", labelZh: "日本" },
+  { region: "KR", code: "+82", label: "South Korea", labelZh: "韩国" },
+  { region: "US", code: "+1", label: "United States", labelZh: "美国" },
+  { region: "CA", code: "+1", label: "Canada", labelZh: "加拿大" },
+  { region: "GB", code: "+44", label: "United Kingdom", labelZh: "英国" },
+  { region: "DE", code: "+49", label: "Germany", labelZh: "德国" },
+  { region: "FR", code: "+33", label: "France", labelZh: "法国" },
+  { region: "AU", code: "+61", label: "Australia", labelZh: "澳大利亚" },
+  { region: "IN", code: "+91", label: "India", labelZh: "印度" },
+] as const;
+
 function LoginForm() {
   const router = useRouter();
   const pathname = usePathname();
@@ -28,9 +44,10 @@ function LoginForm() {
     }
   }
   const next = searchParams.get("next") || `/${locale}/config`;
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneRegion, setPhoneRegion] = useState<(typeof PHONE_REGION_OPTIONS)[number]["region"]>("CN");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
@@ -45,7 +62,7 @@ function LoginForm() {
     setLoading(true);
     try {
       // 基础前端校验：注册时强制要求手机号/邮箱（邀请码可选）
-      if (mode === "register") {
+      if (mode === "register" || mode === "reset") {
         if (!phone.trim() && !email.trim()) {
           setError(locale === "en" ? "Please enter phone or email" : "手机号或邮箱至少填写一个");
           setLoading(false);
@@ -53,10 +70,17 @@ function LoginForm() {
         }
       }
 
-      const endpoint = mode === "register" ? "/api/auth/register" : "/api/auth/login";
+      const endpoint = mode === "register"
+        ? "/api/auth/register"
+        : mode === "reset"
+          ? "/api/auth/reset-password"
+          : "/api/auth/login";
       const payload: Record<string, string> = { username, password };
-      if (mode === "register" && phone.trim()) payload.phone = phone.trim();
-      if (mode === "register" && email.trim()) payload.email = email.trim();
+      if ((mode === "register" || mode === "reset") && phone.trim()) {
+        payload.phone = phone.trim();
+        payload.phone_region = phoneRegion;
+      }
+      if ((mode === "register" || mode === "reset") && email.trim()) payload.email = email.trim();
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,10 +91,17 @@ function LoginForm() {
         setError(data.error || (locale === "en" ? "Operation failed" : "操作失败"));
         return;
       }
-      if (mode === "register") {
-        setSuccessMsg(locale === "en" ? "Registration successful, please sign in" : "注册成功，请登录");
+      if (mode === "register" || mode === "reset") {
+        setSuccessMsg(
+          mode === "register"
+            ? (locale === "en" ? "Registration successful, please sign in" : "注册成功，请登录")
+            : (locale === "en" ? "Password reset successful, please sign in" : "密码重置成功，请登录")
+        );
         setMode("login");
         setPassword("");
+        setPhoneRegion("CN");
+        setPhone("");
+        setEmail("");
         return;
       }
       if (data.token) {
@@ -119,7 +150,11 @@ function LoginForm() {
       <Card>
         <CardHeader>
           <CardTitle className="text-center font-serif text-2xl">
-            {mode === "login" ? (locale === "en" ? "Sign In" : "登录") : (locale === "en" ? "Sign Up" : "注册")}
+            {mode === "login"
+              ? (locale === "en" ? "Sign In" : "登录")
+              : mode === "register"
+                ? (locale === "en" ? "Sign Up" : "注册")
+                : (locale === "en" ? "Reset Password" : "重置密码")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -152,28 +187,41 @@ function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={4}
-                autoComplete={mode === "register" ? "new-password" : "current-password"}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
                 className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
               />
             </div>
-            {mode === "register" && (
+            {(mode === "register" || mode === "reset") && (
               <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">
                     {locale === "en" ? "Phone" : "手机号"}
                   </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                    placeholder={
-                      locale === "en"
-                        ? "Required: at least phone or email"
-                        : "与邮箱至少填一项，用于找回账号"
-                    }
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-                  />
+                  <div className="flex w-full flex-col gap-2">
+                    <select
+                      value={phoneRegion}
+                      onChange={(e) => setPhoneRegion(e.target.value as (typeof PHONE_REGION_OPTIONS)[number]["region"])}
+                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                    >
+                      {PHONE_REGION_OPTIONS.map((option) => (
+                        <option key={`${option.region}-${option.code}`} value={option.region}>
+                          {option.code} {locale === "en" ? option.label : option.labelZh}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      autoComplete="tel"
+                      placeholder={
+                        locale === "en"
+                          ? "Local phone number"
+                          : "本地手机号，与邮箱至少填一项"
+                      }
+                      className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">
@@ -202,21 +250,34 @@ function LoginForm() {
             )}
             <Button type="submit" disabled={loading} className="w-full">
               {loading && <Loader2 size={14} className="animate-spin mr-1" />}
-              {mode === "login" ? (locale === "en" ? "Sign In" : "登录") : (locale === "en" ? "Sign Up" : "注册")}
+              {mode === "login"
+                ? (locale === "en" ? "Sign In" : "登录")
+                : mode === "register"
+                  ? (locale === "en" ? "Sign Up" : "注册")
+                  : (locale === "en" ? "Reset Password" : "重置密码")}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-ink-light">
             {mode === "login" ? (
-              <span>
-                {locale === "en" ? "No account?" : "没有账号？"}{" "}
-                <button onClick={() => { setMode("register"); setError(""); }} className="text-ink underline">
-                  {locale === "en" ? "Sign up" : "注册"}
-                </button>
-              </span>
+              <div className="space-y-2">
+                <div>
+                  {locale === "en" ? "No account?" : "没有账号？"}{" "}
+                  <button onClick={() => { setMode("register"); setError(""); setSuccessMsg(""); }} className="text-ink underline">
+                    {locale === "en" ? "Sign up" : "注册"}
+                  </button>
+                </div>
+                <div>
+                  <button onClick={() => { setMode("reset"); setError(""); setSuccessMsg(""); setPassword(""); }} className="text-ink underline">
+                    {locale === "en" ? "Forgot password?" : "忘记密码？"}
+                  </button>
+                </div>
+              </div>
             ) : (
               <span>
-                {locale === "en" ? "Already have an account?" : "已有账号？"}{" "}
-                <button onClick={() => { setMode("login"); setError(""); }} className="text-ink underline">
+                {mode === "register"
+                  ? (locale === "en" ? "Already have an account?" : "已有账号？")
+                  : (locale === "en" ? "Remembered your password?" : "想起密码了？")}{" "}
+                <button onClick={() => { setMode("login"); setError(""); setSuccessMsg(""); }} className="text-ink underline">
                   {locale === "en" ? "Sign in" : "登录"}
                 </button>
               </span>

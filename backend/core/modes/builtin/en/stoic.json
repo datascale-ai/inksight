@@ -8,9 +8,18 @@
     "type": "llm_json",
     "prompt_template": "You are a Stoic philosophy guide. Based on the environment info below, choose a core Stoic concept (e.g. dichotomy of control, amor fati, memento mori, inner citadel, rational passion, cosmopolitanism) and present it as one original quote + one modern interpretation.\nOutput JSON:\n{{\"quote\": \"Original quote (under 60 chars)\", \"author\": \"Author (e.g. Marcus Aurelius)\", \"interpretation\": \"Modern take (under 40 chars, like a friend talking to you)\"}}\nRequirements:\n1. Quote must be from real Stoic texts (Meditations, Letters, Discourses, etc.)\n2. Modern interpretation should be relatable\n3. Pick a different concept each time\n4. All text must be in English\nOutput JSON only.\nContext: {context}",
     "output_schema": {
-      "quote": { "type": "string", "default": "The impediment to action advances action. What stands in the way becomes the way." },
-      "author": { "type": "string", "default": "Marcus Aurelius" },
-      "interpretation": { "type": "string", "default": "The obstacle IS the path." }
+      "quote": {
+        "type": "string",
+        "default": "The impediment to action advances action. What stands in the way becomes the way."
+      },
+      "author": {
+        "type": "string",
+        "default": "Marcus Aurelius"
+      },
+      "interpretation": {
+        "type": "string",
+        "default": "The obstacle IS the path."
+      }
     },
     "temperature": 0.8,
     "fallback": {
@@ -19,15 +28,38 @@
       "interpretation": "The obstacle IS the path."
     },
     "fallback_pool": [
-      { "quote": "The impediment to action advances action. What stands in the way becomes the way.", "author": "Marcus Aurelius", "interpretation": "The obstacle IS the path." },
-      { "quote": "We suffer more often in imagination than in reality.", "author": "Seneca", "interpretation": "Most worries never come true." },
-      { "quote": "The happiness of your life depends upon the quality of your thoughts.", "author": "Marcus Aurelius", "interpretation": "Guard your mind like a fortress." },
-      { "quote": "It is not that we have a short time to live, but that we waste a lot of it.", "author": "Seneca", "interpretation": "Time is all you have. Use it wisely." },
-      { "quote": "Waste no more time arguing what a good man should be. Be one.", "author": "Marcus Aurelius", "interpretation": "Stop planning. Start doing." }
+      {
+        "quote": "The impediment to action advances action. What stands in the way becomes the way.",
+        "author": "Marcus Aurelius",
+        "interpretation": "The obstacle IS the path."
+      },
+      {
+        "quote": "We suffer more often in imagination than in reality.",
+        "author": "Seneca",
+        "interpretation": "Most worries never come true."
+      },
+      {
+        "quote": "The happiness of your life depends upon the quality of your thoughts.",
+        "author": "Marcus Aurelius",
+        "interpretation": "Guard your mind like a fortress."
+      },
+      {
+        "quote": "It is not that we have a short time to live, but that we waste a lot of it.",
+        "author": "Seneca",
+        "interpretation": "Time is all you have. Use it wisely."
+      },
+      {
+        "quote": "Waste no more time arguing what a good man should be. Be one.",
+        "author": "Marcus Aurelius",
+        "interpretation": "Stop planning. Start doing."
+      }
     ]
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
       {
         "type": "centered_text",
@@ -39,7 +71,7 @@
       }
     ],
     "footer": {
-      "label": "STOIC",
+      "label": "Stoic",
       "attribution_template": "— {author}"
     }
   },
@@ -55,7 +87,11 @@
           "vertical_center": true
         }
       ],
-      "footer": { "label": "STOIC", "attribution_template": "— {author}", "height": 18 }
+      "footer": {
+        "label": "Stoic",
+        "attribution_template": "— {author}",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [

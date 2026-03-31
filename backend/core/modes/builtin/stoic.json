@@ -4,14 +4,22 @@
   "icon": "book",
   "cacheable": true,
   "description": "庄重、内省的哲学语录，附当代解读",
-
   "content": {
     "type": "llm_json",
     "prompt_template": "你是一位斯多葛哲学导师。根据以下环境信息，选择一个与当下情境最相关的斯多葛核心概念（如：二分法、amor fati、memento mori、无常、内在城堡、理性激情、宇宙公民等），用一句原文语录 + 一句当代解读的形式呈现。\n用 JSON 输出：\n{{\"quote\": \"语录原文（中文或英文均可，40字以内）\", \"author\": \"作者（如：马可·奥勒留）\", \"interpretation\": \"当代解读（20字以内，把古代智慧翻译成今天的语境，像朋友在跟你说话）\"}}\n要求：\n1. 语录必须来自真实的斯多葛文献（《沉思录》《论幸福生活》《手册》等）\n2. 当代解读要接地气\n3. 每次选择不同的概念，不要重复\n只输出 JSON。\n环境：{context}",
     "output_schema": {
-      "quote": { "type": "string", "default": "The impediment to action advances action. What stands in the way becomes the way." },
-      "author": { "type": "string", "default": "Marcus Aurelius" },
-      "interpretation": { "type": "string", "default": "挡路的石头，本身就是路。" }
+      "quote": {
+        "type": "string",
+        "default": "The impediment to action advances action. What stands in the way becomes the way."
+      },
+      "author": {
+        "type": "string",
+        "default": "Marcus Aurelius"
+      },
+      "interpretation": {
+        "type": "string",
+        "default": "挡路的石头，本身就是路。"
+      }
     },
     "temperature": 0.8,
     "fallback": {
@@ -19,16 +27,33 @@
       "author": "Marcus Aurelius"
     },
     "fallback_pool": [
-      {"quote": "The impediment to action advances action. What stands in the way becomes the way.", "author": "Marcus Aurelius"},
-      {"quote": "We suffer more often in imagination than in reality.", "author": "Seneca"},
-      {"quote": "The happiness of your life depends upon the quality of your thoughts.", "author": "Marcus Aurelius"},
-      {"quote": "It is not that we have a short time to live, but that we waste a lot of it.", "author": "Seneca"},
-      {"quote": "Waste no more time arguing what a good man should be. Be one.", "author": "Marcus Aurelius"}
+      {
+        "quote": "The impediment to action advances action. What stands in the way becomes the way.",
+        "author": "Marcus Aurelius"
+      },
+      {
+        "quote": "We suffer more often in imagination than in reality.",
+        "author": "Seneca"
+      },
+      {
+        "quote": "The happiness of your life depends upon the quality of your thoughts.",
+        "author": "Marcus Aurelius"
+      },
+      {
+        "quote": "It is not that we have a short time to live, but that we waste a lot of it.",
+        "author": "Seneca"
+      },
+      {
+        "quote": "Waste no more time arguing what a good man should be. Be one.",
+        "author": "Marcus Aurelius"
+      }
     ]
   },
-
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
       {
         "type": "centered_text",
@@ -40,7 +65,7 @@
       }
     ],
     "footer": {
-      "label": "STOIC",
+      "label": "???",
       "attribution_template": "— {author}"
     }
   },
@@ -56,7 +81,11 @@
           "vertical_center": true
         }
       ],
-      "footer": { "label": "STOIC", "attribution_template": "— {author}", "height": 18 }
+      "footer": {
+        "label": "???",
+        "attribution_template": "— {author}",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [

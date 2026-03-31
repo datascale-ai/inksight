@@ -8,11 +8,26 @@
     "type": "llm_json",
     "prompt_template": "Write a short fictional letter. The sender can be: someone from the future, an ordinary person from a historical era, a stranger traveling through a city, or a fictional character.\nOutput JSON:\n{{\"sender\": \"Sender identity (e.g. A tailor from 1920s Paris)\", \"greeting\": \"Salutation (e.g. Dear friend at the desk)\", \"body\": \"Letter body (50-80 words, vivid, warm but not sentimental)\", \"closing\": \"Sign-off (e.g. Yours warmly)\", \"postscript\": \"P.S. (under 30 chars, witty or poignant)\"}}\nRequirements: Literary quality, unique character voice each time. Subtle connection to current weather/season. No platitudes. Output JSON only.\nContext: {context}",
     "output_schema": {
-      "sender": {"type": "string", "default": "A lighthouse keeper, 1847"},
-      "greeting": {"type": "string", "default": "Dear stranger on the shore"},
-      "body": {"type": "string", "default": "The fog rolled in again last night. I kept the light burning, as I always do, though I wonder sometimes who still sails these waters. The gulls know my schedule better than I do. I saved a piece of bread for the one with the crooked wing — she reminds me that broken things can still fly."},
-      "closing": {"type": "string", "default": "With steady light"},
-      "postscript": {"type": "string", "default": "The crooked-wing gull says hello."}
+      "sender": {
+        "type": "string",
+        "default": "A lighthouse keeper, 1847"
+      },
+      "greeting": {
+        "type": "string",
+        "default": "Dear stranger on the shore"
+      },
+      "body": {
+        "type": "string",
+        "default": "The fog rolled in again last night. I kept the light burning, as I always do, though I wonder sometimes who still sails these waters. The gulls know my schedule better than I do. I saved a piece of bread for the one with the crooked wing — she reminds me that broken things can still fly."
+      },
+      "closing": {
+        "type": "string",
+        "default": "With steady light"
+      },
+      "postscript": {
+        "type": "string",
+        "default": "The crooked-wing gull says hello."
+      }
     },
     "temperature": 0.92,
     "fallback": {
@@ -24,19 +39,65 @@
     }
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": true },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": true
+    },
     "body": [
-      { "type": "spacer", "height": 10 },
-      { "type": "text", "field": "greeting", "font_name": "Lora-Regular.ttf", "font_size": 12, "align": "left", "margin_x": 32 },
-      { "type": "spacer", "height": 8 },
-      { "type": "text", "field": "body", "font_name": "Lora-Regular.ttf", "font_size": 13, "align": "left", "margin_x": 32, "max_lines": 6 },
-      { "type": "spacer", "height": 10 },
-      { "type": "text", "field": "closing", "font_name": "Lora-Italic.ttf", "font_size": 12, "align": "right", "margin_x": 32 },
-      { "type": "separator", "style": "short", "width": 40 },
-      { "type": "text", "field": "postscript", "font_name": "Lora-Italic.ttf", "font_size": 10, "align": "left", "margin_x": 32, "max_lines": 1 }
+      {
+        "type": "spacer",
+        "height": 10
+      },
+      {
+        "type": "text",
+        "field": "greeting",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 12,
+        "align": "left",
+        "margin_x": 32
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "text",
+        "field": "body",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 13,
+        "align": "left",
+        "margin_x": 32,
+        "max_lines": 6
+      },
+      {
+        "type": "spacer",
+        "height": 10
+      },
+      {
+        "type": "text",
+        "field": "closing",
+        "font_name": "Lora-Italic.ttf",
+        "font_size": 12,
+        "align": "right",
+        "margin_x": 32
+      },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 40
+      },
+      {
+        "type": "text",
+        "field": "postscript",
+        "font_name": "Lora-Italic.ttf",
+        "font_size": 10,
+        "align": "left",
+        "margin_x": 32,
+        "max_lines": 1
+      }
     ],
     "footer": {
-      "label": "LETTER",
+      "label": "Letter",
       "attribution_template": "— {sender}",
       "dashed": true
     }
@@ -44,22 +105,89 @@
   "layout_overrides": {
     "296x128": {
       "body": [
-        { "type": "text", "field": "greeting", "font_size": 10, "align": "left", "margin_x": 8 },
-        { "type": "text", "field": "body", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 3 },
-        { "type": "text", "field": "closing", "font_size": 10, "align": "right", "margin_x": 8 }
+        {
+          "type": "text",
+          "field": "greeting",
+          "font_size": 10,
+          "align": "left",
+          "margin_x": 8
+        },
+        {
+          "type": "text",
+          "field": "body",
+          "font_size": 10,
+          "align": "left",
+          "margin_x": 8,
+          "max_lines": 3
+        },
+        {
+          "type": "text",
+          "field": "closing",
+          "font_size": 10,
+          "align": "right",
+          "margin_x": 8
+        }
       ],
-      "footer": { "label": "LETTER", "attribution_template": "— {sender}", "dashed": true, "height": 18 }
+      "footer": {
+        "label": "Letter",
+        "attribution_template": "— {sender}",
+        "dashed": true,
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
-        { "type": "spacer", "height": 18 },
-        { "type": "text", "field": "greeting", "font_name": "Lora-Regular.ttf", "font_size": 18, "align": "left", "margin_x": 56 },
-        { "type": "spacer", "height": 14 },
-        { "type": "text", "field": "body", "font_name": "Lora-Regular.ttf", "font_size": 19, "align": "left", "margin_x": 56, "max_lines": 8 },
-        { "type": "spacer", "height": 16 },
-        { "type": "text", "field": "closing", "font_name": "Lora-Italic.ttf", "font_size": 18, "align": "right", "margin_x": 56 },
-        { "type": "separator", "style": "short", "width": 60 },
-        { "type": "text", "field": "postscript", "font_name": "Lora-Italic.ttf", "font_size": 14, "align": "left", "margin_x": 56, "max_lines": 2 }
+        {
+          "type": "spacer",
+          "height": 18
+        },
+        {
+          "type": "text",
+          "field": "greeting",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 18,
+          "align": "left",
+          "margin_x": 56
+        },
+        {
+          "type": "spacer",
+          "height": 14
+        },
+        {
+          "type": "text",
+          "field": "body",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 19,
+          "align": "left",
+          "margin_x": 56,
+          "max_lines": 8
+        },
+        {
+          "type": "spacer",
+          "height": 16
+        },
+        {
+          "type": "text",
+          "field": "closing",
+          "font_name": "Lora-Italic.ttf",
+          "font_size": 18,
+          "align": "right",
+          "margin_x": 56
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 60
+        },
+        {
+          "type": "text",
+          "field": "postscript",
+          "font_name": "Lora-Italic.ttf",
+          "font_size": 14,
+          "align": "left",
+          "margin_x": 56,
+          "max_lines": 2
+        }
       ]
     }
   }

@@ -12,8 +12,16 @@
     "summarize": true,
     "include_insight": true,
     "fallback": {
-      "hn_items": [{"title": "Failed to fetch data", "score": 0}],
-      "ph_item": {"name": "N/A", "tagline": ""},
+      "hn_items": [
+        {
+          "title": "Failed to fetch data",
+          "score": 0
+        }
+      ],
+      "ph_item": {
+        "name": "N/A",
+        "tagline": ""
+      },
       "v2ex_items": [],
       "insight": "Unable to fetch today's tech news. Please try again later.",
       "ph_name": "N/A",
@@ -21,24 +29,52 @@
     },
     "fallback_pool": [
       {
-        "hn_items": [{"title": "Failed to fetch data", "score": 0}],
-        "ph_item": {"name": "N/A", "tagline": ""},
+        "hn_items": [
+          {
+            "title": "Failed to fetch data",
+            "score": 0
+          }
+        ],
+        "ph_item": {
+          "name": "N/A",
+          "tagline": ""
+        },
         "v2ex_items": [],
         "insight": "Unable to fetch today's tech news. Please try again later.",
         "ph_name": "N/A",
         "ph_tagline": ""
       },
       {
-        "hn_items": [{"title": "LLM Frontier Tech", "score": 156}],
-        "ph_item": {"name": "AI Toolkit", "tagline": "Essential for developers"},
-        "v2ex_items": [{"title": "What did you learn today?"}],
+        "hn_items": [
+          {
+            "title": "LLM Frontier Tech",
+            "score": 156
+          }
+        ],
+        "ph_item": {
+          "name": "AI Toolkit",
+          "tagline": "Essential for developers"
+        },
+        "v2ex_items": [
+          {
+            "title": "What did you learn today?"
+          }
+        ],
         "insight": "AI tools are evolving fast. Watch open-source models and local deployment.",
         "ph_name": "AI Toolkit",
         "ph_tagline": "Essential for developers"
       },
       {
-        "hn_items": [{"title": "New Framework Released", "score": 89}],
-        "ph_item": {"name": "DevTools", "tagline": "Boost productivity"},
+        "hn_items": [
+          {
+            "title": "New Framework Released",
+            "score": 89
+          }
+        ],
+        "ph_item": {
+          "name": "DevTools",
+          "tagline": "Boost productivity"
+        },
         "v2ex_items": [],
         "insight": "The open-source ecosystem is thriving. Explore new projects.",
         "ph_name": "DevTools",
@@ -47,7 +83,10 @@
     ]
   },
   "layout": {
-    "status_bar": {"line_width": 1, "dashed": false},
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
       {
         "type": "section",
@@ -67,8 +106,15 @@
           }
         ]
       },
-      {"type": "spacer", "height": 4},
-      {"type": "separator", "style": "dashed", "margin_x": 24},
+      {
+        "type": "spacer",
+        "height": 4
+      },
+      {
+        "type": "separator",
+        "style": "dashed",
+        "margin_x": 24
+      },
       {
         "type": "section",
         "title": "PH #1",
@@ -93,8 +139,15 @@
           }
         ]
       },
-      {"type": "separator", "style": "dashed", "margin_x": 30},
-      {"type": "spacer", "height": 4},
+      {
+        "type": "separator",
+        "style": "dashed",
+        "margin_x": 30
+      },
+      {
+        "type": "spacer",
+        "height": 4
+      },
       {
         "type": "text",
         "field": "insight",
@@ -105,7 +158,7 @@
       }
     ],
     "footer": {
-      "label": "BRIEFING",
+      "label": "Briefing",
       "attribution_template": "— AI Brief"
     }
   },
@@ -121,11 +174,28 @@
           "item_spacing": 14,
           "margin_x": 8
         },
-        {"type": "spacer", "height": 2},
-        {"type": "separator", "style": "dashed", "margin_x": 8},
-        {"type": "text", "field": "insight", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2}
+        {
+          "type": "spacer",
+          "height": 2
+        },
+        {
+          "type": "separator",
+          "style": "dashed",
+          "margin_x": 8
+        },
+        {
+          "type": "text",
+          "field": "insight",
+          "font_size": 10,
+          "align": "left",
+          "margin_x": 8,
+          "max_lines": 2
+        }
       ],
-      "footer": {"label": "BRIEFING", "height": 18}
+      "footer": {
+        "label": "Briefing",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
@@ -147,8 +217,15 @@
             }
           ]
         },
-        {"type": "spacer", "height": 6},
-        {"type": "separator", "style": "dashed", "margin_x": 40},
+        {
+          "type": "spacer",
+          "height": 6
+        },
+        {
+          "type": "separator",
+          "style": "dashed",
+          "margin_x": 40
+        },
         {
           "type": "section",
           "title": "PH #1",
@@ -173,8 +250,15 @@
             }
           ]
         },
-        {"type": "separator", "style": "dashed", "margin_x": 48},
-        {"type": "spacer", "height": 8},
+        {
+          "type": "separator",
+          "style": "dashed",
+          "margin_x": 48
+        },
+        {
+          "type": "spacer",
+          "height": 8
+        },
         {
           "type": "text",
           "field": "insight",

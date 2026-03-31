@@ -4,8 +4,10 @@ import re
 from datetime import datetime
 
 import aiosqlite
+import phonenumbers
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
+from phonenumbers.phonenumberutil import NumberParseException
 
 from core.auth import clear_session_cookie, create_session_token, require_user, set_session_cookie
 from core.config_store import authenticate_user, _hash_password, get_user_api_quota
@@ -14,8 +16,48 @@ from core.db import get_main_db
 router = APIRouter(tags=["auth"])
 
 
-_PHONE_RE = re.compile(r"^1[3-9]\d{9}$")
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+_COMMON_PHONE_REGIONS = {
+    "CN", "US", "CA", "GB", "JP", "KR", "SG", "HK", "TW", "DE", "FR", "AU", "IN",
+}
+
+
+def _normalize_phone(phone: str, phone_region: str = "") -> str:
+    raw = (phone or "").strip()
+    if not raw:
+        return ""
+    region = (phone_region or "").strip().upper()
+    if region and region not in _COMMON_PHONE_REGIONS:
+        raise ValueError("unsupported_region")
+    default_region = region or "CN"
+    try:
+        parsed = phonenumbers.parse(raw, None if raw.startswith("+") else default_region)
+    except NumberParseException as exc:
+        raise ValueError("invalid_phone") from exc
+    if not phonenumbers.is_valid_number(parsed):
+        raise ValueError("invalid_phone")
+    return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+
+def _phone_lookup_candidates(normalized_phone: str) -> tuple[str, ...]:
+    if not normalized_phone:
+        return ()
+    candidates = {normalized_phone}
+    if normalized_phone.startswith("+86"):
+        candidates.add(normalized_phone[3:])
+    return tuple(candidates)
+
+
+async def _phone_exists(db, normalized_phone: str) -> bool:
+    if not normalized_phone:
+        return False
+    candidates = _phone_lookup_candidates(normalized_phone)
+    cursor = await db.execute(
+        f"SELECT 1 FROM users WHERE phone IN ({','.join('?' for _ in candidates)}) LIMIT 1",
+        tuple(candidates),
+    )
+    return await cursor.fetchone() is not None
 
 
 @router.post("/auth/register")
@@ -30,6 +72,7 @@ async def auth_register(body: dict, response: Response):
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     phone = (body.get("phone") or "").strip()
+    phone_region = (body.get("phone_region") or "").strip()
     email = (body.get("email") or "").strip()
 
     if not username or len(username) < 2 or len(username) > 30:
@@ -40,8 +83,12 @@ async def auth_register(body: dict, response: Response):
     # 至少提供一个合法的手机号或邮箱
     if not phone and not email:
         return JSONResponse({"error": "手机号或邮箱至少填写一个"}, status_code=400)
-    if phone and not _PHONE_RE.match(phone):
-        return JSONResponse({"error": "手机号格式不正确"}, status_code=400)
+    normalized_phone = ""
+    if phone:
+        try:
+            normalized_phone = _normalize_phone(phone, phone_region)
+        except ValueError:
+            return JSONResponse({"error": "手机号格式不正确"}, status_code=400)
     if email and not _EMAIL_RE.match(email):
         return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
 
@@ -52,6 +99,9 @@ async def auth_register(body: dict, response: Response):
     try:
         # 显式开启事务，确保「创建用户 -> 初始化额度」原子完成
         await db.execute("BEGIN")
+        if normalized_phone and await _phone_exists(db, normalized_phone):
+            await db.rollback()
+            return JSONResponse({"error": "用户名或手机号/邮箱已存在"}, status_code=409)
 
         # 1) 创建用户记录（用户名 + 手机/邮箱）
         cursor = await db.execute(
@@ -62,7 +112,7 @@ async def auth_register(body: dict, response: Response):
             (
                 username,
                 pw_hash,
-                phone or None,
+                normalized_phone or None,
                 email or None,
                 now,
             ),
@@ -103,6 +153,64 @@ async def auth_login(body: dict, response: Response):
     token = create_session_token(user["id"], user["username"])
     set_session_cookie(response, token)
     return {"ok": True, "user_id": user["id"], "username": user["username"], "token": token}
+
+
+@router.post("/auth/reset-password")
+async def auth_reset_password(body: dict):
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    phone = (body.get("phone") or "").strip()
+    phone_region = (body.get("phone_region") or "").strip()
+    email = (body.get("email") or "").strip()
+
+    if not username or len(username) < 2 or len(username) > 30:
+        return JSONResponse({"error": "用户名长度须为 2-30 字符"}, status_code=400)
+    if len(password) < 4:
+        return JSONResponse({"error": "密码至少 4 位"}, status_code=400)
+    if not phone and not email:
+        return JSONResponse({"error": "手机号或邮箱至少填写一个"}, status_code=400)
+
+    normalized_phone = ""
+    if phone:
+        try:
+            normalized_phone = _normalize_phone(phone, phone_region)
+        except ValueError:
+            return JSONResponse({"error": "手机号格式不正确"}, status_code=400)
+    if email and not _EMAIL_RE.match(email):
+        return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
+
+    db = await get_main_db()
+    clauses = ["username = ?"]
+    params: list[str] = [username]
+
+    if normalized_phone and email:
+        phone_candidates = _phone_lookup_candidates(normalized_phone)
+        clauses.append(f"(phone IN ({','.join('?' for _ in phone_candidates)}) OR email = ?)")
+        params.extend(phone_candidates)
+        params.append(email)
+    elif normalized_phone:
+        phone_candidates = _phone_lookup_candidates(normalized_phone)
+        clauses.append(f"phone IN ({','.join('?' for _ in phone_candidates)})")
+        params.extend(phone_candidates)
+    else:
+        clauses.append("email = ?")
+        params.append(email)
+
+    cursor = await db.execute(
+        f"SELECT id FROM users WHERE {' AND '.join(clauses)} LIMIT 1",
+        tuple(params),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return JSONResponse({"error": "用户名与手机号/邮箱不匹配"}, status_code=404)
+
+    pw_hash, _ = _hash_password(password)
+    await db.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (pw_hash, row[0]),
+    )
+    await db.commit()
+    return {"ok": True, "message": "密码已重置，请重新登录"}
 
 
 @router.get("/auth/me")

@@ -8,8 +8,14 @@
     "type": "llm_json",
     "prompt_template": "You are a skilled aphorist. Output a short, powerful quote and its author.\nOutput JSON:\n{{\"quote\": \"The quote (under 50 chars)\", \"author\": \"Author (under 30 chars, can be fictional but realistic)\"}}\nRequirements:\n1. Not generic self-help — be specific, restrained, sharp\n2. Avoid political sensitivity\n3. Output JSON only\nContext: {context}",
     "output_schema": {
-      "quote": {"type": "string", "default": "The world breaks everyone, and afterward, some are strong at the broken places."},
-      "author": {"type": "string", "default": "Ernest Hemingway"}
+      "quote": {
+        "type": "string",
+        "default": "The world breaks everyone, and afterward, some are strong at the broken places."
+      },
+      "author": {
+        "type": "string",
+        "default": "Ernest Hemingway"
+      }
     },
     "temperature": 0.85,
     "fallback": {
@@ -17,27 +23,77 @@
       "author": "Ernest Hemingway"
     },
     "fallback_pool": [
-      { "quote": "The world breaks everyone, and afterward, some are strong at the broken places.", "author": "Ernest Hemingway" },
-      { "quote": "You don't need to go faster. You need to go steadier.", "author": "InkSight" },
-      { "quote": "Don't wait for inspiration. Finish the first step.", "author": "InkSight" },
-      { "quote": "Break hard things into small ones. Finish the small ones.", "author": "InkSight" },
-      { "quote": "Fewer choices, more action.", "author": "InkSight" }
+      {
+        "quote": "The world breaks everyone, and afterward, some are strong at the broken places.",
+        "author": "Ernest Hemingway"
+      },
+      {
+        "quote": "You don't need to go faster. You need to go steadier.",
+        "author": "InkSight"
+      },
+      {
+        "quote": "Don't wait for inspiration. Finish the first step.",
+        "author": "InkSight"
+      },
+      {
+        "quote": "Break hard things into small ones. Finish the small ones.",
+        "author": "InkSight"
+      },
+      {
+        "quote": "Fewer choices, more action.",
+        "author": "InkSight"
+      }
     ]
   },
   "layout": {
-    "status_bar": {"line_width": 1, "dashed": false},
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      {"type": "centered_text", "field": "quote", "font_name": "Lora-Regular.ttf", "font_size": 18, "max_width_ratio": 0.85, "vertical_center": true}
+      {
+        "type": "centered_text",
+        "field": "quote",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 18,
+        "max_width_ratio": 0.85,
+        "vertical_center": true
+      }
     ],
-    "footer": {"label": "QUOTE", "attribution_template": "— {author}"}
+    "footer": {
+      "label": "Custom Quote",
+      "attribution_template": "— {author}"
+    }
   },
   "layout_overrides": {
     "296x128": {
-      "body": [{"type": "centered_text", "field": "quote", "font_name": "Lora-Regular.ttf", "font_size": 13, "max_width_ratio": 0.92, "vertical_center": true}],
-      "footer": {"label": "QUOTE", "attribution_template": "— {author}", "height": 18}
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 13,
+          "max_width_ratio": 0.92,
+          "vertical_center": true
+        }
+      ],
+      "footer": {
+        "label": "Custom Quote",
+        "attribution_template": "— {author}",
+        "height": 18
+      }
     },
     "800x480": {
-      "body": [{"type": "centered_text", "field": "quote", "font_name": "Lora-Regular.ttf", "font_size": 26, "max_width_ratio": 0.82, "vertical_center": true}]
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "quote",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 26,
+          "max_width_ratio": 0.82,
+          "vertical_center": true
+        }
+      ]
     }
   }
 }

@@ -4,30 +4,49 @@
   "icon": "zen",
   "cacheable": true,
   "description": "极简汉字与意境注释",
-
   "content": {
     "type": "llm_json",
     "prompt_template": "你是一位禅宗大师。选择一个最适合当下环境的汉字，并说明为什么选这个字。\n用 JSON 输出：{{\"word\": \"一个汉字\", \"source\": \"出处或意境说明（10字以内）\"}}\n如：{{\"word\": \"渡\", \"source\": \"苦海无边，回头是岸\"}}\n只输出一个字和一句意境说明，不要其他内容。\n环境：{context}",
     "output_schema": {
-      "word": { "type": "string", "default": "静" },
-      "source": { "type": "string", "default": "万物归寂" }
+      "word": {
+        "type": "string",
+        "default": "静"
+      },
+      "source": {
+        "type": "string",
+        "default": "万物归寂"
+      }
     },
-    "post_process": { "word": "first_char" },
+    "post_process": {
+      "word": "first_char"
+    },
     "temperature": 0.8,
     "fallback": {
       "word": "静"
     },
     "fallback_pool": [
-      {"word": "静"},
-      {"word": "空"},
-      {"word": "悟"},
-      {"word": "定"},
-      {"word": "舍"}
+      {
+        "word": "静"
+      },
+      {
+        "word": "空"
+      },
+      {
+        "word": "悟"
+      },
+      {
+        "word": "定"
+      },
+      {
+        "word": "舍"
+      }
     ]
   },
-
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": true },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": true
+    },
     "body": [
       {
         "type": "centered_text",
@@ -51,7 +70,7 @@
       }
     ],
     "footer": {
-      "label": "ZEN",
+      "label": "??",
       "attribution_template": "— ...",
       "dashed": true
     }
@@ -68,7 +87,12 @@
           "vertical_center": true
         }
       ],
-      "footer": { "label": "ZEN", "attribution_template": "— ...", "dashed": true, "height": 18 }
+      "footer": {
+        "label": "??",
+        "attribution_template": "— ...",
+        "dashed": true,
+        "height": 18
+      }
     },
     "800x480": {
       "body": [

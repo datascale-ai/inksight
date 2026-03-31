@@ -8,10 +8,22 @@
     "type": "llm_json",
     "prompt_template": "You are a cognitive psychology professor. Introduce one cognitive bias or psychological effect.\nOutput JSON:\n{{\"name\": \"Bias name (e.g. Survivorship Bias)\", \"definition\": \"One-line definition (under 50 chars)\", \"example\": \"A relatable daily-life example (under 80 chars)\", \"antidote\": \"How to counter it (under 40 chars)\"}}\nRequirements: Cover decision-making, memory, social, and consumer biases. Examples should be relatable. All text must be in English. Output JSON only.\nContext: {context}",
     "output_schema": {
-      "name": { "type": "string", "default": "Survivorship Bias" },
-      "definition": { "type": "string", "default": "Focusing on successes while ignoring failures" },
-      "example": { "type": "string", "default": "\"Drop out like Gates\" — ignoring millions who dropped out and failed." },
-      "antidote": { "type": "string", "default": "Actively seek counter-evidence" }
+      "name": {
+        "type": "string",
+        "default": "Survivorship Bias"
+      },
+      "definition": {
+        "type": "string",
+        "default": "Focusing on successes while ignoring failures"
+      },
+      "example": {
+        "type": "string",
+        "default": "\"Drop out like Gates\" — ignoring millions who dropped out and failed."
+      },
+      "antidote": {
+        "type": "string",
+        "default": "Actively seek counter-evidence"
+      }
     },
     "temperature": 0.8,
     "fallback": {
@@ -22,56 +34,221 @@
     }
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      { "type": "spacer", "height": 8 },
-      { "type": "text", "field": "name", "font_name": "Lora-Bold.ttf", "font_size": 18, "align": "center" },
-      { "type": "spacer", "height": 6 },
-      { "type": "separator", "style": "short", "width": 70 },
-      { "type": "spacer", "height": 8 },
-      { "type": "text", "field": "definition", "font_size": 14, "align": "center", "margin_x": 28, "max_lines": 2 },
-      { "type": "spacer", "height": 12 },
-      { "type": "group", "title": "Example", "title_font_size": 12, "margin_x": 24, "children": [
-        { "type": "text", "field": "example", "font_name": "Lora-Regular.ttf", "font_size": 12, "align": "left", "margin_x": 36, "max_lines": 3 }
-      ]},
-      { "type": "spacer", "height": 8 },
-      { "type": "separator", "style": "dashed", "margin_x": 40 },
-      { "type": "spacer", "height": 6 },
-      { "type": "icon_text", "icon": "tips", "text": "Antidote", "font_size": 12, "margin_x": 24 },
-      { "type": "text", "field": "antidote", "font_name": "Lora-Regular.ttf", "font_size": 12, "align": "left", "margin_x": 40, "max_lines": 2 }
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "text",
+        "field": "name",
+        "font_name": "Lora-Bold.ttf",
+        "font_size": 18,
+        "align": "center"
+      },
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 70
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "text",
+        "field": "definition",
+        "font_size": 14,
+        "align": "center",
+        "margin_x": 28,
+        "max_lines": 2
+      },
+      {
+        "type": "spacer",
+        "height": 12
+      },
+      {
+        "type": "group",
+        "title": "Example",
+        "title_font_size": 12,
+        "margin_x": 24,
+        "children": [
+          {
+            "type": "text",
+            "field": "example",
+            "font_name": "Lora-Regular.ttf",
+            "font_size": 12,
+            "align": "left",
+            "margin_x": 36,
+            "max_lines": 3
+          }
+        ]
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "separator",
+        "style": "dashed",
+        "margin_x": 40
+      },
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "icon_text",
+        "icon": "tips",
+        "text": "Antidote",
+        "font_size": 12,
+        "margin_x": 24
+      },
+      {
+        "type": "text",
+        "field": "antidote",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 12,
+        "align": "left",
+        "margin_x": 40,
+        "max_lines": 2
+      }
     ],
     "footer": {
-      "label": "BIAS",
+      "label": "Bias",
       "attribution_template": "— Think Clearly"
     }
   },
   "layout_overrides": {
     "296x128": {
       "body": [
-        { "type": "text", "field": "name", "font_name": "Lora-Bold.ttf", "font_size": 13, "align": "center" },
-        { "type": "separator", "style": "short", "width": 50 },
-        { "type": "text", "field": "definition", "font_size": 11, "align": "center", "margin_x": 12, "max_lines": 2 },
-        { "type": "text", "field": "antidote", "font_size": 10, "align": "center", "margin_x": 12, "max_lines": 1 }
+        {
+          "type": "text",
+          "field": "name",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 13,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 50
+        },
+        {
+          "type": "text",
+          "field": "definition",
+          "font_size": 11,
+          "align": "center",
+          "margin_x": 12,
+          "max_lines": 2
+        },
+        {
+          "type": "text",
+          "field": "antidote",
+          "font_size": 10,
+          "align": "center",
+          "margin_x": 12,
+          "max_lines": 1
+        }
       ],
-      "footer": { "label": "BIAS", "attribution_template": "— Think Clearly", "height": 18 }
+      "footer": {
+        "label": "Bias",
+        "attribution_template": "— Think Clearly",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
-        { "type": "spacer", "height": 14 },
-        { "type": "text", "field": "name", "font_name": "Lora-Bold.ttf", "font_size": 26, "align": "center" },
-        { "type": "spacer", "height": 10 },
-        { "type": "separator", "style": "short", "width": 100 },
-        { "type": "spacer", "height": 12 },
-        { "type": "text", "field": "definition", "font_size": 20, "align": "center", "margin_x": 48, "max_lines": 3 },
-        { "type": "spacer", "height": 18 },
-        { "type": "group", "title": "Example", "title_font_size": 16, "margin_x": 40, "children": [
-          { "type": "text", "field": "example", "font_name": "Lora-Regular.ttf", "font_size": 16, "align": "left", "margin_x": 56, "max_lines": 4 }
-        ]},
-        { "type": "spacer", "height": 12 },
-        { "type": "separator", "style": "dashed", "margin_x": 60 },
-        { "type": "spacer", "height": 10 },
-        { "type": "icon_text", "icon": "tips", "text": "Antidote", "font_size": 16, "margin_x": 40 },
-        { "type": "text", "field": "antidote", "font_name": "Lora-Regular.ttf", "font_size": 16, "align": "left", "margin_x": 56, "max_lines": 3 }
+        {
+          "type": "spacer",
+          "height": 14
+        },
+        {
+          "type": "text",
+          "field": "name",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 26,
+          "align": "center"
+        },
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 100
+        },
+        {
+          "type": "spacer",
+          "height": 12
+        },
+        {
+          "type": "text",
+          "field": "definition",
+          "font_size": 20,
+          "align": "center",
+          "margin_x": 48,
+          "max_lines": 3
+        },
+        {
+          "type": "spacer",
+          "height": 18
+        },
+        {
+          "type": "group",
+          "title": "Example",
+          "title_font_size": 16,
+          "margin_x": 40,
+          "children": [
+            {
+              "type": "text",
+              "field": "example",
+              "font_name": "Lora-Regular.ttf",
+              "font_size": 16,
+              "align": "left",
+              "margin_x": 56,
+              "max_lines": 4
+            }
+          ]
+        },
+        {
+          "type": "spacer",
+          "height": 12
+        },
+        {
+          "type": "separator",
+          "style": "dashed",
+          "margin_x": 60
+        },
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
+          "type": "icon_text",
+          "icon": "tips",
+          "text": "Antidote",
+          "font_size": 16,
+          "margin_x": 40
+        },
+        {
+          "type": "text",
+          "field": "antidote",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 16,
+          "align": "left",
+          "margin_x": 56,
+          "max_lines": 3
+        }
       ]
     }
   }

@@ -8,11 +8,26 @@
     "type": "llm_json",
     "prompt_template": "You are a nutritionist. Recommend a simple breakfast, lunch, and dinner plan for today based on the season.\nOutput JSON: {{\"season\": \"Season (e.g. Early Spring)\", \"breakfast\": \"Breakfast (under 30 chars, use · to separate items)\", \"lunch\": \"Lunch (under 30 chars)\", \"dinner\": \"Dinner (under 30 chars)\", \"tip\": \"Nutrition tip (under 30 chars)\"}}\nKeep it simple and clear. Output JSON only.\nContext: {context}",
     "output_schema": {
-      "season": { "type": "string", "default": "Spring" },
-      "breakfast": { "type": "string", "default": "Oatmeal · Berries · Green tea" },
-      "lunch": { "type": "string", "default": "Grilled chicken salad · Soup" },
-      "dinner": { "type": "string", "default": "Salmon · Roasted vegetables" },
-      "tip": { "type": "string", "default": "Eat the rainbow for balanced nutrition." }
+      "season": {
+        "type": "string",
+        "default": "Spring"
+      },
+      "breakfast": {
+        "type": "string",
+        "default": "Oatmeal · Berries · Green tea"
+      },
+      "lunch": {
+        "type": "string",
+        "default": "Grilled chicken salad · Soup"
+      },
+      "dinner": {
+        "type": "string",
+        "default": "Salmon · Roasted vegetables"
+      },
+      "tip": {
+        "type": "string",
+        "default": "Eat the rainbow for balanced nutrition."
+      }
     },
     "temperature": 0.8,
     "fallback": {
@@ -47,63 +62,257 @@
     ]
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      { "type": "text", "field": "season", "font_name": "Lora-Bold.ttf", "font_size": 16, "align": "center" },
-      { "type": "separator", "style": "short", "width": 70 },
-      { "type": "spacer", "height": 6 },
-      { "type": "group", "title": "Breakfast", "title_font_size": 13, "margin_x": 24, "children": [
-        { "type": "text", "field": "breakfast", "font_name": "Lora-Regular.ttf", "font_size": 13, "align": "left", "margin_x": 40, "max_lines": 2 }
-      ]},
-      { "type": "spacer", "height": 4 },
-      { "type": "group", "title": "Lunch", "title_font_size": 13, "margin_x": 24, "children": [
-        { "type": "text", "field": "lunch", "font_name": "Lora-Regular.ttf", "font_size": 13, "align": "left", "margin_x": 40, "max_lines": 2 }
-      ]},
-      { "type": "spacer", "height": 4 },
-      { "type": "group", "title": "Dinner", "title_font_size": 13, "margin_x": 24, "children": [
-        { "type": "text", "field": "dinner", "font_name": "Lora-Regular.ttf", "font_size": 13, "align": "left", "margin_x": 40, "max_lines": 2 }
-      ]},
-      { "type": "spacer", "height": 6 },
-      { "type": "separator", "style": "dashed", "margin_x": 30 },
-      { "type": "spacer", "height": 4 },
-      { "type": "text", "field": "tip", "font_name": "Lora-Italic.ttf", "font_size": 12, "align": "center", "max_lines": 2 }
+      {
+        "type": "text",
+        "field": "season",
+        "font_name": "Lora-Bold.ttf",
+        "font_size": 16,
+        "align": "center"
+      },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 70
+      },
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "group",
+        "title": "Breakfast",
+        "title_font_size": 13,
+        "margin_x": 24,
+        "children": [
+          {
+            "type": "text",
+            "field": "breakfast",
+            "font_name": "Lora-Regular.ttf",
+            "font_size": 13,
+            "align": "left",
+            "margin_x": 40,
+            "max_lines": 2
+          }
+        ]
+      },
+      {
+        "type": "spacer",
+        "height": 4
+      },
+      {
+        "type": "group",
+        "title": "Lunch",
+        "title_font_size": 13,
+        "margin_x": 24,
+        "children": [
+          {
+            "type": "text",
+            "field": "lunch",
+            "font_name": "Lora-Regular.ttf",
+            "font_size": 13,
+            "align": "left",
+            "margin_x": 40,
+            "max_lines": 2
+          }
+        ]
+      },
+      {
+        "type": "spacer",
+        "height": 4
+      },
+      {
+        "type": "group",
+        "title": "Dinner",
+        "title_font_size": 13,
+        "margin_x": 24,
+        "children": [
+          {
+            "type": "text",
+            "field": "dinner",
+            "font_name": "Lora-Regular.ttf",
+            "font_size": 13,
+            "align": "left",
+            "margin_x": 40,
+            "max_lines": 2
+          }
+        ]
+      },
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "separator",
+        "style": "dashed",
+        "margin_x": 30
+      },
+      {
+        "type": "spacer",
+        "height": 4
+      },
+      {
+        "type": "text",
+        "field": "tip",
+        "font_name": "Lora-Italic.ttf",
+        "font_size": 12,
+        "align": "center",
+        "max_lines": 2
+      }
     ],
     "footer": {
-      "label": "RECIPE",
+      "label": "Recipe",
       "attribution_template": "— Eat Well"
     }
   },
   "layout_overrides": {
     "296x128": {
       "body": [
-        { "type": "text", "field": "season", "font_name": "Lora-Bold.ttf", "font_size": 12, "align": "left", "margin_x": 8 },
-        { "type": "separator", "style": "short", "width": 30 },
-        { "type": "text", "template": "B: {breakfast}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 },
-        { "type": "text", "template": "L: {lunch}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 },
-        { "type": "text", "template": "D: {dinner}", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 1 }
+        {
+          "type": "text",
+          "field": "season",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 12,
+          "align": "left",
+          "margin_x": 8
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 30
+        },
+        {
+          "type": "text",
+          "template": "B: {breakfast}",
+          "font_size": 10,
+          "align": "left",
+          "margin_x": 8,
+          "max_lines": 1
+        },
+        {
+          "type": "text",
+          "template": "L: {lunch}",
+          "font_size": 10,
+          "align": "left",
+          "margin_x": 8,
+          "max_lines": 1
+        },
+        {
+          "type": "text",
+          "template": "D: {dinner}",
+          "font_size": 10,
+          "align": "left",
+          "margin_x": 8,
+          "max_lines": 1
+        }
       ],
-      "footer": { "label": "RECIPE", "height": 20 }
+      "footer": {
+        "label": "Recipe",
+        "height": 20
+      }
     },
     "648x480": {
       "body": [
-        { "type": "text", "field": "season", "font_name": "Lora-Bold.ttf", "font_size": 22, "align": "center" },
-        { "type": "separator", "style": "short", "width": 110 },
-        { "type": "spacer", "height": 10 },
-        { "type": "group", "title": "Breakfast", "title_font_size": 18, "margin_x": 40, "children": [
-          { "type": "text", "field": "breakfast", "font_name": "Lora-Regular.ttf", "font_size": 17, "align": "left", "margin_x": 60, "max_lines": 2 }
-        ]},
-        { "type": "spacer", "height": 8 },
-        { "type": "group", "title": "Lunch", "title_font_size": 18, "margin_x": 40, "children": [
-          { "type": "text", "field": "lunch", "font_name": "Lora-Regular.ttf", "font_size": 17, "align": "left", "margin_x": 60, "max_lines": 2 }
-        ]},
-        { "type": "spacer", "height": 8 },
-        { "type": "group", "title": "Dinner", "title_font_size": 18, "margin_x": 40, "children": [
-          { "type": "text", "field": "dinner", "font_name": "Lora-Regular.ttf", "font_size": 17, "align": "left", "margin_x": 60, "max_lines": 2 }
-        ]},
-        { "type": "spacer", "height": 10 },
-        { "type": "separator", "style": "dashed", "margin_x": 48 },
-        { "type": "spacer", "height": 6 },
-        { "type": "text", "field": "tip", "font_name": "Lora-Italic.ttf", "font_size": 16, "align": "center", "max_lines": 2 }
+        {
+          "type": "text",
+          "field": "season",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 22,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 110
+        },
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
+          "type": "group",
+          "title": "Breakfast",
+          "title_font_size": 18,
+          "margin_x": 40,
+          "children": [
+            {
+              "type": "text",
+              "field": "breakfast",
+              "font_name": "Lora-Regular.ttf",
+              "font_size": 17,
+              "align": "left",
+              "margin_x": 60,
+              "max_lines": 2
+            }
+          ]
+        },
+        {
+          "type": "spacer",
+          "height": 8
+        },
+        {
+          "type": "group",
+          "title": "Lunch",
+          "title_font_size": 18,
+          "margin_x": 40,
+          "children": [
+            {
+              "type": "text",
+              "field": "lunch",
+              "font_name": "Lora-Regular.ttf",
+              "font_size": 17,
+              "align": "left",
+              "margin_x": 60,
+              "max_lines": 2
+            }
+          ]
+        },
+        {
+          "type": "spacer",
+          "height": 8
+        },
+        {
+          "type": "group",
+          "title": "Dinner",
+          "title_font_size": 18,
+          "margin_x": 40,
+          "children": [
+            {
+              "type": "text",
+              "field": "dinner",
+              "font_name": "Lora-Regular.ttf",
+              "font_size": 17,
+              "align": "left",
+              "margin_x": 60,
+              "max_lines": 2
+            }
+          ]
+        },
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
+          "type": "separator",
+          "style": "dashed",
+          "margin_x": 48
+        },
+        {
+          "type": "spacer",
+          "height": 6
+        },
+        {
+          "type": "text",
+          "field": "tip",
+          "font_name": "Lora-Italic.ttf",
+          "font_size": 16,
+          "align": "center",
+          "max_lines": 2
+        }
       ]
     }
   }

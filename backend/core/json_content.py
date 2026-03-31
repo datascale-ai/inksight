@@ -518,6 +518,8 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             habit_ov = mo.get("HABIT", {})
             if isinstance(habit_ov, dict):
                 configured_items = habit_ov.get("habitItems")
+                if not isinstance(configured_items, list):
+                    configured_items = habit_ov.get("habits")
 
         habits = []
         if isinstance(configured_items, list) and configured_items:

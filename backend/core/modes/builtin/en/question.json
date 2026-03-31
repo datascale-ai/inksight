@@ -8,9 +8,18 @@
     "type": "llm_json",
     "prompt_template": "You are a thoughtful philosopher and counselor. Generate an open-ended question that invites deep reflection, suitable for a 3-minute thinking break.\nOutput JSON:\n{{\"question\": \"The question (under 60 chars, concise and powerful)\", \"context_note\": \"Why this question matters (under 50 chars)\", \"category\": \"Category (Self / Relationships / Work / Life / Creativity)\"}}\nRequirements:\n1. Deep but not heavy; thought-provoking but not anxiety-inducing\n2. Open-ended, not yes/no\n3. Subtly connected to current season/weather/time\n4. All text must be in English\nOutput JSON only.\nContext: {context}",
     "output_schema": {
-      "question": { "type": "string", "default": "What would you do today if no one was watching?" },
-      "context_note": { "type": "string", "default": "Authenticity begins with honest self-reflection" },
-      "category": { "type": "string", "default": "Self" }
+      "question": {
+        "type": "string",
+        "default": "What would you do today if no one was watching?"
+      },
+      "context_note": {
+        "type": "string",
+        "default": "Authenticity begins with honest self-reflection"
+      },
+      "category": {
+        "type": "string",
+        "default": "Self"
+      }
     },
     "temperature": 0.9,
     "fallback": {
@@ -20,10 +29,21 @@
     }
   },
   "layout": {
-    "status_bar": {"line_width": 1, "dashed": true},
+    "status_bar": {
+      "line_width": 1,
+      "dashed": true
+    },
     "body": [
-      {"type": "spacer", "height": 10},
-      {"type": "text", "field": "category", "font_size": 10, "align": "center"},
+      {
+        "type": "spacer",
+        "height": 10
+      },
+      {
+        "type": "text",
+        "field": "category",
+        "font_size": 10,
+        "align": "center"
+      },
       {
         "type": "centered_text",
         "field": "question",
@@ -33,9 +53,20 @@
         "vertical_center": true,
         "line_spacing": 12
       },
-      {"type": "text", "field": "context_note", "font_name": "Lora-Regular.ttf", "font_size": 10, "align": "center", "max_lines": 2}
+      {
+        "type": "text",
+        "field": "context_note",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 10,
+        "align": "center",
+        "max_lines": 2
+      }
     ],
-    "footer": {"label": "?", "attribution_template": "— Take a Moment", "dashed": true}
+    "footer": {
+      "label": "Daily Question",
+      "attribution_template": "— Take a Moment",
+      "dashed": true
+    }
   },
   "layout_overrides": {
     "296x128": {
@@ -50,12 +81,25 @@
           "line_spacing": 8
         }
       ],
-      "footer": {"label": "?", "attribution_template": "— Take a Moment", "dashed": true, "height": 18}
+      "footer": {
+        "label": "Daily Question",
+        "attribution_template": "— Take a Moment",
+        "dashed": true,
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
-        {"type": "spacer", "height": 16},
-        {"type": "text", "field": "category", "font_size": 14, "align": "center"},
+        {
+          "type": "spacer",
+          "height": 16
+        },
+        {
+          "type": "text",
+          "field": "category",
+          "font_size": 14,
+          "align": "center"
+        },
         {
           "type": "centered_text",
           "field": "question",
@@ -65,7 +109,14 @@
           "vertical_center": true,
           "line_spacing": 16
         },
-        {"type": "text", "field": "context_note", "font_name": "Lora-Regular.ttf", "font_size": 14, "align": "center", "max_lines": 2}
+        {
+          "type": "text",
+          "field": "context_note",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 14,
+          "align": "center",
+          "max_lines": 2
+        }
       ]
     }
   }

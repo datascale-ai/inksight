@@ -8,10 +8,22 @@
     "type": "llm_json",
     "prompt_template": "You are a riddle master. Based on the environment info, create a fun puzzle (riddle, brain teaser, or trivia — pick one).\nOutput JSON:\n{{\"category\": \"Type (Riddle / Brain Teaser / Trivia)\", \"question\": \"The question (under 80 chars)\", \"hint\": \"A hint (under 30 chars)\", \"answer\": \"The answer (under 30 chars)\"}}\nRequirements: Fun, medium difficulty, suitable for all ages. Output JSON only.\nContext: {context}",
     "output_schema": {
-      "category": {"type": "string", "default": "Riddle"},
-      "question": {"type": "string", "default": "I have cities, but no houses. I have mountains, but no trees. What am I?"},
-      "hint": {"type": "string", "default": "You use me to find places."},
-      "answer": {"type": "string", "default": "A map"}
+      "category": {
+        "type": "string",
+        "default": "Riddle"
+      },
+      "question": {
+        "type": "string",
+        "default": "I have cities, but no houses. I have mountains, but no trees. What am I?"
+      },
+      "hint": {
+        "type": "string",
+        "default": "You use me to find places."
+      },
+      "answer": {
+        "type": "string",
+        "default": "A map"
+      }
     },
     "temperature": 0.9,
     "fallback": {
@@ -22,13 +34,34 @@
     }
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": false },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
-      { "type": "spacer", "height": 10 },
-      { "type": "text", "field": "category", "font_size": 11, "align": "center" },
-      { "type": "spacer", "height": 10 },
-      { "type": "separator", "style": "short", "width": 60 },
-      { "type": "spacer", "height": 16 },
+      {
+        "type": "spacer",
+        "height": 10
+      },
+      {
+        "type": "text",
+        "field": "category",
+        "font_size": 11,
+        "align": "center"
+      },
+      {
+        "type": "spacer",
+        "height": 10
+      },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 60
+      },
+      {
+        "type": "spacer",
+        "height": 16
+      },
       {
         "type": "centered_text",
         "field": "question",
@@ -38,23 +71,56 @@
         "vertical_center": false,
         "line_spacing": 10
       },
-      { "type": "spacer", "height": 12 },
-      { "type": "text", "template": "Hint: {hint}", "font_name": "Lora-Italic.ttf", "font_size": 11, "align": "center" },
-      { "type": "spacer", "height": 20 },
-      { "type": "separator", "style": "dashed", "margin_x": 60 },
-      { "type": "spacer", "height": 8 },
-      { "type": "text", "field": "answer", "font_size": 12, "align": "center" }
+      {
+        "type": "spacer",
+        "height": 12
+      },
+      {
+        "type": "text",
+        "template": "Hint: {hint}",
+        "font_name": "Lora-Italic.ttf",
+        "font_size": 11,
+        "align": "center"
+      },
+      {
+        "type": "spacer",
+        "height": 20
+      },
+      {
+        "type": "separator",
+        "style": "dashed",
+        "margin_x": 60
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "text",
+        "field": "answer",
+        "font_size": 12,
+        "align": "center"
+      }
     ],
     "footer": {
-      "label": "RIDDLE",
+      "label": "Riddle",
       "attribution_template": "— Think About It"
     }
   },
   "layout_overrides": {
     "296x128": {
       "body": [
-        { "type": "text", "field": "category", "font_size": 9, "align": "center" },
-        { "type": "separator", "style": "short", "width": 40 },
+        {
+          "type": "text",
+          "field": "category",
+          "font_size": 9,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 40
+        },
         {
           "type": "centered_text",
           "field": "question",
@@ -64,17 +130,44 @@
           "vertical_center": true,
           "line_spacing": 6
         },
-        { "type": "text", "field": "answer", "font_size": 10, "align": "center" }
+        {
+          "type": "text",
+          "field": "answer",
+          "font_size": 10,
+          "align": "center"
+        }
       ],
-      "footer": { "label": "RIDDLE", "attribution_template": "— Think About It", "height": 18 }
+      "footer": {
+        "label": "Riddle",
+        "attribution_template": "— Think About It",
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
-        { "type": "spacer", "height": 16 },
-        { "type": "text", "field": "category", "font_size": 15, "align": "center" },
-        { "type": "spacer", "height": 14 },
-        { "type": "separator", "style": "short", "width": 90 },
-        { "type": "spacer", "height": 24 },
+        {
+          "type": "spacer",
+          "height": 16
+        },
+        {
+          "type": "text",
+          "field": "category",
+          "font_size": 15,
+          "align": "center"
+        },
+        {
+          "type": "spacer",
+          "height": 14
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 90
+        },
+        {
+          "type": "spacer",
+          "height": 24
+        },
         {
           "type": "centered_text",
           "field": "question",
@@ -84,12 +177,36 @@
           "vertical_center": false,
           "line_spacing": 14
         },
-        { "type": "spacer", "height": 18 },
-        { "type": "text", "template": "Hint: {hint}", "font_name": "Lora-Italic.ttf", "font_size": 15, "align": "center" },
-        { "type": "spacer", "height": 28 },
-        { "type": "separator", "style": "dashed", "margin_x": 90 },
-        { "type": "spacer", "height": 12 },
-        { "type": "text", "field": "answer", "font_size": 18, "align": "center" }
+        {
+          "type": "spacer",
+          "height": 18
+        },
+        {
+          "type": "text",
+          "template": "Hint: {hint}",
+          "font_name": "Lora-Italic.ttf",
+          "font_size": 15,
+          "align": "center"
+        },
+        {
+          "type": "spacer",
+          "height": 28
+        },
+        {
+          "type": "separator",
+          "style": "dashed",
+          "margin_x": 90
+        },
+        {
+          "type": "spacer",
+          "height": 12
+        },
+        {
+          "type": "text",
+          "field": "answer",
+          "font_size": 18,
+          "align": "center"
+        }
       ]
     }
   }

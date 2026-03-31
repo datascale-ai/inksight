@@ -41,7 +41,10 @@
     ]
   },
   "layout": {
-    "status_bar": {"line_width": 1, "dashed": false},
+    "status_bar": {
+      "line_width": 1,
+      "dashed": false
+    },
     "body": [
       {
         "type": "text",
@@ -58,7 +61,7 @@
       }
     ],
     "footer": {
-      "label": "ARTWALL",
+      "label": "Art Wall",
       "attribution_template": "— Ink Art"
     }
   },
@@ -72,7 +75,10 @@
           "height": 86
         }
       ],
-      "footer": {"label": "ARTWALL", "height": 20}
+      "footer": {
+        "label": "Art Wall",
+        "height": 20
+      }
     },
     "648x480": {
       "body": [

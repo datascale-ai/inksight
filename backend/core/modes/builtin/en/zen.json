@@ -8,40 +8,112 @@
     "type": "llm_json",
     "prompt_template": "You are a Zen master. Choose ONE English word that best captures the essence of this moment. Provide a brief meaning or origin note.\nOutput JSON: {{\"word\": \"one word\", \"source\": \"brief meaning or origin (under 30 chars)\"}}\nExample: {{\"word\": \"Stillness\", \"source\": \"the art of doing nothing\"}}\nAll text must be in English. Output only the JSON.\nContext: {context}",
     "output_schema": {
-      "word": { "type": "string", "default": "Stillness" },
-      "source": { "type": "string", "default": "the art of doing nothing" }
+      "word": {
+        "type": "string",
+        "default": "Stillness"
+      },
+      "source": {
+        "type": "string",
+        "default": "the art of doing nothing"
+      }
     },
     "temperature": 0.8,
-    "fallback": { "word": "Stillness", "source": "the art of doing nothing" },
+    "fallback": {
+      "word": "Stillness",
+      "source": "the art of doing nothing"
+    },
     "fallback_pool": [
-      { "word": "Stillness" },
-      { "word": "Wander" },
-      { "word": "Bloom" },
-      { "word": "Breathe" },
-      { "word": "Drift" }
+      {
+        "word": "Stillness"
+      },
+      {
+        "word": "Wander"
+      },
+      {
+        "word": "Bloom"
+      },
+      {
+        "word": "Breathe"
+      },
+      {
+        "word": "Drift"
+      }
     ]
   },
   "layout": {
-    "status_bar": { "line_width": 1, "dashed": true },
+    "status_bar": {
+      "line_width": 1,
+      "dashed": true
+    },
     "body": [
-      { "type": "centered_text", "field": "word", "font_name": "Lora-Regular.ttf", "font_size": 48, "max_width_ratio": 0.7, "vertical_center": true },
-      { "type": "spacer", "height": 10 },
-      { "type": "text", "field": "source", "font_name": "Lora-Regular.ttf", "font_size": 9, "align": "center", "max_lines": 1 }
+      {
+        "type": "centered_text",
+        "field": "word",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 48,
+        "max_width_ratio": 0.7,
+        "vertical_center": true
+      },
+      {
+        "type": "spacer",
+        "height": 10
+      },
+      {
+        "type": "text",
+        "field": "source",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 9,
+        "align": "center",
+        "max_lines": 1
+      }
     ],
-    "footer": { "label": "ZEN", "attribution_template": "— ...", "dashed": true }
+    "footer": {
+      "label": "Zen",
+      "attribution_template": "— ...",
+      "dashed": true
+    }
   },
   "layout_overrides": {
     "296x128": {
       "body": [
-        { "type": "centered_text", "field": "word", "font_name": "Lora-Regular.ttf", "font_size": 32, "max_width_ratio": 0.7, "vertical_center": true }
+        {
+          "type": "centered_text",
+          "field": "word",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 32,
+          "max_width_ratio": 0.7,
+          "vertical_center": true
+        }
       ],
-      "footer": { "label": "ZEN", "attribution_template": "— ...", "dashed": true, "height": 18 }
+      "footer": {
+        "label": "Zen",
+        "attribution_template": "— ...",
+        "dashed": true,
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
-        { "type": "centered_text", "field": "word", "font_name": "Lora-Regular.ttf", "font_size": 72, "max_width_ratio": 0.7, "vertical_center": true },
-        { "type": "spacer", "height": 14 },
-        { "type": "text", "field": "source", "font_name": "Lora-Regular.ttf", "font_size": 14, "align": "center", "max_lines": 1 }
+        {
+          "type": "centered_text",
+          "field": "word",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 72,
+          "max_width_ratio": 0.7,
+          "vertical_center": true
+        },
+        {
+          "type": "spacer",
+          "height": 14
+        },
+        {
+          "type": "text",
+          "field": "source",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 14,
+          "align": "center",
+          "max_lines": 1
+        }
       ]
     }
   }

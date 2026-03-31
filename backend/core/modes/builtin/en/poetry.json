@@ -8,8 +8,14 @@
     "type": "llm_json",
     "prompt_template": "You are a classical literature expert. Based on the environment info, recommend a short poem or excerpt (4-8 lines) from English or Western poetry that resonates with the current season, weather, or mood.\nOutput JSON: {{\"title\": \"Poem title\", \"author\": \"Poet name\", \"lines\": [\"line 1\", \"line 2\", ...], \"note\": \"One-line appreciation (under 40 chars)\"}}\nRequirements:\n1. Choose from classic poets: Shakespeare, Frost, Dickinson, Keats, Shelley, Wordsworth, Whitman, Yeats, Rilke, Neruda, etc.\n2. Different poem each time\n3. Each line as a separate array element\n4. All text must be in English\n5. Output JSON only\nContext: {context}",
     "output_schema": {
-      "title": { "type": "string", "default": "The Road Not Taken" },
-      "author": { "type": "string", "default": "Robert Frost" },
+      "title": {
+        "type": "string",
+        "default": "The Road Not Taken"
+      },
+      "author": {
+        "type": "string",
+        "default": "Robert Frost"
+      },
       "lines": {
         "type": "array",
         "default": [
@@ -19,7 +25,10 @@
           "And looked down one as far as I could"
         ]
       },
-      "note": { "type": "string", "default": "Every choice shapes who we become." }
+      "note": {
+        "type": "string",
+        "default": "Every choice shapes who we become."
+      }
     },
     "temperature": 0.8,
     "fallback": {
@@ -70,15 +79,47 @@
     ]
   },
   "layout": {
-    "status_bar": {"line_width": 1, "dashed": true},
+    "status_bar": {
+      "line_width": 1,
+      "dashed": true
+    },
     "body": [
-      {"type": "spacer", "height": 14},
-      {"type": "text", "field": "title", "font_name": "Lora-Bold.ttf", "font_size": 14, "align": "center"},
-      {"type": "spacer", "height": 4},
-      {"type": "text", "field": "author", "font_name": "Lora-Regular.ttf", "font_size": 11, "align": "center"},
-      {"type": "spacer", "height": 6},
-      {"type": "separator", "style": "short", "width": 60, "line_width": 1},
-      {"type": "spacer", "height": 8},
+      {
+        "type": "spacer",
+        "height": 14
+      },
+      {
+        "type": "text",
+        "field": "title",
+        "font_name": "Lora-Bold.ttf",
+        "font_size": 14,
+        "align": "center"
+      },
+      {
+        "type": "spacer",
+        "height": 4
+      },
+      {
+        "type": "text",
+        "field": "author",
+        "font_name": "Lora-Regular.ttf",
+        "font_size": 11,
+        "align": "center"
+      },
+      {
+        "type": "spacer",
+        "height": 6
+      },
+      {
+        "type": "separator",
+        "style": "short",
+        "width": 60,
+        "line_width": 1
+      },
+      {
+        "type": "spacer",
+        "height": 8
+      },
       {
         "type": "list",
         "field": "lines",
@@ -90,11 +131,21 @@
         "margin_x": 30,
         "align": "center"
       },
-      {"type": "spacer", "height": 8},
-      {"type": "text", "field": "note", "font_name": "Lora-Italic.ttf", "font_size": 10, "align": "center", "max_lines": 2}
+      {
+        "type": "spacer",
+        "height": 8
+      },
+      {
+        "type": "text",
+        "field": "note",
+        "font_name": "Lora-Italic.ttf",
+        "font_size": 10,
+        "align": "center",
+        "max_lines": 2
+      }
     ],
     "footer": {
-      "label": "POETRY",
+      "label": "Poetry",
       "attribution_template": "— {author}",
       "dashed": true
     }
@@ -102,8 +153,19 @@
   "layout_overrides": {
     "296x128": {
       "body": [
-        {"type": "text", "field": "title", "font_name": "Lora-Bold.ttf", "font_size": 11, "align": "center"},
-        {"type": "separator", "style": "short", "width": 40, "line_width": 1},
+        {
+          "type": "text",
+          "field": "title",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 11,
+          "align": "center"
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 40,
+          "line_width": 1
+        },
         {
           "type": "list",
           "field": "lines",
@@ -116,17 +178,51 @@
           "align": "center"
         }
       ],
-      "footer": {"label": "POETRY", "attribution_template": "— {author}", "dashed": true, "height": 18}
+      "footer": {
+        "label": "Poetry",
+        "attribution_template": "— {author}",
+        "dashed": true,
+        "height": 18
+      }
     },
     "800x480": {
       "body": [
-        {"type": "spacer", "height": 22},
-        {"type": "text", "field": "title", "font_name": "Lora-Bold.ttf", "font_size": 22, "align": "center"},
-        {"type": "spacer", "height": 8},
-        {"type": "text", "field": "author", "font_name": "Lora-Regular.ttf", "font_size": 16, "align": "center"},
-        {"type": "spacer", "height": 10},
-        {"type": "separator", "style": "short", "width": 90, "line_width": 1},
-        {"type": "spacer", "height": 14},
+        {
+          "type": "spacer",
+          "height": 22
+        },
+        {
+          "type": "text",
+          "field": "title",
+          "font_name": "Lora-Bold.ttf",
+          "font_size": 22,
+          "align": "center"
+        },
+        {
+          "type": "spacer",
+          "height": 8
+        },
+        {
+          "type": "text",
+          "field": "author",
+          "font_name": "Lora-Regular.ttf",
+          "font_size": 16,
+          "align": "center"
+        },
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
+          "type": "separator",
+          "style": "short",
+          "width": 90,
+          "line_width": 1
+        },
+        {
+          "type": "spacer",
+          "height": 14
+        },
         {
           "type": "list",
           "field": "lines",
@@ -138,8 +234,18 @@
           "margin_x": 50,
           "align": "center"
         },
-        {"type": "spacer", "height": 12},
-        {"type": "text", "field": "note", "font_name": "Lora-Italic.ttf", "font_size": 14, "align": "center", "max_lines": 2}
+        {
+          "type": "spacer",
+          "height": 12
+        },
+        {
+          "type": "text",
+          "field": "note",
+          "font_name": "Lora-Italic.ttf",
+          "font_size": 14,
+          "align": "center",
+          "max_lines": 2
+        }
       ]
     }
   }
