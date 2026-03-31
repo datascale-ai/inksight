@@ -16,7 +16,9 @@ import { useToast } from '@/components/ui/InkToastProvider';
 import { useAuthStore } from '@/features/auth/store';
 import { getTodayContent, type TodayHeaderMeta, type TodayItem } from '@/features/content/api';
 import { appendLocalHistory, getCachedTodayContent, setCachedTodayContent } from '@/features/content/storage';
-import { listUserDevices, favoriteDeviceContent, pushPreviewToDevice, type DeviceSummary } from '@/features/device/api';
+import { getDeviceState, listUserDevices, favoriteDeviceContent, pushPreviewImageToDevice, refreshDevice, type DeviceSummary } from '@/features/device/api';
+import { listModes, type ModeCatalogItem } from '@/features/modes/api';
+import { buildApiUrl } from '@/lib/api-client';
 import { lightImpact, successFeedback } from '@/features/feedback/haptics';
 import { shareTodayItem } from '@/features/sharing/share';
 import { useFavoriteState } from '@/hooks/useFavoriteState';
@@ -24,13 +26,40 @@ import { useI18n, type I18nContextValue } from '@/lib/i18n';
 import { localizeCatalogMode } from '@/lib/mode-display';
 import { theme } from '@/lib/theme';
 
-const fallbackModes = ['DAILY', 'WEATHER', 'POETRY'];
+/** Curated pool of built-in mode IDs eligible for the daily random selection. */
+const BUILTIN_POOL = [
+  'DAILY', 'WEATHER', 'POETRY', 'STOIC', 'ZEN', 'ALMANAC',
+  'BRIEFING', 'STORY', 'QUESTION', 'RIDDLE', 'LETTER',
+  'CHALLENGE', 'HABIT', 'BIAS', 'RECIPE', 'CALENDAR',
+  'COUNTDOWN', 'TIMETABLE', 'FITNESS', 'LIFEBAR', 'THISDAY',
+  'WORD_OF_THE_DAY', 'ARTWALL',
+];
 
 function tf(t: (key: string, vars?: Record<string, string | number>) => string, key: string, fallback: string, vars?: Record<string, string | number>) {
   const resolved = t(key, vars);
   return resolved === key ? fallback : resolved;
 }
 
+/** Deterministically pick N modes from the pool using today's date as seed.
+ *  Returns the same 3 modes for the entire day; changes at midnight local time. */
+function pickDailyModes(count: number): string[] {
+  const today = new Date();
+  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  // Simple deterministic shuffle using a linear congruential generator
+  let s = seed;
+  const rand = () => {
+    s = (1664525 * s + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+  const pool = [...BUILTIN_POOL];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.min(count, pool.length));
+}
+
+/** Recursively extract the first non-empty string from a nested value. */
 function firstText(value: unknown): string {
   if (typeof value === 'string') {
     return value.trim();
@@ -48,6 +77,27 @@ function firstText(value: unknown): string {
     }
   }
   return '';
+}
+
+/** Extract the primary body content from a mode's content object.
+ *  Tries a curated list of "main content" field names, then falls back to
+ *  the first available text. Returns an empty string if nothing is found. */
+function extractMainContent(content: Record<string, unknown> | undefined): string {
+  if (!content) return '';
+  const MAIN_FIELD_PRIORITY = [
+    'text', 'quote', 'body', 'opening', 'event_title',
+    'question', 'challenge', 'word', 'daily_word', 'advice',
+    'habit', 'summary', 'note', 'title', 'author',
+  ];
+  for (const key of MAIN_FIELD_PRIORITY) {
+    const val = content[key];
+    if (val != null) {
+      const text = firstText(val);
+      if (text) return text;
+    }
+  }
+  // Last resort: first non-empty string in any field
+  return firstText(content);
 }
 
 function getItemDisplayName(item: TodayItem, locale: 'zh' | 'en') {
@@ -122,9 +172,9 @@ function ActionIconButton({
     <Pressable onPress={onPress} style={[styles.iconButton, active ? styles.iconButtonActive : null]}>
       <Icon
         size={18}
-        color={active ? theme.colors.accent : theme.colors.secondary}
+        color={active ? theme.colors.background : theme.colors.ink}
         strokeWidth={theme.strokeWidth}
-        fill={active ? theme.colors.accentSoft : 'transparent'}
+        fill={active ? theme.colors.background : 'transparent'}
       />
     </Pressable>
   );
@@ -149,8 +199,8 @@ function HeroActions({
         <Animated.View style={{ transform: [{ scale: favoriteScale }] }}>
           <Heart
             size={18}
-            color={favorite ? theme.colors.accent : theme.colors.secondary}
-            fill={favorite ? theme.colors.accentSoft : 'transparent'}
+            color={favorite ? theme.colors.background : theme.colors.ink}
+            fill={favorite ? theme.colors.background : 'transparent'}
             strokeWidth={theme.strokeWidth}
           />
         </Animated.View>
@@ -268,9 +318,44 @@ export default function TodayScreen() {
   const [activeItem, setActiveItem] = useState<TodayItem | null>(null);
   const token = useAuthStore((state) => state.token);
 
+  // Load built-in mode catalog for daily random selection
+  const modesQuery = useQuery({
+    queryKey: ['today-modes-catalog', token],
+    queryFn: () => listModes({ token: token || undefined }),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Build today's mode list: try catalog (builtin only) first, then fall back to date-seeded shuffle
+  const todaysModes = useMemo(() => {
+    const catalog = modesQuery.data?.modes;
+    if (catalog && catalog.length > 0) {
+      const builtinIds = catalog
+        .filter((m: ModeCatalogItem) => m.source === 'builtin')
+        .map((m: ModeCatalogItem) => m.mode_id);
+      if (builtinIds.length >= 3) {
+        // Deterministic daily shuffle from catalog
+        const today = new Date();
+        const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+        let s = seed;
+        const rand = () => {
+          s = (1664525 * s + 1013904223) & 0xffffffff;
+          return (s >>> 0) / 0xffffffff;
+        };
+        const pool = [...builtinIds];
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(rand() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        return pool.slice(0, 3);
+      }
+    }
+    // Fallback: date-seeded shuffle from the hardcoded pool
+    return pickDailyModes(3);
+  }, [modesQuery.data]);
+
   const query = useQuery({
-    queryKey: ['today-content-v3'],
-    queryFn: () => getTodayContent(fallbackModes),
+    queryKey: ['today-content-v3', todaysModes.join(',')],
+    queryFn: () => getTodayContent(todaysModes),
     staleTime: 30 * 60 * 1000,
     retry: 1,
   });
@@ -320,7 +405,8 @@ export default function TodayScreen() {
 
   async function handleSheetCopy() {
     if (!activeItem) return;
-    await Clipboard.setStringAsync(activeItem.summary || '');
+    const main = extractMainContent(activeItem.content);
+    await Clipboard.setStringAsync(main || activeItem.summary || '');
     showToast(tf(t, 'today.copied', 'Copied'), 'success');
   }
 
@@ -357,12 +443,49 @@ export default function TodayScreen() {
       }
       return;
     }
+
+    // Gate: require device to be online and in active runtime mode
     try {
-      await pushPreviewToDevice(device.mac, token, item.preview_url, item.mode_id);
+      const state = await getDeviceState(device.mac, token);
+      if (!state.is_online) {
+        Alert.alert(
+          tf(t, 'today.pushOfflineTitle', 'Device offline'),
+          tf(t, 'today.pushOfflineBody', 'The device is offline. Bring it online and try again.'),
+        );
+        return;
+      }
+      if (state.runtime_mode !== 'active') {
+        Alert.alert(
+          tf(t, 'today.pushIntermittentTitle', 'Device not active'),
+          tf(t, 'today.pushIntermittentBody', 'The device is in interval mode. Wait for it to enter active mode before pushing.'),
+        );
+        return;
+      }
+    } catch {
+      // State check failed; proceed with push attempt anyway (backend handles it)
+    }
+
+    try {
+      const rawUrl = buildApiUrl(item.preview_url);
+      const sep = rawUrl.includes('?') ? '&' : '?';
+      const url = `${rawUrl}${sep}no_cache=1`;
+      console.log(`[today push] url=${url}, preview_url=${item.preview_url}, mode=${item.mode_id}`);
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`Preview fetch failed: ${resp.status} ${text.slice(0, 200)}`);
+      }
+      const bytes = await resp.arrayBuffer();
+      console.log(`[today push] got ${bytes.byteLength} bytes`);
+      await pushPreviewImageToDevice(device.mac, token, bytes, item.mode_id);
+      console.log(`[today push] pushPreviewImageToDevice done`);
+      // Trigger immediate refresh so device fetches the pushed preview right away (same as webapp)
+      await refreshDevice(device.mac, token);
+      console.log(`[today push] refreshDevice done`);
       await successFeedback();
       Alert.alert(
         tf(t, 'today.pushedTitle', 'Pushed'),
-        tf(t, 'today.pushed', `${getItemDisplayName(item, locale)} pushed to ${device.mac}`, {
+        tf(t, 'today.pushed', '{title} pushed to {mac}', {
           title: getItemDisplayName(item, locale),
           mac: device.mac,
         }),
@@ -462,21 +585,27 @@ export default function TodayScreen() {
         <InkText serif style={styles.sheetTitle}>
           {sheetVariant === 'actions'
             ? tf(t, 'today.actionsTitle', 'Actions')
-            : tf(t, 'today.detailTitle', 'Detail')}
-        </InkText>
-        <InkText dimmed style={styles.sheetBody}>
-          {sheetVariant === 'actions'
-            ? tf(t, 'today.actionsBody', 'Share, copy, favorite, or push to your device.')
-            : tf(t, 'today.detailSummary', `Summary: ${activeItem?.summary || '-'}`, { summary: activeItem?.summary || '-' })}
+            : tf(t, 'today.detailTitle', 'Content Detail')}
         </InkText>
 
         {activeItem ? (
           <InkCard style={styles.sheetCard}>
-            <InkText style={styles.sheetMode}>{getItemDisplayName(activeItem, locale)}</InkText>
+            <InkChip label={getItemDisplayName(activeItem, locale)} active />
             <InkText dimmed style={styles.sheetText}>{deriveItemTitle(activeItem)}</InkText>
-            <InkText dimmed style={styles.sheetText}>
-              {deriveRecommendation(activeItem, headerMeta, t)}
-            </InkText>
+            {sheetVariant === 'detail' ? (
+              <>
+                <InkText serif style={styles.sheetMainContent}>
+                  {extractMainContent(activeItem.content) || activeItem.summary || tf(t, 'today.summaryFallback', 'Stay with one thing.')}
+                </InkText>
+                <InkText dimmed style={styles.sheetText}>
+                  {deriveRecommendation(activeItem, headerMeta, t)}
+                </InkText>
+              </>
+            ) : (
+              <InkText dimmed style={styles.sheetText}>
+                {tf(t, 'today.actionsBody', 'Share, copy, favorite, or push to your device.')}
+              </InkText>
+            )}
           </InkCard>
         ) : null}
 
@@ -559,13 +688,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   iconButtonActive: {
-    backgroundColor: theme.colors.accentSoft,
-    borderColor: theme.colors.heroBorder,
+    backgroundColor: theme.colors.ink,
+    borderColor: theme.colors.ink,
   },
   heroSummary: {
     marginTop: 18,
@@ -664,6 +793,12 @@ const styles = StyleSheet.create({
   sheetText: {
     marginTop: 8,
     lineHeight: 22,
+  },
+  sheetMainContent: {
+    marginTop: 12,
+    fontSize: 17,
+    lineHeight: 28,
+    color: theme.colors.ink,
   },
   sheetActions: {
     gap: 10,

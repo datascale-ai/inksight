@@ -28,23 +28,23 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   active: {
-    backgroundColor: theme.colors.accentSoft,
-    borderColor: theme.colors.heroBorder,
+    backgroundColor: theme.colors.ink,
+    borderColor: theme.colors.ink,
   },
   pressed: {
-    opacity: 0.86,
+    opacity: 0.7,
   },
   label: {
-    color: theme.colors.secondary,
+    color: theme.colors.ink,
     fontSize: 13,
     fontWeight: '600',
   },
   labelActive: {
-    color: theme.colors.brandInk,
+    color: theme.colors.background,
   },
 });

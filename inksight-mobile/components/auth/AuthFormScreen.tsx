@@ -178,6 +178,15 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
           onPress={handleModeSwitch}
           style={styles.switchButton}
         />
+        {mode === 'login' ? (
+          <InkButton
+            label={t('auth.forgotPassword')}
+            block
+            variant="ghost"
+            onPress={() => router.push('/forgot-password')}
+            style={styles.forgotButton}
+          />
+        ) : null}
       </InkCard>
     </AppScreen>
   );
@@ -228,5 +237,8 @@ const styles = StyleSheet.create({
   },
   switchButton: {
     marginTop: 8,
+  },
+  forgotButton: {
+    marginTop: 4,
   },
 });

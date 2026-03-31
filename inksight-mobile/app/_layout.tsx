@@ -88,6 +88,7 @@ function RootShell() {
               <Stack.Screen name="onboarding" options={{ title: t('nav.welcome'), headerBackVisible: false }} />
               <Stack.Screen name="login" options={{ title: t('nav.login') }} />
               <Stack.Screen name="register" options={{ title: t('nav.register') }} />
+              <Stack.Screen name="forgot-password" options={{ title: t('auth.forgotPassword'), headerBackVisible: true }} />
               <Stack.Screen name="browse/modes" options={{ title: t('nav.modeCatalog') }} />
               <Stack.Screen name="browse/[id]" options={{ title: t('nav.detail') }} />
               <Stack.Screen name="create/generate" options={{ title: t('nav.aiGenerate') }} />

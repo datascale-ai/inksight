@@ -1,3 +1,8 @@
+---
+description: 
+alwaysApply: true
+---
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -198,3 +203,4 @@ The mode registry reloads on server restart. Mode IDs must not conflict with exi
 | `big_number` | Large font number with alignment options |
 | `progress_bar` | Value/max-based bar |
 | `image` | Remote image (fetched + converted to 1-bit) with fallback placeholder |
+

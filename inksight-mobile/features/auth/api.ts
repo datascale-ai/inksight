@@ -36,3 +36,17 @@ export async function register(
 export async function me(token: string) {
   return apiRequest<AuthUser>('/auth/me', { token });
 }
+
+export async function resetPassword(params: {
+  username: string;
+  password: string;
+  phone?: string;
+  email?: string;
+  phone_region?: string;
+}) {
+  return apiRequest<{ ok: boolean; message: string }>('/auth/reset-password', {
+    method: 'POST',
+    body: params,
+    token: null,
+  });
+}

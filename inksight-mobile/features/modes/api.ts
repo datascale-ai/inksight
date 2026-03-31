@@ -33,6 +33,8 @@ export type ModeCatalogItem = {
   source: string;
   settings_schema?: Array<Record<string, unknown>>;
   mac?: string;
+  /** Absolute URL to the rendered PNG preview, if available. */
+  preview_url?: string;
 };
 
 export type CustomModeDefinition = {

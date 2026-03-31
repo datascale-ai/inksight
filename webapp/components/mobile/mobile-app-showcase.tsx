@@ -529,7 +529,7 @@ function BrowsePhone({
         <p className="mt-1 text-sm text-[#8E8E93]">{locale === "en" ? "History, favorites, and modes" : "历史、收藏、模式目录"}</p>
       </div>
 
-      <div className="flex rounded-[14px] bg-[#E5E5EA] p-1">
+      <div className="flex rounded-[14px] bg-white p-1 border border-[#E5E5EA]">
         {(Object.keys(browseSegments) as BrowseSegmentId[]).map((segment) => {
           const selected = segment === browseSegment;
           return (
@@ -537,7 +537,7 @@ function BrowsePhone({
               key={segment}
               type="button"
               onClick={() => setBrowseSegment(segment)}
-              className={`flex-1 rounded-[11px] px-3 py-2 text-sm transition-all ${selected ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#8E8E93]"}`}
+              className={`flex-1 rounded-[11px] px-3 py-2 text-sm transition-all ${selected ? "bg-[#1A1A1A] text-white" : "text-[#1A1A1A] hover:bg-[#F0F0F0]"}`}
             >
               {tr(locale, browseSegments[segment].label)}
             </button>

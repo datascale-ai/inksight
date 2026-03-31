@@ -6,15 +6,18 @@ import { Clock, Heart, Trash2 } from 'lucide-react-native';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkChip } from '@/components/ui/InkChip';
+import { InkBottomSheet } from '@/components/ui/InkBottomSheet';
+import { InkButton } from '@/components/ui/InkButton';
 import { InkEmptyState } from '@/components/ui/InkEmptyState';
 import { InkText } from '@/components/ui/InkText';
 import { ModeIcon } from '@/components/content/ModeIcon';
 import { theme } from '@/lib/theme';
 import { useAuthStore } from '@/features/auth/store';
-import { getTodayContent } from '@/features/content/api';
 import { getLocalFavorites, getLocalHistory } from '@/features/content/storage';
-import { listUserDevices, getDeviceFavorites, getDeviceHistory } from '@/features/device/api';
-import { listModes, deleteCustomMode } from '@/features/modes/api';
+import { getDeviceState, listUserDevices, getDeviceFavorites, getDeviceHistory, pushPreviewImageToDevice, refreshDevice } from '@/features/device/api';
+import { listModes, deleteCustomMode, type ModeCatalogItem } from '@/features/modes/api';
+import { getWidgetData } from '@/features/widgets/api';
+import { buildApiUrl } from '@/lib/api-client';
 import { useI18n } from '@/lib/i18n';
 import { localizeCatalogMode } from '@/lib/mode-display';
 import { lightImpact, successFeedback } from '@/features/feedback/haptics';
@@ -46,14 +49,11 @@ export default function BrowseScreen() {
   const [segment, setSegment] = useState<(typeof segments)[number]>('modes');
   const [localFavorites, setLocalFavorites] = useState<Awaited<ReturnType<typeof getLocalFavorites>>>([]);
   const [localHistory, setLocalHistory] = useState<Awaited<ReturnType<typeof getLocalHistory>>>([]);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [activeCustomMode, setActiveCustomMode] = useState<ModeCatalogItem | null>(null);
   const token = useAuthStore((state) => state.token);
   const queryClient = useQueryClient();
 
-  const todayQuery = useQuery({
-    queryKey: ['browse-recommended-today'],
-    queryFn: () => getTodayContent(['DAILY', 'POETRY', 'WEATHER']),
-    staleTime: 10 * 60 * 1000,
-  });
   const devicesQuery = useQuery({
     queryKey: ['browse-devices', token],
     queryFn: () => listUserDevices(token || ''),
@@ -63,7 +63,7 @@ export default function BrowseScreen() {
   const deviceNicknames = useMemo(() => {
     const map: Record<string, string> = {};
     for (const d of devicesQuery.data?.devices || []) {
-      map[d.mac] = d.nickname || d.mac;
+      if (d.nickname) map[d.mac] = d.nickname;
     }
     return map;
   }, [devicesQuery.data]);
@@ -93,6 +93,84 @@ export default function BrowseScreen() {
         { text: tf(t, 'browse.deleteAction', 'Delete'), style: 'destructive', onPress: () => deleteMutation.mutate({ modeId, mac }) },
       ],
     );
+  }
+
+  function openCustomModeSheet(mode: ModeCatalogItem) {
+    setActiveCustomMode(mode);
+    setSheetVisible(true);
+  }
+
+  async function pickDeviceForPush() {
+    const devices = devicesQuery.data?.devices || [];
+    if (devices.length === 0) return null;
+    if (devices.length === 1) return devices[0];
+    return new Promise<typeof devices[0] | null>((resolve) => {
+      Alert.alert(tf(t, 'common.pushToDevice', 'Push to device'), '', [
+        ...devices.map((d) => ({
+          text: d.nickname || d.mac,
+          onPress: () => resolve(d),
+        })),
+        { text: tf(t, 'common.cancel', 'Cancel'), style: 'cancel' as const, onPress: () => resolve(null) },
+      ]);
+    });
+  }
+
+  async function handlePushCustomMode() {
+    const mode = activeCustomMode;
+    if (!mode || !token) return;
+    const device = await pickDeviceForPush();
+    if (!device?.mac) return;
+
+    // Check device online/active status
+    try {
+      const state = await getDeviceState(device.mac, token);
+      if (!state.is_online) {
+        Alert.alert(
+          tf(t, 'browse.pushOfflineTitle', 'Device offline'),
+          tf(t, 'browse.pushOfflineBody', 'The device is offline. Bring it online and try again.'),
+        );
+        return;
+      }
+      if (state.runtime_mode !== 'active') {
+        Alert.alert(
+          tf(t, 'browse.pushIntermittentTitle', 'Device not active'),
+          tf(t, 'browse.pushIntermittentBody', 'The device is in interval mode. Wait for it to enter active mode before pushing.'),
+        );
+        return;
+      }
+    } catch { /* proceed anyway */ }
+
+    try {
+      // Use widget API (same pattern as device/[mac].tsx) to get PNG bytes directly
+      const widget = await getWidgetData(device.mac, token, mode.mode_id);
+      const rawUrl = buildApiUrl(widget.preview_url);
+      const sep = rawUrl.includes('?') ? '&' : '?';
+      const url = `${rawUrl}${sep}no_cache=1`;
+      console.log(`[browse push] url=${url}, preview_url=${widget.preview_url}, mode=${mode.mode_id}`);
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`Preview fetch failed: ${resp.status} ${text.slice(0, 200)}`);
+      }
+      const bytes = await resp.arrayBuffer();
+      console.log(`[browse push] got ${bytes.byteLength} bytes`);
+      await pushPreviewImageToDevice(device.mac, token, bytes, mode.mode_id);
+      console.log(`[browse push] pushPreviewImageToDevice done`);
+      // Trigger immediate refresh so device fetches the pushed preview right away (same as webapp)
+      await refreshDevice(device.mac, token);
+      console.log(`[browse push] refreshDevice done`);
+      await successFeedback();
+      Alert.alert(
+        tf(t, 'browse.pushedTitle', 'Pushed'),
+        tf(t, 'browse.pushed', '{name} pushed to {mac}', {
+          name: localizeMode(mode).display_name,
+          mac: device.nickname || device.mac,
+        }),
+      );
+      setSheetVisible(false);
+    } catch (err) {
+      Alert.alert(tf(t, 'browse.pushFailed', 'Push failed'), err instanceof Error ? err.message : tf(t, 'browse.pushFailed', 'Push failed'));
+    }
   }
 
   const historyQuery = useQuery({
@@ -148,7 +226,6 @@ export default function BrowseScreen() {
     .map((id) => modeItems.find((m) => m.mode_id === id))
     .filter(Boolean) as typeof modeItems;
   const customModes = modeItems.filter((mode) => mode.source === 'custom').slice(0, 4);
-  const recommendedItems = todayQuery.data?.items || [];
 
   function modeDisplayName(modeId: string) {
     return localizeCatalogMode({ mode_id: modeId, display_name: modeId, description: '' }, locale).display_name;
@@ -169,7 +246,6 @@ export default function BrowseScreen() {
   }
 
   const isRefreshing =
-    todayQuery.isRefetching ||
     modesQuery.isRefetching ||
     historyQuery.isRefetching ||
     favoritesQuery.isRefetching;
@@ -177,7 +253,7 @@ export default function BrowseScreen() {
   const handleRefresh = useCallback(async () => {
     await lightImpact();
     if (segment === 'modes') {
-      await Promise.all([todayQuery.refetch(), modesQuery.refetch()]);
+      await modesQuery.refetch();
     } else if (segment === 'favorites') {
       if (token) await favoritesQuery.refetch();
       else getLocalFavorites().then(setLocalFavorites);
@@ -186,10 +262,11 @@ export default function BrowseScreen() {
       else getLocalHistory().then(setLocalHistory);
     }
     await successFeedback();
-  }, [segment, token, todayQuery, modesQuery, favoritesQuery, historyQuery]);
+  }, [segment, token, modesQuery, favoritesQuery, historyQuery]);
 
   return (
-    <AppScreen
+    <>
+      <AppScreen
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.colors.accent} />}
       header={
         <View>
@@ -218,35 +295,6 @@ export default function BrowseScreen() {
       {segment === 'modes' ? (
         <>
           <View style={styles.sectionBlock}>
-            <SectionHeader title={tf(t, 'browse.section.today', 'Today suggestions')} />
-            {recommendedItems.map((item) => (
-              <Pressable
-                key={`recommended-${item.mode_id}`}
-                onPress={() =>
-                  router.push(
-                    `/browse/${encodeURIComponent(item.mode_id)}?kind=content&title=${encodeURIComponent(localizeCatalogMode({ mode_id: item.mode_id, display_name: item.display_name, description: '' }, locale).display_name)}&summary=${encodeURIComponent(item.summary)}&time=${encodeURIComponent(todayQuery.data?.generated_at || '')}`,
-                  )
-                }
-              >
-                <InkCard style={styles.editorialCard}>
-                  <View style={styles.editorialTop}>
-                    <View style={styles.editorialTitleRow}>
-                      <View style={styles.modeIconWrap}>
-                        <ModeIcon modeId={item.mode_id} color={theme.colors.brandInk} />
-                      </View>
-                      <View style={styles.editorialText}>
-                        <InkText style={styles.editorialTitle}>{localizeCatalogMode({ mode_id: item.mode_id, display_name: item.display_name, description: '' }, locale).display_name}</InkText>
-                        <InkText dimmed style={styles.editorialDesc}>{item.summary}</InkText>
-                      </View>
-                    </View>
-                    <InkChip label={item.mode_id} active />
-                  </View>
-                </InkCard>
-              </Pressable>
-            ))}
-          </View>
-
-          <View style={styles.sectionBlock}>
             <SectionHeader title={tf(t, 'browse.featuredModes', 'Featured modes')} />
             <View style={styles.grid}>
               {featuredModes.map((mode) => (
@@ -274,41 +322,57 @@ export default function BrowseScreen() {
           {customModes.length > 0 ? (
             <View style={styles.sectionBlock}>
               <SectionHeader title={tf(t, 'browse.customModes', 'Custom modes')} />
-              {customModes.map((mode) => (
-                <InkCard key={`custom-${mode.mode_id}-${mode.mac || ''}`} style={styles.editorialCard}>
-                  <View style={styles.editorialTop}>
-                    <Pressable
-                      style={styles.editorialTitleRow}
-                      onPress={() =>
-                        router.push(
-                          `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
-                        )
-                      }
-                    >
-                      <View style={styles.modeIconWrap}>
-                        <ModeIcon modeId={mode.mode_id} color={theme.colors.brandInk} />
-                      </View>
-                      <View style={styles.editorialText}>
-                        <InkText style={styles.editorialTitle}>{localizeMode(mode).display_name}</InkText>
-                        <InkText dimmed style={styles.editorialDesc}>
-                          {mode.mac ? (deviceNicknames[mode.mac] || mode.mac) : (localizeMode(mode).description || mode.mode_id)}
-                        </InkText>
-                      </View>
-                    </Pressable>
-                    <View style={styles.customActions}>
-                      <InkChip label={tf(t, 'browse.customBadge', 'Custom')} />
+              {customModes.map((mode) => {
+                const deviceLabel = mode.mac
+                  ? deviceNicknames[mode.mac]
+                    ? `${deviceNicknames[mode.mac]} · ${mode.mac}`
+                    : mode.mac
+                  : localizeMode(mode).description || mode.mode_id;
+                return (
+                  <InkCard key={`custom-${mode.mode_id}-${mode.mac || ''}`} style={styles.customModeCard}>
+                    <View style={styles.customCardRow}>
                       <Pressable
-                        hitSlop={8}
+                        style={styles.customCardMain}
+                        onPress={() =>
+                          router.push(
+                            `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${localizedTitle(mode)}&summary=${localizedSummary(mode)}`,
+                          )
+                        }
+                        onLongPress={() => {
+                          lightImpact();
+                          openCustomModeSheet(mode);
+                        }}
+                      >
+                        <View style={styles.modeIconWrap}>
+                          <ModeIcon modeId={mode.mode_id} color={theme.colors.brandInk} />
+                        </View>
+                        <View style={styles.editorialText}>
+                          <InkText style={styles.editorialTitle}>{localizeMode(mode).display_name}</InkText>
+                          <InkText dimmed style={styles.editorialDesc}>{deviceLabel}</InkText>
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        hitSlop={10}
+                        style={styles.customDeleteBtn}
                         onPress={() => confirmDeleteMode(mode.mode_id, localizeMode(mode).display_name, mode.mac)}
                       >
-                        <Trash2 size={18} color={theme.colors.secondary} />
+                        <Trash2 size={20} color={theme.colors.secondary} />
                       </Pressable>
                     </View>
-                  </View>
-                </InkCard>
-              ))}
+                  </InkCard>
+                );
+              })}
             </View>
           ) : null}
+
+          <Pressable onPress={() => router.push('/browse/modes')}>
+            <InkCard style={styles.moreModesCard}>
+              <InkText style={styles.moreModesTitle}>{tf(t, 'browse.moreModes', 'More Modes')}</InkText>
+              <InkText dimmed style={styles.moreModesDesc}>
+                {tf(t, 'browse.moreModesDesc', 'Open the full catalog to see every built-in and custom mode.')}
+              </InkText>
+            </InkCard>
+          </Pressable>
         </>
       ) : null}
 
@@ -369,13 +433,42 @@ export default function BrowseScreen() {
           ))}
         </View>
       ) : null}
+      </AppScreen>
 
-      <Pressable onPress={() => router.push('/browse/modes')}>
-        <InkCard>
-          <InkText style={styles.catalogLink}>{tf(t, 'browse.moreModes', 'More modes')}</InkText>
-        </InkCard>
-      </Pressable>
-    </AppScreen>
+      <InkBottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
+        <InkText serif style={styles.sheetTitle}>
+          {tf(t, 'browse.actionsTitle', 'Actions')}
+        </InkText>
+        {activeCustomMode ? (
+          <InkCard style={styles.sheetCard}>
+            <InkChip label={localizeMode(activeCustomMode).display_name} active />
+            <InkText dimmed style={styles.sheetText}>
+              {activeCustomMode.mac
+                ? tf(t, 'browse.deviceOwner', 'Belongs to {device}', {
+                    device: deviceNicknames[activeCustomMode.mac] || activeCustomMode.mac,
+                  })
+                : localizeMode(activeCustomMode).description || activeCustomMode.mode_id}
+            </InkText>
+          </InkCard>
+        ) : null}
+        <View style={styles.sheetActions}>
+          {token ? (
+            <InkButton
+              label={tf(t, 'common.pushToDevice', 'Push to device')}
+              block
+              variant="secondary"
+              onPress={handlePushCustomMode}
+            />
+          ) : null}
+          <InkButton
+            label={tf(t, 'common.close', 'Close')}
+            block
+            variant="ghost"
+            onPress={() => setSheetVisible(false)}
+          />
+        </View>
+      </InkBottomSheet>
+    </>
   );
 }
 
@@ -390,7 +483,7 @@ const styles = StyleSheet.create({
   segmentWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
     borderRadius: 16,
     padding: 4,
     borderWidth: 1,
@@ -405,14 +498,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   segmentSelected: {
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.ink,
   },
   segmentText: {
-    color: theme.colors.secondary,
+    color: theme.colors.ink,
   },
   segmentTextSelected: {
     fontWeight: '600',
-    color: theme.colors.brandInk,
+    color: theme.colors.background,
   },
   sectionBlock: {
     gap: 10,
@@ -427,20 +520,28 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     lineHeight: 20,
   },
+  customModeCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: theme.colors.border,
+  },
+  customCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  customCardMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  customDeleteBtn: {
+    padding: 8,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   editorialCard: {
     backgroundColor: theme.colors.surface,
-  },
-  editorialTop: {
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  editorialTitleRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    flex: 1,
   },
   editorialText: {
     flex: 1,
@@ -453,9 +554,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 20,
   },
-  customActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  sheetTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  sheetCard: {
+    backgroundColor: theme.colors.hero,
+    borderColor: theme.colors.heroBorder,
+  },
+  sheetText: {
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  sheetActions: {
     gap: 10,
   },
   grid: {
@@ -485,6 +596,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontSize: 13,
   },
+  moreModesCard: {
+    borderStyle: 'dashed',
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xl,
+  },
+  moreModesTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  moreModesDesc: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   list: {
     gap: 12,
   },
@@ -502,9 +630,5 @@ const styles = StyleSheet.create({
   listTime: {
     marginTop: 10,
     fontSize: 12,
-  },
-  catalogLink: {
-    color: theme.colors.accent,
-    fontWeight: '600',
   },
 });

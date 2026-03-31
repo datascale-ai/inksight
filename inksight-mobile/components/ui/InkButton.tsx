@@ -29,7 +29,7 @@ const variants = StyleSheet.create({
     backgroundColor: theme.colors.ink,
   },
   secondary: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },

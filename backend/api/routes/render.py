@@ -96,6 +96,7 @@ async def render(
         if mac:
             async with _preview_push_queue_lock:
                 pushed_payload = _preview_push_queue.pop(mac, None)
+            logger.info("[RENDER] Checked queue for mac=%s: found=%s, mode=%s", mac, pushed_payload is not None, pushed_payload.get("mode") if pushed_payload else None)
             if pushed_payload and pushed_payload.get("image"):
                 try:
                     with Image.open(io.BytesIO(pushed_payload["image"])) as pushed_img:

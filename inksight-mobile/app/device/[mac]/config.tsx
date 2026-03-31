@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,7 +10,7 @@ import { useAuthStore } from '@/features/auth/store';
 import { getDeviceConfig, saveDeviceConfig } from '@/features/device/api';
 import { useI18n } from '@/lib/i18n';
 import { modeDisplayName } from '@/lib/mode-display';
-import { listModes } from '@/features/modes/api';
+import { listModes, type ModeCatalogItem } from '@/features/modes/api';
 import { theme } from '@/lib/theme';
 
 export default function DeviceConfigScreen() {
@@ -24,9 +24,28 @@ export default function DeviceConfigScreen() {
     enabled: Boolean(mac && token),
   });
   const modesQuery = useQuery({
-    queryKey: ['mode-catalog-config'],
-    queryFn: listModes,
+    queryKey: ['mode-catalog-config', mac, token],
+    queryFn: () => listModes({ token: token || undefined, mac: mac || undefined }),
+    enabled: Boolean(mac && token),
   });
+
+  const { builtinModes, customModes } = useMemo(() => {
+    const raw = modesQuery.data?.modes || [];
+    const seen = new Set<string>();
+    const unique: ModeCatalogItem[] = [];
+    for (const m of raw) {
+      if (seen.has(m.mode_id)) continue;
+      seen.add(m.mode_id);
+      unique.push(m);
+    }
+    const builtin: ModeCatalogItem[] = [];
+    const custom: ModeCatalogItem[] = [];
+    for (const m of unique) {
+      if (m.source === 'custom') custom.push(m);
+      else builtin.push(m);
+    }
+    return { builtinModes: builtin, customModes: custom };
+  }, [modesQuery.data?.modes]);
 
   const [nickname, setNickname] = useState('');
   const [city, setCity] = useState('Hangzhou');
@@ -90,8 +109,9 @@ export default function DeviceConfigScreen() {
 
       <InkCard>
         <InkText style={styles.label}>{t('browse.segment.modes')}</InkText>
+        <InkText style={styles.modeSectionTitle}>{t('device.configModesBuiltin')}</InkText>
         <View style={styles.modeWrap}>
-          {(modesQuery.data?.modes || []).map((mode) => {
+          {builtinModes.map((mode) => {
             const active = selectedModes.includes(mode.mode_id);
             return (
               <InkButton
@@ -103,6 +123,24 @@ export default function DeviceConfigScreen() {
             );
           })}
         </View>
+        <InkText style={[styles.modeSectionTitle, styles.modeSectionTitleSecond]}>{t('browse.customModes')}</InkText>
+        {customModes.length === 0 ? (
+          <InkText dimmed style={styles.modeSectionEmpty}>{t('device.configModesCustomEmpty')}</InkText>
+        ) : (
+          <View style={styles.modeWrap}>
+            {customModes.map((mode) => {
+              const active = selectedModes.includes(mode.mode_id);
+              return (
+                <InkButton
+                  key={`${mode.mode_id}-${mode.mac || ''}`}
+                  label={modeDisplayName(mode.mode_id, locale, mode.display_name)}
+                  variant={active ? 'primary' : 'secondary'}
+                  onPress={() => toggleMode(mode.mode_id)}
+                />
+              );
+            })}
+          </View>
+        )}
       </InkCard>
 
       <InkButton
@@ -136,5 +174,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+  },
+  modeSectionTitle: {
+    fontWeight: '600',
+    fontSize: 15,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  modeSectionTitleSecond: {
+    marginTop: 18,
+  },
+  modeSectionEmpty: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

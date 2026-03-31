@@ -19,12 +19,13 @@ from core.config import (
 )
 from core.config_store import (
     get_active_config,
+    get_user_llm_config,
     get_user_preferences,
     register_push_token,
     save_user_preferences,
     unregister_push_token,
 )
-from core.context import extract_location_settings, get_date_context, get_weather
+from core.context import extract_location_settings, get_date_context_cached, get_weather_cached
 from core.mode_registry import get_registry
 from core.pipeline import generate_content_only
 from core.schemas import PushRegistrationRequest, UserPreferencesRequest
@@ -137,16 +138,41 @@ async def get_today_content(
     prefs = await get_user_preferences(user_id) if user_id else None
     resolved_locale = (locale or (prefs or {}).get("locale") or DEFAULT_LANGUAGE).lower()
     selected_modes = _normalize_modes(modes, limit)
-    date_ctx = await get_date_context()
-    weather = await get_weather(**extract_location_settings({"city": city}, fallback_city=DEFAULT_CITY))
+    date_ctx = await get_date_context_cached()
+    weather = await get_weather_cached(city=city)
     registry = get_registry()
+
+    # 查询用户 LLM 配置并注入到 config 中
+    base_cfg = _base_mobile_config(city=city, locale=resolved_locale, widget_mode=selected_modes[0] if selected_modes else "STOIC")
+    if user_id is not None:
+        try:
+            user_llm_cfg = await get_user_llm_config(user_id)
+        except Exception:
+            user_llm_cfg = None
+        if user_llm_cfg:
+            llm_access_mode = (user_llm_cfg.get("llm_access_mode") or "preset").strip().lower()
+            provider = (user_llm_cfg.get("provider") or "").strip()
+            model = (user_llm_cfg.get("model") or "").strip()
+            api_key = (user_llm_cfg.get("api_key") or "").strip()
+            base_url = (user_llm_cfg.get("base_url") or "").strip()
+            image_api_key = (user_llm_cfg.get("image_api_key") or "").strip()
+            if provider:
+                base_cfg["llm_provider"] = provider
+            if model:
+                base_cfg["llm_model"] = model
+            if api_key:
+                base_cfg["user_api_key"] = api_key
+            if llm_access_mode == "custom_openai" and base_url:
+                base_cfg["llm_base_url"] = base_url
+            if image_api_key:
+                base_cfg["user_image_api_key"] = image_api_key
 
     items: list[dict] = []
     for mode_id in selected_modes:
         try:
             content = await generate_content_only(
                 mode_id,
-                _base_mobile_config(city=city, locale=resolved_locale, widget_mode=mode_id),
+                base_cfg,
                 date_ctx,
                 weather,
             )
@@ -238,8 +264,8 @@ async def get_widget_data(
         effective_cfg = config or {}
         city = effective_cfg.get("city", DEFAULT_CITY)
         locale = (config or {}).get("language", DEFAULT_LANGUAGE)
-        date_ctx = await get_date_context()
-        weather = await get_weather(**extract_location_settings(effective_cfg, fallback_city=DEFAULT_CITY))
+        date_ctx = await get_date_context_cached()
+        weather = await get_weather_cached(**extract_location_settings(effective_cfg, fallback_city=DEFAULT_CITY))
         try:
             content = await generate_content_only(
                 selected_mode,

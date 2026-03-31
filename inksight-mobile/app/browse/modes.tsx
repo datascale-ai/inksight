@@ -5,13 +5,56 @@ import { AppScreen } from '@/components/layout/AppScreen';
 import { ModeIcon } from '@/components/content/ModeIcon';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
-import { listModes } from '@/features/modes/api';
+import { listModes, type ModeCatalogItem } from '@/features/modes/api';
 import { useI18n } from '@/lib/i18n';
 import { localizeCatalogMode } from '@/lib/mode-display';
 import { theme } from '@/lib/theme';
 
 const GRID_GAP = 12;
 const COLS = 3;
+
+function ModeCard({ mode, locale, cardWidth }: { mode: ModeCatalogItem; locale: string; cardWidth: number }) {
+  const { display_name, description } = localizeCatalogMode(mode, locale);
+  return (
+    <Pressable
+      style={{ width: cardWidth }}
+      onPress={() =>
+        router.push(
+          `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${encodeURIComponent(display_name)}&summary=${encodeURIComponent(description || display_name)}`,
+        )
+      }
+    >
+      <InkCard style={[styles.card, { width: cardWidth }]}>
+        <View style={styles.iconWrap}>
+          <ModeIcon modeId={mode.mode_id} />
+        </View>
+        <View style={styles.titleBlock}>
+          <InkText numberOfLines={2} ellipsizeMode="tail" style={styles.modeTitle}>
+            {display_name}
+          </InkText>
+        </View>
+        <View style={styles.summaryBlock}>
+          <InkText
+            numberOfLines={3}
+            ellipsizeMode="tail"
+            dimmed
+            style={styles.modeSummary}
+          >
+            {description || mode.mode_id}
+          </InkText>
+        </View>
+      </InkCard>
+    </Pressable>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <InkText style={styles.sectionTitle}>{title}</InkText>
+    </View>
+  );
+}
 
 export default function BrowseModesScreen() {
   const { locale, t } = useI18n();
@@ -27,35 +70,36 @@ export default function BrowseModesScreen() {
     Math.floor((windowWidth - horizontalPad - GRID_GAP * (COLS - 1)) / COLS),
   );
 
+  const allModes = modesQuery.data?.modes || [];
+  const builtinModes = allModes.filter((m) => m.source !== 'custom');
+  const customModes = allModes.filter((m) => m.source === 'custom');
+
   return (
     <AppScreen>
       <InkText serif style={styles.title}>{t('catalog.title')}</InkText>
       <InkText dimmed>{t('catalog.subtitle')}</InkText>
 
-      <View style={styles.grid}>
-        {(modesQuery.data?.modes || []).map((mode) => {
-          const { display_name, description } = localizeCatalogMode(mode, locale);
-          return (
-            <Pressable
-              key={mode.mode_id}
-              style={{ width: cardWidth }}
-              onPress={() =>
-                router.push(
-                  `/browse/${encodeURIComponent(mode.mode_id)}?kind=mode&title=${encodeURIComponent(display_name)}&summary=${encodeURIComponent(description || display_name)}`,
-                )
-              }
-            >
-              <InkCard style={[styles.card, { width: cardWidth }]}>
-                <View style={styles.iconWrap}>
-                  <ModeIcon modeId={mode.mode_id} />
-                </View>
-                <InkText style={styles.modeTitle}>{display_name}</InkText>
-                <InkText dimmed style={styles.modeSummary}>{description || mode.mode_id}</InkText>
-              </InkCard>
-            </Pressable>
-          );
-        })}
-      </View>
+      {builtinModes.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader title={t('catalog.builtinModes', 'Built-in modes')} />
+          <View style={styles.grid}>
+            {builtinModes.map((mode) => (
+              <ModeCard key={mode.mode_id} mode={mode} locale={locale} cardWidth={cardWidth} />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {customModes.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader title={t('catalog.customModes', 'Custom modes')} />
+          <View style={styles.grid}>
+            {customModes.map((mode) => (
+              <ModeCard key={mode.mode_id} mode={mode} locale={locale} cardWidth={cardWidth} />
+            ))}
+          </View>
+        </View>
+      )}
     </AppScreen>
   );
 }
@@ -63,6 +107,16 @@ export default function BrowseModesScreen() {
 const styles = StyleSheet.create({
   title: {
     fontSize: 32,
+    fontWeight: '600',
+  },
+  section: {
+    marginTop: 24,
+  },
+  sectionHeader: {
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '600',
   },
   grid: {
@@ -74,7 +128,22 @@ const styles = StyleSheet.create({
   },
   card: {
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
+    paddingVertical: theme.spacing.md,
+    height: 196,
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
+  },
+  titleBlock: {
+    marginTop: 10,
+    width: '100%',
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  summaryBlock: {
+    marginTop: 4,
+    width: '100%',
+    height: 42,
   },
   iconWrap: {
     width: 42,
@@ -85,14 +154,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modeTitle: {
-    marginTop: 10,
     fontSize: 12,
+    lineHeight: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   modeSummary: {
-    marginTop: 4,
     fontSize: 11,
+    lineHeight: 14,
     textAlign: 'center',
   },
 });
