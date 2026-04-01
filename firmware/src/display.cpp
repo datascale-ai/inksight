@@ -401,6 +401,15 @@ void showModePreview(const char *modeName) {
 static int refreshCount = 0;
 
 void smartDisplay(const uint8_t *image) {
+#if EPD_BPP >= 2
+    if (useColorBuf) {
+        Serial.printf("smartDisplay: 2bpp color (cycle %d)\n", refreshCount);
+        epdDisplay2bpp(colorBuf);
+        useColorBuf = false;
+        refreshCount++;
+        return;
+    }
+#endif
     if (refreshCount % FULL_REFRESH_INTERVAL == 0) {
         Serial.printf("smartDisplay: full refresh (cycle %d)\n", refreshCount);
         epdDisplay(image);

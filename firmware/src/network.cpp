@@ -287,6 +287,7 @@ bool fetchFocusListeningFlag(bool *outEnabled) {
     bool useSSL = cfgServer.startsWith("https://");
 
     for (int attempt = 0; attempt < 2; attempt++) {
+        if (checkAbort()) return false;
         WiFiClient plainClient;
         WiFiClientSecure secClient;
         HTTPClient http;
@@ -331,6 +332,7 @@ bool fetchFocusAlertBMP() {
     bool useSSL = cfgServer.startsWith("https://");
 
     for (int attempt = 0; attempt < 2; attempt++) {
+        if (checkAbort()) return false;
         WiFiClient plainClient;
         WiFiClientSecure secClient;
         HTTPClient http;
@@ -395,6 +397,11 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
     float v = readBatteryVoltage();
     String mac = WiFi.macAddress();
     int rssi = WiFi.RSSI();
+#if EPD_BPP >= 2
+    const int colorCapability = 4;
+#else
+    const int colorCapability = 2;
+#endif
 #if DEBUG_MODE
     int effectiveRefreshMin = DEBUG_REFRESH_MIN;
 #else
@@ -403,7 +410,9 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
     String url = cfgServer + "/api/render?v=" + String(v, 2)
                + "&mac=" + mac + "&rssi=" + String(rssi)
                + "&refresh_min=" + String(effectiveRefreshMin)
-               + "&w=" + String(W) + "&h=" + String(H);
+               + "&w=" + String(W) + "&h=" + String(H)
+               + "&bpp=" + String(EPD_BPP)
+               + "&colors=" + String(colorCapability);
     if (nextMode) {
         url += "&next=1";
     }
@@ -467,6 +476,22 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
 
         WiFiClient *stream = http.getStreamPtr();
 
+#if EPD_BPP >= 2
+        if (contentLen == COLOR_BUF_LEN) {
+            if (!readExact(stream, colorBuf, COLOR_BUF_LEN)) {
+                Serial.println("Failed to read 2bpp data");
+                http.end();
+                return false;
+            }
+            useColorBuf = true;
+            http.end();
+            Serial.printf("2BPP OK  %d bytes\n", COLOR_BUF_LEN);
+            lastHeartbeatAt = millis();
+            return true;
+        }
+        Serial.printf("Not raw 2bpp (%d bytes), fallback to BMP\n", contentLen);
+        useColorBuf = false;
+#endif
         uint8_t fileHeader[14];
         if (!readExact(stream, fileHeader, 14)) {
             Serial.println("Failed to read BMP header");

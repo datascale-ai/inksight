@@ -71,13 +71,31 @@
       "line_width": 1,
       "dashed": false
     },
+    "body_align": "top",
     "body": [
+      {
+        "type": "spacer",
+        "height": 18
+      },
+      {
+        "type": "text",
+        "field": "message",
+        "font": "noto_serif_regular",
+        "font_size": 16,
+        "align": "center",
+        "margin_x": 28,
+        "max_lines": 2
+      },
+      {
+        "type": "spacer",
+        "height": 18
+      },
       {
         "type": "list",
         "field": "events",
         "max_items": 1,
         "item_template": "{name}",
-        "font_size": 16,
+        "font_size": 14,
         "align": "center"
       },
       {
@@ -92,6 +110,10 @@
         "type": "separator",
         "style": "short",
         "width": 70
+      },
+      {
+        "type": "spacer",
+        "height": 18
       },
       {
         "type": "list",
@@ -119,7 +141,17 @@
   },
   "layout_overrides": {
     "296x128": {
+      "body_align": "center",
       "body": [
+        {
+          "type": "text",
+          "field": "message",
+          "font": "noto_serif_regular",
+          "font_size": 16,
+          "align": "center",
+          "margin_x": 42,
+          "max_lines": 2
+        },
         {
           "type": "list",
           "field": "events",
@@ -159,11 +191,28 @@
     "800x480": {
       "body": [
         {
+          "type": "spacer",
+          "height": 22
+        },
+        {
+          "type": "text",
+          "field": "message",
+          "font": "noto_serif_regular",
+          "font_size": 16,
+          "align": "center",
+          "margin_x": 42,
+          "max_lines": 2
+        },
+        {
+          "type": "spacer",
+          "height": 10
+        },
+        {
           "type": "list",
           "field": "events",
           "max_items": 1,
           "item_template": "{name}",
-          "font_size": 24,
+          "font_size": 20,
           "align": "center"
         },
         {
@@ -178,6 +227,10 @@
           "type": "separator",
           "style": "short",
           "width": 100
+        },
+        {
+          "type": "spacer",
+          "height": 28
         },
         {
           "type": "list",

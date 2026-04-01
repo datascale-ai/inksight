@@ -300,14 +300,17 @@ class TestJsonContentApiKey:
                 mode_def_briefing,
                 date_str="2025-03-12",
                 weather_str="晴 15°C",
+                language="en",
                 api_key=user_api_key,
             )
             
             # 验证嵌套调用都传递了 api_key
             mock_summarize.assert_called_once()
             assert mock_summarize.call_args.kwargs.get("api_key") == user_api_key
+            assert mock_summarize.call_args.kwargs.get("language") == "en"
             mock_insight.assert_called_once()
             assert mock_insight.call_args.kwargs.get("api_key") == user_api_key
+            assert mock_insight.call_args.kwargs.get("language") == "en"
 
 
 class TestModeGeneratorApiKey:

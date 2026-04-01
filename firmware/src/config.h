@@ -48,8 +48,17 @@ static const int ROW_BYTES   = W / 8;
 static const int ROW_STRIDE  = (ROW_BYTES + 3) & ~3;  // BMP row stride (4-byte aligned)
 static const int IMG_BUF_LEN = ROW_BYTES * H;
 
-// Shared framebuffer (defined in main.cpp)
+#ifndef EPD_BPP
+#define EPD_BPP 1
+#endif
+static const int COLOR_BUF_LEN = (W * H) / 4;  // 2bpp: 4 pixels per byte
+
+// Shared framebuffers (defined in main.cpp)
 extern uint8_t imgBuf[];
+#if EPD_BPP >= 2
+extern uint8_t colorBuf[];
+extern bool useColorBuf;
+#endif
 
 // ── Refresh strategy ─────────────────────────────────────────
 static const int FULL_REFRESH_INTERVAL = 10;  // Full refresh every N updates to clear ghosting

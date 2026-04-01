@@ -136,13 +136,16 @@ def _build_context_str(
     days_until: int = 0,
     language: str = "zh",
 ) -> str:
+    def _has_cjk(text: str) -> bool:
+        return any("\u4e00" <= ch <= "\u9fff" for ch in str(text or ""))
+
     if language == "en":
         parts = [f"Date: {date_str}", f"Weather: {weather_str}"]
-        if festival:
+        if festival and not _has_cjk(festival):
             parts.append(f"Festival: {festival}")
-        if upcoming_holiday and days_until > 0:
+        if upcoming_holiday and days_until > 0 and not _has_cjk(upcoming_holiday):
             parts.append(f"{upcoming_holiday} in {days_until} days")
-        if daily_word:
+        if daily_word and not _has_cjk(daily_word):
             parts.append(f"Word of the day: {daily_word}")
     else:
         parts = [f"日期: {date_str}", f"天气: {weather_str}"]
@@ -189,10 +192,11 @@ def _build_style_instructions(
         if content_tone and content_tone != "neutral":
             parts.append(f"整体调性要{tone_map_zh.get(content_tone, '中性克制')}")
 
+    if is_en:
+        parts.append("All output MUST be in English")
+        return "\nAdditional style: " + "; ".join(parts) + "."
     if not parts:
         return ""
-    if is_en:
-        return "\nAdditional style: " + "; ".join(parts) + "."
     return "\n额外风格要求：" + "；".join(parts) + "。"
 
 
@@ -577,6 +581,7 @@ async def generate_briefing_insight(
     llm_model: str = "deepseek-chat",
     api_key: str | None = None,
     llm_base_url: str | None = None,
+    language: str = "zh",
 ) -> str:
     """使用 LLM 生成行业洞察"""
     hn_summary = "\n".join(
@@ -584,7 +589,21 @@ async def generate_briefing_insight(
     )
     ph_summary = f"Product Hunt #1: {ph_product.get('name', 'N/A')}"
 
-    prompt = f"""你是一位科技行业分析师。根据今日 Hacker News 热榜和 Product Hunt 新品，生成一句简短的行业洞察（30字以内）。
+    if language == "en":
+        prompt = f"""You are a technology industry analyst. Based on today's Hacker News top stories and the top Product Hunt launch, write one short industry insight in English (under 20 words).
+
+Hacker News Top 3:
+{hn_summary}
+
+{ph_summary}
+
+Requirements:
+1. Output the insight only, with no prefix or quotes
+2. Focus on technology trends or industry movement
+3. Keep it concise, sharp, and suitable for a morning briefing
+4. All output must be in English"""
+    else:
+        prompt = f"""你是一位科技行业分析师。根据今日 Hacker News 热榜和 Product Hunt 新品，生成一句简短的行业洞察（30字以内）。
 
 Hacker News Top 3:
 {hn_summary}
@@ -612,6 +631,7 @@ async def summarize_briefing_content(
     llm_model: str = "deepseek-chat",
     api_key: str | None = None,
     llm_base_url: str | None = None,
+    language: str = "zh",
 ) -> tuple[list[dict], dict]:
     """使用单次 LLM 调用批量总结 HN stories 和 PH tagline（原先需 3-4 次调用）"""
     try:
@@ -631,35 +651,61 @@ async def summarize_briefing_content(
         if not titles_to_summarize and not ph_tagline:
             return stories, ph_product
 
-        prompt_parts = [
-            "# Role",
-            "你是一个科技内容编辑，擅长用精练中文总结技术新闻。",
-            "",
-            "# Tasks",
-            "请按顺序完成以下总结任务，用 JSON 格式输出结果。",
-            "",
-        ]
+        if language == "en":
+            prompt_parts = [
+                "# Role",
+                "You are a tech editor skilled at summarizing technology news in concise English.",
+                "",
+                "# Tasks",
+                "Complete the following summarization tasks in order and return the result in JSON.",
+                "",
+            ]
+        else:
+            prompt_parts = [
+                "# Role",
+                "你是一个科技内容编辑，擅长用精练中文总结技术新闻。",
+                "",
+                "# Tasks",
+                "请按顺序完成以下总结任务，用 JSON 格式输出结果。",
+                "",
+            ]
 
         if titles_to_summarize:
-            prompt_parts.append("## HN Stories 总结")
-            prompt_parts.append("为每条标题生成 30 字以内的中文简介：")
+            prompt_parts.append("## HN Stories Summary" if language == "en" else "## HN Stories 总结")
+            prompt_parts.append(
+                "Write an English summary under 20 words for each title:"
+                if language == "en"
+                else "为每条标题生成 30 字以内的中文简介："
+            )
             for idx, (_, title) in enumerate(titles_to_summarize):
                 prompt_parts.append(f"  {idx + 1}. {title}")
             prompt_parts.append("")
 
         if ph_tagline:
-            prompt_parts.append("## Product Hunt 产品总结")
-            prompt_parts.append(f"产品名称：{ph_name}")
-            prompt_parts.append(f"英文Slogan：{ph_tagline}")
-            prompt_parts.append("重写为 30 字以内的中文介绍。")
+            prompt_parts.append("## Product Hunt Summary" if language == "en" else "## Product Hunt 产品总结")
+            prompt_parts.append(f"Product name: {ph_name}" if language == "en" else f"产品名称：{ph_name}")
+            prompt_parts.append(f"Original tagline: {ph_tagline}" if language == "en" else f"英文Slogan：{ph_tagline}")
+            prompt_parts.append(
+                "Rewrite it as an English introduction under 20 words."
+                if language == "en"
+                else "重写为 30 字以内的中文介绍。"
+            )
             prompt_parts.append("")
 
-        prompt_parts.append("# Output (仅输出 JSON)")
+        prompt_parts.append("# Output (JSON only)" if language == "en" else "# Output (仅输出 JSON)")
         prompt_parts.append('{')
         if titles_to_summarize:
-            prompt_parts.append('  "hn_summaries": ["简介1", "简介2", ...],')
+            prompt_parts.append(
+                '  "hn_summaries": ["summary 1", "summary 2", ...],'
+                if language == "en"
+                else '  "hn_summaries": ["简介1", "简介2", ...],'
+            )
         if ph_tagline:
-            prompt_parts.append('  "ph_summary": "中文介绍"')
+            prompt_parts.append(
+                '  "ph_summary": "English introduction"'
+                if language == "en"
+                else '  "ph_summary": "中文介绍"'
+            )
         prompt_parts.append('}')
 
         batch_prompt = "\n".join(prompt_parts)
@@ -708,6 +754,7 @@ async def generate_briefing_content(
         llm_provider = ctx.llm_provider
         llm_model = ctx.llm_model
         api_key = ctx.api_key
+    language = getattr(ctx, "language", "zh") if ctx is not None else "zh"
     import asyncio as _asyncio
 
     logger.info("[BRIEFING] Starting content generation...")
@@ -721,29 +768,40 @@ async def generate_briefing_content(
 
     if not hn_stories and not ph_product and not v2ex_topics:
         logger.error("[BRIEFING] All data sources failed, using fallback")
+        if language == "en":
+            return {
+                "hn_items": [
+                    {"title": "Hacker News API unavailable", "score": 0},
+                    {"title": "Please try again later", "score": 0},
+                    {"title": "Or check your network connection", "score": 0},
+                ],
+                "ph_item": {"name": "Product Hunt", "tagline": "Failed to fetch data"},
+                "v2ex_items": [],
+                "insight": "Unable to fetch today's tech briefing. Please refresh later.",
+            }
         return _fallback_content("BRIEFING")
 
     if summarize:
         llm_base_url = _extract_llm_base_url(ctx)
         (hn_stories, ph_product), insight = await _asyncio.gather(
             summarize_briefing_content(
-                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
+                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
             ),
             generate_briefing_insight(
-                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
+                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
             ),
         )
     else:
         llm_base_url = _extract_llm_base_url(ctx)
         insight = await generate_briefing_insight(
-            hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
+            hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
         )
 
     result = {
-        "hn_items": hn_stories if hn_stories else [{"title": "数据获取失败", "score": 0}],
+        "hn_items": hn_stories if hn_stories else [{"title": "Failed to fetch data", "score": 0}] if language == "en" else [{"title": "数据获取失败", "score": 0}],
         "ph_item": ph_product if ph_product else {"name": "N/A", "tagline": ""},
         "v2ex_items": v2ex_topics if v2ex_topics else [],
-        "insight": insight,
+        "insight": insight or ("Unable to fetch today's tech briefing. Please refresh later." if language == "en" else "今日科技动态暂时无法获取，请稍后刷新。"),
     }
 
     logger.info("[BRIEFING] Content generation complete")
@@ -765,6 +823,8 @@ async def generate_countdown_content(
 
     cfg = config or {}
     raw_events = cfg.get("countdownEvents", [])
+    language = str(cfg.get("mode_language") or cfg.get("modeLanguage") or "zh").lower()
+    content_tone = str(cfg.get("content_tone") or cfg.get("contentTone") or "neutral").lower()
 
     today = datetime.date.today()
     computed_events = []
@@ -808,7 +868,73 @@ async def generate_countdown_content(
         ]
 
     logger.info(f"[COUNTDOWN] Computed {len(computed_events)} events")
-    return {"events": computed_events}
+    primary_event = computed_events[0]
+    message = _build_countdown_message(
+        primary_event.get("name", ""),
+        primary_event.get("type", "countdown"),
+        int(primary_event.get("days", 0) or 0),
+        language,
+        content_tone,
+    )
+    return {"events": computed_events, "message": message}
+
+
+def _build_countdown_message(
+    name: str,
+    evt_type: str,
+    days: int,
+    language: str,
+    content_tone: str,
+) -> str:
+    safe_name = str(name or "").strip() or ("the day" if language == "en" else "这一天")
+    tone = content_tone if content_tone in {"positive", "neutral", "deep", "humor"} else "neutral"
+
+    if language == "en":
+        if evt_type == "countup":
+            templates = {
+                "positive": "{name} has begun. Keep the momentum going.",
+                "neutral": "Every day after {name} still counts.",
+                "deep": "{name} has passed, but its meaning keeps unfolding.",
+                "humor": "{name} is already behind you. Nice, now act like a pro.",
+            }
+        elif days == 0:
+            templates = {
+                "positive": "It is {name} today. Go make it count.",
+                "neutral": "{name} is here today. Stay focused.",
+                "deep": "{name} has arrived. Meet it with a steady heart.",
+                "humor": "{name} is today. No dramatic exits now.",
+            }
+        else:
+            templates = {
+                "positive": "{name} is getting closer. Keep going.",
+                "neutral": "Step by step, you are moving toward {name}.",
+                "deep": "Before {name} arrives, these days are shaping you.",
+                "humor": "{name} is waiting ahead. Breathe, then follow the plan.",
+            }
+    else:
+        if evt_type == "countup":
+            templates = {
+                "positive": "{name}已经开始，把状态保持住。",
+                "neutral": "{name}之后的每一天，都算数。",
+                "deep": "{name}已成过往，它留下的意义仍在延长。",
+                "humor": "{name}都过去了，你居然还挺能打。",
+            }
+        elif days == 0:
+            templates = {
+                "positive": "就是{name}，去把这一天过得漂亮点。",
+                "neutral": "{name}就在今天，按计划来。",
+                "deep": "{name}已至，平静地迎接它。",
+                "humor": "{name}就是今天，先别演，稳住。",
+            }
+        else:
+            templates = {
+                "positive": "{name}越来越近了，继续加油。",
+                "neutral": "朝着{name}，稳稳推进。",
+                "deep": "{name}未至，日子已在塑造你。",
+                "humor": "{name}在前面等你，先别慌，按计划来。",
+            }
+
+    return templates.get(tone, templates["neutral"]).format(name=safe_name)
 
 
 # ── Artwall mode ─────────────────────────────────────────────

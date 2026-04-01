@@ -56,6 +56,7 @@ export function ModeSelector({
       </CardHeader>
       <CardContent>
         <ModeGrid
+          tr={tr}
           title={tr("核心模式", "Core Modes")}
           modes={coreModes}
           selectedModes={selectedModes}
@@ -64,6 +65,7 @@ export function ModeSelector({
           modeMeta={modeMeta}
         />
         <ModeGrid
+          tr={tr}
           title={tr("更多模式", "More Modes")}
           modes={extraModes}
           selectedModes={selectedModes}
@@ -72,6 +74,7 @@ export function ModeSelector({
           modeMeta={modeMeta}
         />
         <ModeGrid
+          tr={tr}
           title={tr("自定义模式", "Custom Modes")}
           modes={customModes}
           selectedModes={selectedModes}
@@ -100,6 +103,7 @@ export function ModeSelector({
 }
 
 function ModeGrid({
+  tr,
   title,
   modes,
   selectedModes,
@@ -108,6 +112,7 @@ function ModeGrid({
   modeMeta,
   tailItem,
 }: {
+  tr: (zh: string, en: string) => string;
   title: string;
   modes: string[];
   selectedModes: Set<string>;
@@ -128,7 +133,7 @@ function ModeGrid({
           onClick={() => setCollapsed((v) => !v)}
           className="text-xs text-ink-light hover:text-ink flex items-center gap-1 transition-colors"
         >
-          {collapsed ? "展开" : "收起"}
+          {collapsed ? tr("展开", "Expand") : tr("收起", "Collapse")}
           <ChevronDown size={14} className={`transition-transform ${collapsed ? "" : "rotate-180"}`} />
         </button>
       </div>

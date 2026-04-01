@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        env: [epd_42_c3, epd_29_c3, epd_75_c3]
+        env: [epd_42_wsv2_ssd1683_c3_promini, epd_29_c3_promini, epd_75_c3_promini]
     steps:
       - uses: actions/checkout@v4
 

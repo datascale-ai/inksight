@@ -275,6 +275,81 @@ async def test_weather_external_data_does_not_mark_llm_used():
     assert "_llm_used" not in result
 
 
+@pytest.mark.asyncio
+async def test_countdown_preview_override_keeps_message_and_event_in_sync():
+    mode_def = {
+        "mode_id": "COUNTDOWN",
+        "content": {
+            "type": "computed",
+            "provider": "countdown",
+            "fallback": {"events": []},
+        },
+        "layout": {"body": []},
+    }
+
+    result = await generate_json_mode_content(
+        mode_def,
+        config={
+            "mode_overrides": {
+                "COUNTDOWN": {
+                    "events": [
+                        {"name": "测试1", "date": "2099-01-01", "type": "countdown", "days": 123},
+                    ]
+                }
+            },
+            "content_tone": "positive",
+        },
+        date_str="2025-03-12",
+        weather_str="晴 15°C",
+    )
+
+    assert result["events"][0]["name"] == "测试1"
+    assert "测试1" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_habit_computed_content_ignores_stale_derived_override_fields():
+    mode_def = {
+        "mode_id": "HABIT",
+        "content": {
+            "type": "computed",
+            "provider": "habit",
+            "fallback": {"habits": [], "summary": "", "week_progress": 0, "week_total": 7},
+        },
+        "layout": {"body": []},
+    }
+
+    result = await generate_json_mode_content(
+        mode_def,
+        config={
+            "mode_overrides": {
+                "HABIT": {
+                    "habitItems": [
+                        {"name": "早起", "done": True},
+                        {"name": "阅读", "done": False},
+                    ],
+                    "habits": [{"name": "脏数据", "done": False, "status": "○"}],
+                    "summary": "旧 summary",
+                    "week_progress": 99,
+                    "week_total": 99,
+                }
+            }
+        },
+        date_str="2025-03-12",
+        weather_str="晴 15°C",
+        language="zh",
+    )
+
+    assert result["habits"] == [
+        {"name": "早起", "done": True, "status": "●"},
+        {"name": "阅读", "done": False, "status": "○"},
+    ]
+    assert "旧 summary" not in result["summary"]
+    assert "今日已完成 1/2 项" in result["summary"]
+    assert result["week_progress"] == 1
+    assert result["week_total"] == 2
+
+
 if __name__ == "__main__":
     test_parse_text_split_basic()
     test_parse_text_split_missing_fields()

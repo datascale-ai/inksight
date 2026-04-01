@@ -1066,11 +1066,8 @@ export default function ExperiencePage() {
                     <Button
                       onClick={async () => {
                         setModal(null);
-                        const lines = habitItems.map(h => `${h.name} ${h.done ? '✓' : '✗'}`);
-                        const summary = lines.join('\n');
                         await handlePreview(modal.modeId, {
-                          habits: habitItems,
-                          summary: summary
+                          habitItems: habitItems,
                         });
                       }}
                       disabled={previewLoading}

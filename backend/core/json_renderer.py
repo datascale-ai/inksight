@@ -32,6 +32,7 @@ from .patterns.utils import (
     wrap_text,
     has_cjk,
 )
+from .mode_catalog import builtin_catalog_map
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,49 @@ _LABEL_EMOJI_TO_ICON = {
     "\U0001f31f": "star",
 }
 
+_BUILTIN_STATIC_ATTRIBUTIONS = {
+    "zh": {
+        "ARTWALL": "— 墨上观形",
+        "BIAS": "— 见自己",
+        "BRIEFING": "— 今日速览",
+        "CALENDAR": "— 日有其序",
+        "CHALLENGE": "— 试试看",
+        "COUNTDOWN": "— 静待那天",
+        "DAILY": "— 活在当下",
+        "FITNESS": "— 动起来",
+        "LIFEBAR": "— 此刻即刻度",
+        "QUESTION": "— 想一想",
+        "RECIPE": "— 好好吃饭",
+        "RIDDLE": "— 且猜且想",
+        "ROAST": "— 一笑了之",
+        "STORY": "— 微光成篇",
+        "THISDAY": "— 以史为镜",
+        "TIMETABLE": "— 按表前行",
+        "WEATHER": "— 阴晴有时",
+        "WORD_OF_THE_DAY": "— 每日精进",
+    },
+    "en": {
+        "ARTWALL": "— Ink Art",
+        "BIAS": "— Think Clearly",
+        "BRIEFING": "— AI Brief",
+        "CALENDAR": "— InkSight",
+        "CHALLENGE": "— Just Do It",
+        "COUNTDOWN": "— Remember",
+        "DAILY": "— Carpe Diem",
+        "FITNESS": "— Stay Healthy",
+        "LIFEBAR": "— Time Flies",
+        "QUESTION": "— Take a Moment",
+        "RECIPE": "— Eat Well",
+        "RIDDLE": "— Think About It",
+        "ROAST": "— InkSight AI",
+        "STORY": "— Micro Fiction",
+        "THISDAY": "— History",
+        "TIMETABLE": "— InkSight",
+        "WEATHER": "— Open-Meteo",
+        "WORD_OF_THE_DAY": "— Expand Your Lexicon",
+    },
+}
+
 
 def _section_icon_from_label(label: str) -> str | None:
     """If label starts with a known emoji, return the corresponding icon name."""
@@ -65,6 +109,20 @@ def _section_icon_from_label(label: str) -> str | None:
         if label.startswith(emoji) or emoji in label:
             return icon_name
     return None
+
+
+def _localized_footer_label(mode_id: str, fallback_label: str, language: str) -> str:
+    item = builtin_catalog_map().get((mode_id or "").upper())
+    if not item:
+        return fallback_label
+    return item.en.name if language == "en" else item.zh.name
+
+
+def _localized_footer_attribution(mode_id: str, attribution: str, language: str) -> str:
+    if not attribution or "{" in attribution:
+        return attribution
+    localized = _BUILTIN_STATIC_ATTRIBUTIONS.get(language, {}).get((mode_id or "").upper())
+    return localized or attribution
 
 
 @dataclass
@@ -245,14 +303,16 @@ def render_json_mode(
 
     # 3. Footer
     ft = ft_layout
-    label = ft.get("label", mode_def.get("mode_id", ""))
+    mode_id = mode_def.get("mode_id", "")
+    label = _localized_footer_label(mode_id, ft.get("label", mode_id), language)
     attribution = ctx.resolve(ft.get("attribution_template", "")) if ft.get("attribution_template") else ""
+    attribution = _localized_footer_attribution(mode_id, attribution, language)
     _attr_font_size = ft.get("font_size")
     if _attr_font_size is not None:
         _attr_font_size = int(_attr_font_size * scale)
     draw_footer(
         draw, img, label, attribution,
-        mode_id=mode_def.get("mode_id", ""),
+        mode_id=mode_id,
         weather_code=content.get("today_code", content.get("code")),
         line_width=ft.get("line_width", 1),
         dashed=ft.get("dashed", False),

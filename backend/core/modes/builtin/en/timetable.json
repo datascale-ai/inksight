@@ -51,7 +51,7 @@
     "status_bar": {"line_width": 1, "dashed": false},
     "body_align": "top",
     "body": [
-      {"type": "timetable_grid", "field": "slots", "font_size": 11, "margin_x": 6, "row_height": 28}
+      {"type": "timetable_grid", "field": "slots", "font_size": 12, "margin_x": 6, "row_height": 30}
     ],
     "footer": {"label": "TIMETABLE", "attribution_template": "— InkSight"}
   }

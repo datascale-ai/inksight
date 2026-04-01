@@ -14,6 +14,10 @@
 
 // ── Shared framebuffers (referenced by other modules via extern) ──
 uint8_t imgBuf[IMG_BUF_LEN];
+#if EPD_BPP >= 2
+uint8_t colorBuf[COLOR_BUF_LEN];
+bool useColorBuf = false;
+#endif
 
 // ── Device state machine ────────────────────────────────────
 enum class DeviceState : uint8_t {
@@ -525,9 +529,22 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi) {
     if (connected) {
         ledFeedback("downloading");
         if (fetchBMP(nextMode)) {
-            cacheSave(imgBuf, IMG_BUF_LEN);
+            bool hasRaw2bpp = false;
+#if EPD_BPP >= 2
+            hasRaw2bpp = useColorBuf;
+#endif
+            if (!hasRaw2bpp) {
+                cacheSave(imgBuf, IMG_BUF_LEN);
+            }
 
-            uint32_t newChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
+            uint32_t newChecksum = 0;
+#if EPD_BPP >= 2
+            newChecksum = hasRaw2bpp
+                ? computeChecksum(colorBuf, COLOR_BUF_LEN)
+                : computeChecksum(imgBuf, IMG_BUF_LEN);
+#else
+            newChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
+#endif
             syncNTP();
             if (newChecksum == lastContentChecksum && !nextMode) {
                 Serial.println("Content unchanged, skipping display refresh");

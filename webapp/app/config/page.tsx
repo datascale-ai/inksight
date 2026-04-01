@@ -365,7 +365,7 @@ function ConfigPageInner() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(data.error || "配对失败", "error");
+        showToast(data.error || tr("配对失败", "Pairing failed"), "error");
         return;
       }
       setPairCodeInput("");
@@ -376,9 +376,9 @@ function ConfigPageInner() {
         return;
       }
       await loadPendingRequests();
-      showToast("已提交绑定申请，等待 owner 同意", "info");
+      showToast(tr("已提交绑定申请，等待 owner 同意", "Binding request submitted. Waiting for owner approval"), "info");
     } catch {
-      showToast("配对失败", "error");
+      showToast(tr("配对失败", "Pairing failed"), "error");
     } finally {
       setPairingDevice(false);
     }
@@ -393,7 +393,7 @@ function ConfigPageInner() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(data.error || "绑定失败", "error");
+        showToast(data.error || tr("绑定失败", "Binding failed"), "error");
         return null;
       }
       setBindMacInput("");
@@ -402,7 +402,7 @@ function ConfigPageInner() {
       await loadPendingRequests();
       return data;
     } catch {
-      showToast("绑定失败", "error");
+      showToast(tr("绑定失败", "Binding failed"), "error");
       return null;
     }
   };
@@ -427,12 +427,12 @@ function ConfigPageInner() {
       if (res.ok) {
         await loadPendingRequests();
         if (mac) await loadDeviceMembers(mac);
-        showToast("已同意绑定请求", "success");
+        showToast(tr("已同意绑定请求", "Binding request approved"), "success");
       } else {
-        showToast("同意失败", "error");
+        showToast(tr("同意失败", "Approval failed"), "error");
       }
     } catch {
-      showToast("同意失败", "error");
+      showToast(tr("同意失败", "Approval failed"), "error");
     }
   };
 
@@ -445,12 +445,12 @@ function ConfigPageInner() {
       });
       if (res.ok) {
         await loadPendingRequests();
-        showToast("已拒绝绑定请求", "success");
+        showToast(tr("已拒绝绑定请求", "Binding request rejected"), "success");
       } else {
-        showToast("拒绝失败", "error");
+        showToast(tr("拒绝失败", "Rejection failed"), "error");
       }
     } catch {
-      showToast("拒绝失败", "error");
+      showToast(tr("拒绝失败", "Rejection failed"), "error");
     }
   };
 
@@ -466,9 +466,9 @@ function ConfigPageInner() {
       setShareUsernameInput("");
       await loadDeviceMembers(mac);
       await loadPendingRequests();
-      showToast("分享成功", "success");
+      showToast(tr("分享成功", "Shared successfully"), "success");
     } catch {
-      showToast("分享失败", "error");
+      showToast(tr("分享失败", "Share failed"), "error");
     }
   };
 
@@ -481,9 +481,9 @@ function ConfigPageInner() {
       });
       if (!res.ok) throw new Error("remove failed");
       await loadDeviceMembers(mac);
-      showToast("成员已移除", "success");
+      showToast(tr("成员已移除", "Member removed"), "success");
     } catch {
-      showToast("移除成员失败", "error");
+      showToast(tr("移除成员失败", "Failed to remove member"), "error");
     }
   };
 
@@ -882,6 +882,13 @@ function ConfigPageInner() {
       });
       return copied;
     });
+    if (modeId === "COUNTDOWN") {
+      setConfig((prev) => ({
+        ...prev,
+        countdownEvents: [],
+        countdown_events: [],
+      }));
+    }
   }, []);
 
   const modeSchemaMap = useMemo(
@@ -904,8 +911,8 @@ function ConfigPageInner() {
         const parsed = JSON.parse(text);
         updateModeOverride(modeId, { [item.key]: parsed });
       } catch {
-        setSettingsJsonErrors((prev) => ({ ...prev, [key]: "JSON 格式错误" }));
-        showToast(`${item.label} JSON 格式错误`, "error");
+        setSettingsJsonErrors((prev) => ({ ...prev, [key]: tr("JSON 格式错误", "Invalid JSON") }));
+        showToast(`${item.label} ${tr("JSON 格式错误", "Invalid JSON")}`, "error");
         return false;
       }
     }
@@ -913,8 +920,8 @@ function ConfigPageInner() {
   }, [modeSchemaMap, settingsJsonDrafts, showToast, updateModeOverride]);
 
   const handleSave = async () => {
-    if (!mac) { showToast("请先完成刷机和配网以获取设备 MAC", "error"); return; }
-    if (macAccessDenied) { showToast("你无权配置该设备", "error"); return; }
+    if (!mac) { showToast(tr("请先完成刷机和配网以获取设备 MAC", "Please flash and provision to get device MAC"), "error"); return; }
+    if (macAccessDenied) { showToast(tr("你无权配置该设备", "No permission to configure this device"), "error"); return; }
     setSaving(true);
     try {
       const normalizedModeOverrides = Object.fromEntries(
@@ -957,15 +964,17 @@ function ConfigPageInner() {
       setLastSeen(latestLastSeen);
       showToast(
         syncResult.onlineNow === null
-          ? "配置已保存，暂时无法确认设备状态"
+          ? tr("配置已保存，暂时无法确认设备状态", "Settings saved, but device status is currently unavailable")
           : onlineNow
-            ? (refreshQueued ? "配置已保存，已通知设备立即刷新" : "配置已保存，设备在线，但立即刷新通知失败")
-            : "配置已保存，设备当前离线，将在设备上线后生效",
+            ? (refreshQueued
+                ? tr("配置已保存，已通知设备立即刷新", "Settings saved, device notified to refresh now")
+                : tr("配置已保存，设备在线，但立即刷新通知失败", "Settings saved, device is online, but immediate refresh notification failed"))
+            : tr("配置已保存，设备当前离线，将在设备上线后生效", "Settings saved. Device is offline and will update when it comes online"),
         syncResult.onlineNow === null || !refreshQueued ? "info" : "success",
       );
       setPreviewNoCacheOnce(true);
     } catch {
-      showToast("保存失败", "error");
+      showToast(tr("保存失败", "Save failed"), "error");
     } finally {
       setSaving(false);
     }
@@ -1034,27 +1043,42 @@ function ConfigPageInner() {
         setShowFocusTokenModal(true);
       }
       showToast(
-        next ? "Focus 专注模式就绪，OpenCLAW 守护中" : "专注监听已关闭，设备将按原计划轮播内容",
+        next
+          ? tr("Focus 专注模式就绪，OpenCLAW 守护中", "Focus mode is ready, guarded by OpenCLAW")
+          : tr("专注监听已关闭，设备将按原计划轮播内容", "Focus listening disabled. The device will resume normal rotation"),
         "success",
       );
     } catch (err) {
       console.error("[FOCUS] Toggle error:", err);
-      showToast("切换专注监听失败，请稍后重试", "error");
+      showToast(tr("切换专注监听失败，请稍后重试", "Failed to toggle Focus Listening. Please try again"), "error");
     } finally {
       setFocusToggleLoading(false);
     }
   }, [isFocusListening, mac, showToast]);
 
-  const buildPreviewParams = useCallback((mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride) => {
+  const buildPreviewParams = useCallback((mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, clearSavedOverride = false) => {
     const m = mode || previewMode;
     const consumeNoCacheOnce = previewNoCacheOnce;
     const forceFresh = forceNoCache || consumeNoCacheOnce;
     const params = new URLSearchParams({ persona: m });
     if (mac) params.set("mac", mac);
-    const modeOverrideSource = sanitizeModeOverride({
-      ...(modeOverrides[m] || {}),
-      ...(forcedModeOverride || {}),
-    });
+    if (clearSavedOverride && m === "COUNTDOWN") {
+      params.set("mode_override", JSON.stringify({ countdownEvents: [] }));
+      if (previewColors > 2) params.set("colors", String(previewColors));
+      if (forceFresh) params.set("no_cache", "1");
+      return { m, params, consumeNoCacheOnce };
+    }
+    const modeOverrideSource = sanitizeModeOverride(
+      clearSavedOverride
+        ? {
+            ...(m === "COUNTDOWN" ? { countdownEvents: [] } : {}),
+            ...(forcedModeOverride || {}),
+          }
+        : {
+            ...(modeOverrides[m] || {}),
+            ...(forcedModeOverride || {}),
+          }
+    );
     const savedOverrides = (config.mode_overrides || config.modeOverrides || {}) as Record<string, ModeOverride>;
     const effectiveLocation = cleanLocationValue(
       modeOverrideSource.city
@@ -1072,7 +1096,7 @@ function ConfigPageInner() {
       ...modeOverrideSource,
       ...(locationChanged ? effectiveLocation : {}),
     });
-    if (m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
+    if (!clearSavedOverride && m === "MEMO" && memoText.trim() && !("memo_text" in activeModeOverride)) {
       activeModeOverride.memo_text = memoText.trim();
     }
     const hasModeOverride = Object.keys(activeModeOverride).length > 0;
@@ -1121,8 +1145,8 @@ function ConfigPageInner() {
     }
   }, [ownerUsername, tr]);
 
-  const handlePreview = useCallback(async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, confirmed = false) => {
-    const { m, params, consumeNoCacheOnce } = buildPreviewParams(mode, forceNoCache, forcedModeOverride);
+  const handlePreview = useCallback(async (mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, confirmed = false, clearSavedOverride = false) => {
+    const { m, params, consumeNoCacheOnce } = buildPreviewParams(mode, forceNoCache, forcedModeOverride, clearSavedOverride);
     if (!m) return;
 
     if (mac && !confirmed) {
@@ -1279,7 +1303,7 @@ function ConfigPageInner() {
         };
       });
     } catch {
-      showToast("预览失败", "error");
+      showToast(tr("预览失败", "Preview failed"), "error");
       setPreviewCacheHit(null);
       setPreviewStatusText("");
     } finally {
@@ -1406,7 +1430,7 @@ function ConfigPageInner() {
   }, []);
 
   const handleGenerateMode = async () => {
-    if (!customDesc.trim()) { showToast("请输入模式描述", "error"); return; }
+    if (!customDesc.trim()) { showToast(tr("请输入模式描述", "Please enter a mode description"), "error"); return; }
     setCustomGenerating(true);
     try {
       const res = await fetch("/api/modes/generate", {
@@ -1433,11 +1457,11 @@ function ConfigPageInner() {
       }
 
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "生成失败");
+      if (!data.ok) throw new Error(data.error || tr("生成失败", "Generation failed"));
       setCustomJson(JSON.stringify(data.mode_def, null, 2));
       setCustomModeName((data.mode_def?.display_name || "").toString());
       setCustomEditorSource("ai");
-      showToast("模式生成成功", "success");
+      showToast(tr("模式生成成功", "Mode generated successfully"), "success");
 
       // Close modal right after generation, then start preview on the right panel
       const finalName = (customModeName || data.mode_def?.display_name || "").toString().trim();
@@ -1453,7 +1477,7 @@ function ConfigPageInner() {
 
       await handleCustomPreview(data.mode_def);
     } catch (e) {
-      showToast(`生成失败: ${e instanceof Error ? e.message : "未知错误"}`, "error");
+      showToast(`${tr("生成失败", "Generation failed")}: ${e instanceof Error ? e.message : tr("未知错误", "Unknown error")}`, "error");
     } finally {
       setCustomGenerating(false);
     }
@@ -1500,7 +1524,7 @@ function ConfigPageInner() {
 
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "预览失败");
+        throw new Error(d.error || tr("预览失败", "Preview failed"));
       }
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -1525,7 +1549,7 @@ function ConfigPageInner() {
       }
       replacePreviewImg(objectUrl);
     } catch (e) {
-      showToast(`预览失败: ${e instanceof Error ? e.message : ""}`, "error");
+      showToast(`${tr("预览失败", "Preview failed")}: ${e instanceof Error ? e.message : ""}`, "error");
     } finally {
       setCustomPreviewLoading(false);
       setPreviewLoading(false);
@@ -1535,7 +1559,7 @@ function ConfigPageInner() {
   const handleSaveCustomMode = async () => {
     if (!customJson.trim()) return;
     if (!mac) {
-      showToast("请先选择设备", "error");
+      showToast(tr("请先选择设备", "Please select a device first"), "error");
       return;
     }
     try {
@@ -1578,12 +1602,12 @@ function ConfigPageInner() {
       
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `保存失败: ${res.status}`);
+        throw new Error(errorData.error || `${tr("保存失败", "Save failed")}: ${res.status}`);
       }
       
       const data = await res.json();
       if (data.ok || data.status === "ok") {
-        showToast(`模式 ${def.mode_id} 已保存`, "success");
+        showToast(`${tr("模式", "Mode")} ${def.mode_id} ${tr("已保存", "saved")}`, "success");
         // Refresh catalog (modes + categories + settings schema)
         refreshCatalog();
         setEditingCustomMode(false);
@@ -1596,10 +1620,10 @@ function ConfigPageInner() {
         setCustomPreviewImg(null);
         setCustomEditorSource(null);
       } else {
-        throw new Error(data.error || "保存失败");
+        throw new Error(data.error || tr("保存失败", "Save failed"));
       }
     } catch (e) {
-      showToast(`保存失败: ${e instanceof Error ? e.message : ""}`, "error");
+      showToast(`${tr("保存失败", "Save failed")}: ${e instanceof Error ? e.message : ""}`, "error");
     }
   };
 
@@ -1644,12 +1668,19 @@ function ConfigPageInner() {
     }
     const wasSelected = selectedModes.has(modeId);
     toggleMode(modeId);
-    showToast(wasSelected ? "已从轮播移除" : "已加入轮播", "success");
+    showToast(
+      wasSelected
+        ? tr("已从轮播移除", "Removed from rotation")
+        : tr("已加入轮播", "Added to rotation"),
+      "success",
+    );
   };
 
-  const commitModalAction = useCallback(async (modeId: string, action: "preview" | "apply", forcedOverride?: ModeOverride) => {
+  const commitModalAction = useCallback(async (modeId: string, action: "preview" | "apply", forcedOverride?: ModeOverride, clearSavedOverride = false) => {
     setParamModal(null);
-    if (forcedOverride && Object.keys(forcedOverride).length > 0) {
+    if (clearSavedOverride) {
+      clearModeOverride(modeId);
+    } else if (forcedOverride && Object.keys(forcedOverride).length > 0) {
       updateModeOverride(modeId, forcedOverride);
       if (modeId === "MEMO" && typeof forcedOverride.memo_text === "string") {
         setMemoText(forcedOverride.memo_text);
@@ -1660,15 +1691,15 @@ function ConfigPageInner() {
     }
 
     setPreviewMode(modeId);
-    await handlePreview(modeId, true, forcedOverride);
+    await handlePreview(modeId, true, forcedOverride, false, clearSavedOverride);
 
     if (action === "apply") {
       if (!selectedModes.has(modeId)) {
         toggleMode(modeId);
-        showToast("已加入轮播", "success");
+        showToast(tr("已加入轮播", "Added to rotation"), "success");
       }
     }
-  }, [handlePreview, selectedModes, showToast, toggleMode, updateModeOverride]);
+  }, [clearModeOverride, handlePreview, selectedModes, showToast, toggleMode, updateModeOverride]);
 
   const handlePreviewFromSettings = (addToCarousel: boolean) => {
     if (!settingsMode) return;
@@ -1691,7 +1722,12 @@ function ConfigPageInner() {
     setTimeout(() => {
       handlePreview(modeId, true, forcedOverride);
     }, 0);
-    showToast(addToCarousel ? "已加入轮播并刷新预览" : "已刷新预览", "success");
+    showToast(
+      addToCarousel
+        ? tr("已加入轮播并刷新预览", "Added to rotation and preview refreshed")
+        : tr("已刷新预览", "Preview refreshed"),
+      "success",
+    );
   };
 
   const handleApplyPreviewToScreen = async () => {
@@ -1700,7 +1736,7 @@ function ConfigPageInner() {
     try {
       const stateRes = await fetch(`/api/device/${encodeURIComponent(mac)}/state`, { cache: "no-store", headers: authHeaders() });
       if (!stateRes.ok) {
-        showToast("无法确认设备状态，已阻止发送", "error");
+        showToast(tr("无法确认设备状态，已阻止发送", "Unable to verify device status. Sending was blocked"), "error");
         return;
       }
       const stateData = await stateRes.json();
@@ -1709,7 +1745,7 @@ function ConfigPageInner() {
         setRuntimeMode(mode);
       }
       if (mode !== "active") {
-        showToast("设备处于间歇状态，不可发送", "error");
+        showToast(tr("设备处于间歇状态，不可发送", "Device is in interval mode and cannot receive content"), "error");
         return;
       }
 
@@ -1727,9 +1763,9 @@ function ConfigPageInner() {
       if (!res.ok) throw new Error("apply-preview failed");
       setCurrentMode(previewMode);
       await loadRuntimeMode();
-      showToast("已下发到墨水屏", "success");
+      showToast(tr("已下发到墨水屏", "Sent to E-Ink"), "success");
     } catch {
-      showToast("下发失败", "error");
+      showToast(tr("下发失败", "Send failed"), "error");
     } finally {
       setApplyToScreenLoading(false);
     }
@@ -1974,12 +2010,12 @@ function ConfigPageInner() {
                   const result = await handleBindDevice(targetMac, bindNicknameInput.trim());
                   if (!result) return;
                   if (result.status === "claimed" || result.status === "active") {
-                    showToast("设备已绑定", "success");
+                    showToast(tr("设备已绑定", "Device bound"), "success");
                     window.location.href = `${withLocalePath(locale, "/config")}?mac=${encodeURIComponent(targetMac)}`;
                     return;
                   }
                   if (result.status === "pending_approval") {
-                    showToast("已提交绑定申请，等待 owner 同意", "info");
+                    showToast(tr("已提交绑定申请，等待 owner 同意", "Binding request submitted. Waiting for owner approval"), "info");
                   }
                 }}>
                   {tr("绑定", "Bind")}
@@ -2756,7 +2792,7 @@ function ConfigPageInner() {
             className="w-full bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
           >
             {saving ? <Loader2 size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
-            保存到设备
+            {tr("保存到设备", "Save to Device")}
           </Button>
         </div>
       )}
@@ -3090,7 +3126,7 @@ function ConfigPageInner() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 pt-3">
                     <Button
-                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action, undefined, true)}
                       disabled={previewLoading}
                       variant="outline"
                     >
@@ -3167,7 +3203,7 @@ function ConfigPageInner() {
                   </button>
                   <div className="grid grid-cols-2 gap-2 pt-3">
                     <Button
-                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action, undefined, true)}
                       disabled={previewLoading}
                       variant="outline"
                     >
@@ -3236,7 +3272,7 @@ function ConfigPageInner() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 pt-3">
                     <Button
-                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action, undefined, true)}
                       disabled={previewLoading}
                       variant="outline"
                     >
@@ -3280,7 +3316,7 @@ function ConfigPageInner() {
                   />
                   <div className="grid grid-cols-2 gap-2 pt-3">
                     <Button
-                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action, undefined, true)}
                       disabled={previewLoading}
                       variant="outline"
                     >
@@ -3317,7 +3353,7 @@ function ConfigPageInner() {
                   />
                   <div className="grid grid-cols-2 gap-2 pt-3">
                     <Button
-                      onClick={() => commitModalAction(paramModal.mode, paramModal.action)}
+                      onClick={() => commitModalAction(paramModal.mode, paramModal.action, undefined, true)}
                       disabled={previewLoading}
                       variant="outline"
                     >

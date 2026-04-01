@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from PIL import Image
-from core.json_renderer import render_json_mode, RenderContext
+from core.json_renderer import render_json_mode, RenderContext, _localized_footer_label, _localized_footer_attribution
 from core.config import SCREEN_WIDTH as SCREEN_W, SCREEN_HEIGHT as SCREEN_H
 
 
@@ -238,6 +238,13 @@ def test_render_with_footer_template():
         date_str="2月18日", weather_str="晴", battery_pct=80,
     )
     assert img.size == (SCREEN_W, SCREEN_H)
+
+
+def test_builtin_footer_localization():
+    assert _localized_footer_label("COUNTDOWN", "COUNTDOWN", "zh") == "倒计时"
+    assert _localized_footer_label("COUNTDOWN", "Countdown", "en") == "Countdown"
+    assert _localized_footer_attribution("COUNTDOWN", "— Remember", "zh") == "— 静待那天"
+    assert _localized_footer_attribution("COUNTDOWN", "— Remember", "en") == "— Remember"
 
 
 def test_render_with_dashed_status_bar():

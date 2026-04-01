@@ -61,9 +61,9 @@
       {
         "type": "timetable_grid",
         "field": "slots",
-        "font_size": 11,
+        "font_size": 12,
         "margin_x": 6,
-        "row_height": 28
+        "row_height": 30
       }
     ],
     "footer": {

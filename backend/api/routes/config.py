@@ -15,7 +15,6 @@ from core.config_store import (
     save_config,
     set_pending_refresh,
     update_focus_listening,
-    update_device_state,
 )
 from core.schemas import ConfigRequest, ConfigSaveResponse
 
@@ -50,7 +49,6 @@ async def post_config(
         data.get("refresh_strategy"),
     )
     config_id = await save_config(mac, data)
-    await update_device_state(mac, runtime_mode="interval")
     await set_pending_refresh(mac, True)
 
     saved_config = await get_active_config(mac)

@@ -249,6 +249,10 @@ async def generate_json_mode_content(
             for k, v in override.items():
                 if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
                     continue
+                if mode_id == "COUNTDOWN" and k in {"events", "countdownEvents", "message"}:
+                    continue
+                if mode_id == "HABIT" and k in {"habitItems", "habits", "summary", "week_progress", "week_total"}:
+                    continue
                 content[k] = v
         content = await _prefetch_images(content, mode_def)
         return content
@@ -418,6 +422,23 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             events = mode_settings.get("countdownEvents")
             if isinstance(events, list):
                 cfg["countdownEvents"] = events
+        mode_overrides = (kwargs.get("config") or {}).get("mode_overrides", {})
+        if isinstance(mode_overrides, dict):
+            override = mode_overrides.get("COUNTDOWN")
+            if isinstance(override, dict):
+                override_events = override.get("countdownEvents")
+                if not isinstance(override_events, list):
+                    override_events = override.get("events")
+                if isinstance(override_events, list):
+                    cfg["countdownEvents"] = [
+                        {
+                            "name": str(ev.get("name", "")),
+                            "date": str(ev.get("date", "")),
+                            "type": "countup" if ev.get("type") == "countup" else "countdown",
+                        }
+                        for ev in override_events
+                        if isinstance(ev, dict)
+                    ]
         return await generate_countdown_content(config=cfg)
     if provider == "daily_meta":
         from datetime import datetime as _dt
@@ -518,8 +539,6 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             habit_ov = mo.get("HABIT", {})
             if isinstance(habit_ov, dict):
                 configured_items = habit_ov.get("habitItems")
-                if not isinstance(configured_items, list):
-                    configured_items = habit_ov.get("habits")
 
         habits = []
         if isinstance(configured_items, list) and configured_items:
@@ -853,6 +872,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
     llm_model = kwargs.get("llm_model") or DEFAULT_LLM_MODEL
     api_key = kwargs.get("api_key")
     llm_base_url = kwargs.get("llm_base_url")
+    language = kwargs.get("language", "zh") or "zh"
 
     if provider == "briefing":
         hn_limit = int(content_cfg.get("hn_limit", 2))
@@ -877,7 +897,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         llm_failed = False
         if summarize:
             summarized_hn, summarized_ph = await summarize_briefing_content(
-                hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url
+                hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
             )
             # 如果返回 None，说明 summarize 失败了
             if summarized_hn is None or summarized_ph is None:
@@ -888,7 +908,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
         
         insight = ""
         if include_insight:
-            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url)
+            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language)
             # 如果返回 None，说明 insight 生成失败了
             if insight is None:
                 llm_failed = True

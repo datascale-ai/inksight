@@ -348,6 +348,31 @@ async def test_config_save_and_load(client):
 
 
 @pytest.mark.asyncio
+async def test_config_save_preserves_active_runtime_mode(client):
+    headers = await provision_device_headers(client, "AA:BB:CC:DD:EE:11")
+    from core.config_store import get_device_state, update_device_state
+
+    await update_device_state("AA:BB:CC:DD:EE:11", runtime_mode="active")
+
+    resp = await client.post(
+        "/api/config",
+        json={
+            "mac": "AA:BB:CC:DD:EE:11",
+            "modes": ["STOIC"],
+            "refreshInterval": 30,
+            "llmProvider": "deepseek",
+            "llmModel": "deepseek-chat",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+
+    state = await get_device_state("AA:BB:CC:DD:EE:11")
+    assert state["runtime_mode"] == "active"
+    assert state["pending_refresh"] == 1
+
+
+@pytest.mark.asyncio
 async def test_cors_allows_local_expo_web(client):
     resp = await client.options(
         "/api/auth/login",

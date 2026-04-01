@@ -11,6 +11,7 @@ from core.content import (
     _build_context_str,
     _build_style_instructions,
     _fallback_content,
+    generate_countdown_content,
     generate_artwall_content,
     generate_recipe_content,
     generate_content,
@@ -58,6 +59,22 @@ class TestBuildContextStr:
         result = _build_context_str("2月16日", "12°C", daily_word="春风化雨")
         assert "每日一词: 春风化雨" in result
 
+    def test_english_filters_cjk_holiday_context(self):
+        result = _build_context_str(
+            "Apr 4",
+            "15°C",
+            festival="清明节",
+            daily_word="春和景明",
+            upcoming_holiday="清明节",
+            days_until=3,
+            language="en",
+        )
+        assert "Qingming" not in result
+        assert "清明" not in result
+        assert "春和景明" not in result
+        assert "Date: Apr 4" in result
+        assert "Weather: 15°C" in result
+
 
 class TestBuildStyleInstructions:
     def test_empty(self):
@@ -71,7 +88,7 @@ class TestBuildStyleInstructions:
 
     def test_language_en(self):
         result = _build_style_instructions(None, "en", None)
-        assert result == ""
+        assert "English" in result
 
     def test_content_tone_humor(self):
         result = _build_style_instructions(None, None, "humor")
@@ -143,6 +160,39 @@ class TestGenerateContent:
             # Should return fallback content
             assert "quote" in result
             assert "author" in result
+
+
+class TestGenerateCountdownContent:
+    @pytest.mark.asyncio
+    async def test_generates_message_from_event_and_tone(self):
+        result = await generate_countdown_content(
+            config={
+                "countdownEvents": [
+                    {"name": "项目截止", "date": "2099-01-01", "type": "countdown"},
+                ],
+                "content_tone": "positive",
+            }
+        )
+
+        assert result["events"][0]["name"] == "项目截止"
+        assert "项目截止" in result["message"]
+        assert "加油" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_generates_english_message(self):
+        result = await generate_countdown_content(
+            config={
+                "countdownEvents": [
+                    {"name": "Demo Day", "date": "2099-01-01", "type": "countdown"},
+                ],
+                "mode_language": "en",
+                "content_tone": "humor",
+            }
+        )
+
+        assert result["events"][0]["name"] == "Demo Day"
+        assert "Demo Day" in result["message"]
+        assert "plan" in result["message"]
 
 
 class TestFetchHNStories:
@@ -220,13 +270,35 @@ class TestGenerateBriefingContent:
         with (
             patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
             patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
+            patch("core.content.fetch_v2ex_hot", new_callable=AsyncMock) as mock_v2ex,
         ):
             mock_hn.return_value = []
             mock_ph.return_value = {}
+            mock_v2ex.return_value = []
 
             result = await generate_briefing_content()
             assert "hn_items" in result
             assert "insight" in result
+
+    @pytest.mark.asyncio
+    async def test_all_sources_fail_returns_english_fallback(self):
+        ctx = MagicMock()
+        ctx.llm_provider = "deepseek"
+        ctx.llm_model = "deepseek-chat"
+        ctx.api_key = None
+        ctx.language = "en"
+        with (
+            patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
+            patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
+            patch("core.content.fetch_v2ex_hot", new_callable=AsyncMock) as mock_v2ex,
+        ):
+            mock_hn.return_value = []
+            mock_ph.return_value = {}
+            mock_v2ex.return_value = []
+
+            result = await generate_briefing_content(ctx=ctx)
+            assert result["hn_items"][0]["title"] == "Hacker News API unavailable"
+            assert "Unable to fetch" in result["insight"]
 
     @pytest.mark.asyncio
     async def test_success_path(self):
@@ -264,6 +336,24 @@ class TestBriefingSummaries:
         # 当 JSON 解析失败时，应该返回 None, None 表示失败
         assert summarized_stories is None
         assert summarized_ph is None
+
+    @pytest.mark.asyncio
+    async def test_summarize_briefing_content_english_prompt(self):
+        stories = [{"title": "A very long story title that should be summarized", "score": 10}]
+        ph = {"name": "CoolApp", "tagline": "A long English tagline that should also be summarized"}
+
+        with patch(
+            "core.content._call_llm",
+            new_callable=AsyncMock,
+            return_value='{"hn_summaries":["Short summary"],"ph_summary":"English intro"}',
+        ) as mock_call:
+            summarized_stories, summarized_ph = await summarize_briefing_content(stories, ph, language="en")
+
+        prompt = mock_call.await_args.args[2]
+        assert "concise English" in prompt
+        assert "中文" not in prompt
+        assert summarized_stories[0]["summary"] == "Short summary"
+        assert summarized_ph["tagline"] == "English intro"
 
 
 class TestRecipeAndArtwallFallbacks:
