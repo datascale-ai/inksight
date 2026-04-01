@@ -33,9 +33,7 @@ export function ForgotPasswordForm() {
     const errs: FormErrors = {};
     const trimmed = username.trim();
     if (trimmed.length < 2 || trimmed.length > 30) {
-      errs.username = t('auth.errorUsernameMin');
-    } else if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
-      errs.username = t('auth.errorUsernameFormat');
+      errs.username = t('auth.errorUsernameRange');
     }
 
     const p = phone.trim();

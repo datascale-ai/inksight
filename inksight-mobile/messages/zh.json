@@ -371,6 +371,7 @@
   "auth.confirmPassword": "确认密码",
   "auth.errorUsernameMin": "用户名至少需要 3 个字符",
   "auth.errorUsernameFormat": "用户名只能包含字母和数字",
+  "auth.errorUsernameRange": "用户名长度须为 2-30 字符",
   "auth.errorPasswordMin": "密码至少需要 6 个字符",
   "auth.errorPasswordMatch": "两次输入的密码不一致",
   "auth.phoneOptional": "电话（可选）",

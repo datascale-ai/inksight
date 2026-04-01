@@ -371,6 +371,7 @@
   "auth.confirmPassword": "Confirm password",
   "auth.errorUsernameMin": "Username must be at least 3 characters",
   "auth.errorUsernameFormat": "Username can only contain letters and numbers",
+  "auth.errorUsernameRange": "Username must be 2-30 characters",
   "auth.errorPasswordMin": "Password must be at least 6 characters",
   "auth.errorPasswordMatch": "Passwords do not match",
   "auth.phoneOptional": "Phone (optional)",

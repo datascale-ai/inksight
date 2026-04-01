@@ -39,10 +39,8 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
   function validate(): FormErrors | null {
     const errs: FormErrors = {};
     const trimmed = username.trim();
-    if (trimmed.length < 3) {
-      errs.username = t('auth.errorUsernameMin');
-    } else if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
-      errs.username = t('auth.errorUsernameFormat');
+    if (trimmed.length < 2 || trimmed.length > 30) {
+      errs.username = t('auth.errorUsernameRange');
     }
     if (password.length < 6) {
       errs.password = t('auth.errorPasswordMin');

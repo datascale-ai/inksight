@@ -159,8 +159,9 @@ export async function saveCustomMode(token: string, modeDef: CustomModeDefinitio
   });
 }
 
-export async function getCustomMode(token: string, modeId: string) {
-  return apiRequest<CustomModeDefinition>(`/modes/custom/${encodeURIComponent(modeId)}`, {
+export async function getCustomMode(token: string, modeId: string, mac?: string) {
+  const qs = mac ? `?mac=${encodeURIComponent(mac)}` : '';
+  return apiRequest<CustomModeDefinition>(`/modes/custom/${encodeURIComponent(modeId)}${qs}`, {
     token,
   });
 }

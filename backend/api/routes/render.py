@@ -124,6 +124,9 @@ async def render(
                     )
                     if params.refresh_min is not None:
                         await update_device_state(mac, expected_refresh_min=params.refresh_min)
+                    # Clear pending_mode after delivering the pushed preview, so the device
+                    # returns to normal polling instead of re-requesting the same mode every cycle.
+                    await update_device_state(mac, pending_mode=None)
                     headers = {"X-Preview-Push": "1"}
                     if configured_refresh_minutes is not None:
                         headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)

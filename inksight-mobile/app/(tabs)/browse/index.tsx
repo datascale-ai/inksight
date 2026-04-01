@@ -15,7 +15,7 @@ import { theme } from '@/lib/theme';
 import { useAuthStore } from '@/features/auth/store';
 import { getLocalFavorites, getLocalHistory } from '@/features/content/storage';
 import { getDeviceState, listUserDevices, getDeviceFavorites, getDeviceHistory, pushPreviewImageToDevice, refreshDevice } from '@/features/device/api';
-import { listModes, deleteCustomMode, type ModeCatalogItem } from '@/features/modes/api';
+import { listModes, deleteCustomMode, getCustomMode, previewCustomModeImage, type ModeCatalogItem } from '@/features/modes/api';
 import { getWidgetData } from '@/features/widgets/api';
 import { buildApiUrl } from '@/lib/api-client';
 import { useI18n } from '@/lib/i18n';
@@ -115,33 +115,54 @@ export default function BrowseScreen() {
     });
   }
 
-  async function handlePushCustomMode() {
-    const mode = activeCustomMode;
-    if (!mode || !token) return;
-    const device = await pickDeviceForPush();
-    if (!device?.mac) return;
+/** Convert data URI to ArrayBuffer for pushing to device */
+function dataUriToArrayBuffer(dataUri: string): ArrayBuffer {
+  const base64 = dataUri.split(',')[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
-    // Check device online/active status
-    try {
-      const state = await getDeviceState(device.mac, token);
-      if (!state.is_online) {
-        Alert.alert(
-          tf(t, 'browse.pushOfflineTitle', 'Device offline'),
-          tf(t, 'browse.pushOfflineBody', 'The device is offline. Bring it online and try again.'),
-        );
-        return;
-      }
-      if (state.runtime_mode !== 'active') {
-        Alert.alert(
-          tf(t, 'browse.pushIntermittentTitle', 'Device not active'),
-          tf(t, 'browse.pushIntermittentBody', 'The device is in interval mode. Wait for it to enter active mode before pushing.'),
-        );
-        return;
-      }
-    } catch { /* proceed anyway */ }
+async function handlePushCustomMode() {
+  const mode = activeCustomMode;
+  if (!mode || !token) return;
+  const device = await pickDeviceForPush();
+  if (!device?.mac) return;
 
-    try {
-      // Use widget API (same pattern as device/[mac].tsx) to get PNG bytes directly
+  // Check device online/active status
+  try {
+    const state = await getDeviceState(device.mac, token);
+    if (!state.is_online) {
+      Alert.alert(
+        tf(t, 'browse.pushOfflineTitle', 'Device offline'),
+        tf(t, 'browse.pushOfflineBody', 'The device is offline. Bring it online and try again.'),
+      );
+      return;
+    }
+    if (state.runtime_mode !== 'active') {
+      Alert.alert(
+        tf(t, 'browse.pushIntermittentTitle', 'Device not active'),
+        tf(t, 'browse.pushIntermittentBody', 'The device is in interval mode. Wait for it to enter active mode before pushing.'),
+      );
+      return;
+    }
+  } catch { /* proceed anyway */ }
+
+  try {
+    let bytes: ArrayBuffer;
+
+    if (mode.source === 'custom') {
+      // Custom mode: fetch mode definition first, then generate preview via /modes/custom/preview
+      const modeDef = await getCustomMode(token, mode.mode_id, mode.mac);
+      console.log(`[browse push] fetching custom mode preview for ${mode.mode_id}`);
+      const imageDataUri = await previewCustomModeImage(token, modeDef, { width: 400, height: 300 });
+      bytes = dataUriToArrayBuffer(imageDataUri);
+      console.log(`[browse push] got ${bytes.byteLength} bytes from custom preview`);
+    } else {
+      // Built-in mode: use widget API (original flow)
       const widget = await getWidgetData(device.mac, token, mode.mode_id);
       const rawUrl = buildApiUrl(widget.preview_url);
       const sep = rawUrl.includes('?') ? '&' : '?';
@@ -152,26 +173,28 @@ export default function BrowseScreen() {
         const text = await resp.text().catch(() => '');
         throw new Error(`Preview fetch failed: ${resp.status} ${text.slice(0, 200)}`);
       }
-      const bytes = await resp.arrayBuffer();
+      bytes = await resp.arrayBuffer();
       console.log(`[browse push] got ${bytes.byteLength} bytes`);
-      await pushPreviewImageToDevice(device.mac, token, bytes, mode.mode_id);
-      console.log(`[browse push] pushPreviewImageToDevice done`);
-      // Trigger immediate refresh so device fetches the pushed preview right away (same as webapp)
-      await refreshDevice(device.mac, token);
-      console.log(`[browse push] refreshDevice done`);
-      await successFeedback();
-      Alert.alert(
-        tf(t, 'browse.pushedTitle', 'Pushed'),
-        tf(t, 'browse.pushed', '{name} pushed to {mac}', {
-          name: localizeMode(mode).display_name,
-          mac: device.nickname || device.mac,
-        }),
-      );
-      setSheetVisible(false);
-    } catch (err) {
-      Alert.alert(tf(t, 'browse.pushFailed', 'Push failed'), err instanceof Error ? err.message : tf(t, 'browse.pushFailed', 'Push failed'));
     }
+
+    await pushPreviewImageToDevice(device.mac, token, bytes, mode.mode_id);
+    console.log(`[browse push] pushPreviewImageToDevice done`);
+    // Trigger immediate refresh so device fetches the pushed preview right away (same as webapp)
+    await refreshDevice(device.mac, token);
+    console.log(`[browse push] refreshDevice done`);
+    await successFeedback();
+    Alert.alert(
+      tf(t, 'browse.pushedTitle', 'Pushed'),
+      tf(t, 'browse.pushed', '{name} pushed to {mac}', {
+        name: localizeMode(mode).display_name,
+        mac: device.nickname || device.mac,
+      }),
+    );
+    setSheetVisible(false);
+  } catch (err) {
+    Alert.alert(tf(t, 'browse.pushFailed', 'Push failed'), err instanceof Error ? err.message : tf(t, 'browse.pushFailed', 'Push failed'));
   }
+}
 
   const historyQuery = useQuery({
     queryKey: ['device-history', activeMac, token],
