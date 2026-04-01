@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Eye, LayoutGrid, Plus } from "lucide-react";
+import { ChevronDown, Eye, LayoutGrid, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorSelect } from "@/components/ui/color-select";
 
@@ -17,6 +17,7 @@ type ModeSelectorProps = {
   extraModes: string[];
   handleModePreview: (mode: string) => void;
   handleModeApply: (mode: string) => void;
+  handleCustomModeDelete: (mode: string) => void;
   setEditingCustomMode: (value: boolean) => void;
   setCustomDesc: (value: string) => void;
   setCustomModeName: (value: string) => void;
@@ -35,6 +36,7 @@ export function ModeSelector({
   extraModes,
   handleModePreview,
   handleModeApply,
+  handleCustomModeDelete,
   setEditingCustomMode,
   setCustomDesc,
   setCustomModeName,
@@ -80,6 +82,7 @@ export function ModeSelector({
           selectedModes={selectedModes}
           onPreview={handleModePreview}
           onApply={handleModeApply}
+          onDelete={handleCustomModeDelete}
           modeMeta={{ ...modeMeta, ...customModeMeta }}
           tailItem={
             <button
@@ -109,6 +112,7 @@ function ModeGrid({
   selectedModes,
   onPreview,
   onApply,
+  onDelete,
   modeMeta,
   tailItem,
 }: {
@@ -118,6 +122,7 @@ function ModeGrid({
   selectedModes: Set<string>;
   onPreview: (mode: string) => void;
   onApply: (mode: string) => void;
+  onDelete?: (mode: string) => void;
   modeMeta: ModeMeta;
   tailItem?: React.ReactNode;
 }) {
@@ -159,7 +164,7 @@ function ModeGrid({
                   </div>
                 </button>
 
-                <div className="border-t border-ink/10 grid grid-cols-4">
+                <div className={`border-t border-ink/10 grid ${onDelete ? "grid-cols-5" : "grid-cols-4"}`}>
                   <button
                     onClick={() => onPreview(mode)}
                     className="col-span-2 h-9 px-2 text-[11px] sm:text-xs text-ink hover:bg-ink hover:text-white transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
@@ -174,6 +179,15 @@ function ModeGrid({
                   >
                     {isSelected ? "-" : "+"}
                   </button>
+                  {onDelete ? (
+                    <button
+                      onClick={() => onDelete(mode)}
+                      className="h-9 px-2 text-[11px] sm:text-xs text-ink hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center"
+                      title={tr("删除模式", "Delete mode")}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );

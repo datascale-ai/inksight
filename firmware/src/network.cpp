@@ -276,9 +276,10 @@ bool ensureDeviceToken() {
     return false;
 }
 
-bool fetchFocusListeningFlag(bool *outEnabled) {
-    if (!outEnabled) return false;
-    *outEnabled = false;
+bool fetchConfigFlags(bool *outFocusEnabled, bool *outAlwaysActive) {
+    if (!outFocusEnabled || !outAlwaysActive) return false;
+    *outFocusEnabled = false;
+    *outAlwaysActive = false;
     if (WiFi.status() != WL_CONNECTED) return false;
     if (!ensureDeviceToken()) return false;
 
@@ -311,13 +312,21 @@ bool fetchFocusListeningFlag(bool *outEnabled) {
 
         String body = http.getString();
         http.end();
-        bool enabled =
+        bool focusEnabled =
             body.indexOf("\"is_focus_listening\":true") >= 0 ||
             body.indexOf("\"is_focus_listening\": true") >= 0 ||
             body.indexOf("\"focus_listening\":1") >= 0 ||
             body.indexOf("\"focus_listening\": 1") >= 0;
-        *outEnabled = enabled;
-        Serial.printf("[FOCUS] is_focus_listening=%s\n", enabled ? "true" : "false");
+        bool keepActive =
+            body.indexOf("\"is_always_active\":true") >= 0 ||
+            body.indexOf("\"is_always_active\": true") >= 0 ||
+            body.indexOf("\"always_active\":1") >= 0 ||
+            body.indexOf("\"always_active\": 1") >= 0;
+        *outFocusEnabled = focusEnabled;
+        *outAlwaysActive = keepActive;
+        Serial.printf("[CONFIG] focus=%s always_active=%s\n",
+                      focusEnabled ? "true" : "false",
+                      keepActive ? "true" : "false");
         return true;
     }
     return false;

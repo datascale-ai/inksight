@@ -11,7 +11,7 @@ The most recommended and best-supported combination today is:
 
 - **MCU**: ESP32-C3
 - **Display**: 4.2-inch SPI e-paper
-- **Firmware environment**: `epd_42_c3`
+- **Firmware environment**: `epd_42_wsv2_ssd1683_c3_promini`
 
 Why this build is recommended:
 
@@ -23,7 +23,7 @@ Why this build is recommended:
 
 | Part | Recommended choice | Notes |
 |------|--------------------|-------|
-| MCU | ESP32-C3 dev board / SuperMini-style board | best first-build option |
+| MCU | ESP32-C3 Pro mini dev board | best first-build option |
 | Display | 4.2-inch SPI e-paper | current default display profile |
 | USB | USB data cable | flashing requires data, not charge-only |
 | Wiring | Dupont wires or soldered wires | dupont is fine for prototypes |
@@ -35,7 +35,7 @@ A typical DIY BOM can still stay around **CNY 220**, depending on your display s
 
 ## 3. Built-in firmware hardware profiles
 
-The default environment is `epd_42_c3`, and all public-facing docs and setup flow are centered on the **4.2-inch build**.
+The default environment is `epd_42_wsv2_ssd1683_c3_promini`, and all public-facing docs and setup flow are centered on the **4.2-inch build**.
 
 If you want to inspect other built-in profiles in code, see:
 

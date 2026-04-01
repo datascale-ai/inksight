@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ modeId: string }> },
 ) {
   const { modeId } = await params;
-  return proxyGet(`/api/modes/custom/${encodeURIComponent(modeId)}`, req);
+  return proxyGet(`/api/modes/custom/${encodeURIComponent(modeId)}${req.nextUrl.search}`, req);
 }
 
 export async function DELETE(
@@ -14,5 +14,5 @@ export async function DELETE(
   { params }: { params: Promise<{ modeId: string }> },
 ) {
   const { modeId } = await params;
-  return proxyDelete(`/api/modes/custom/${encodeURIComponent(modeId)}`, req);
+  return proxyDelete(`/api/modes/custom/${encodeURIComponent(modeId)}${req.nextUrl.search}`, req);
 }

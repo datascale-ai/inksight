@@ -202,7 +202,7 @@ pio device monitor
 
 默认环境为：
 
-- `epd_42_c3`
+- `epd_42_wsv2_ssd1683_c3_promini`
 
 更多硬件组合请参考：
 

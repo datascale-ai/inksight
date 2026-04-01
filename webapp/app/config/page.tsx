@@ -183,6 +183,8 @@ interface DeviceConfig {
   modeOverrides?: Record<string, ModeOverride>;
   is_focus_listening?: boolean;
   focus_listening?: number;
+  is_always_active?: boolean;
+  always_active?: number | boolean;
 }
 
 interface ModeOverride {
@@ -573,6 +575,7 @@ function ConfigPageInner() {
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const [isFocusListening, setIsFocusListening] = useState(false);
+  const [alwaysActive, setAlwaysActive] = useState(false);
   const [focusToggleLoading, setFocusToggleLoading] = useState(false);
   const [focusAlertToken, setFocusAlertToken] = useState<string>("");
   const [showFocusTokenModal, setShowFocusTokenModal] = useState(false);
@@ -733,6 +736,7 @@ function ConfigPageInner() {
         if (cfg.mode_overrides) setModeOverrides(cfg.mode_overrides);
         else if (cfg.modeOverrides) setModeOverrides(cfg.modeOverrides);
         setIsFocusListening(Boolean(cfg.is_focus_listening ?? Number(cfg.focus_listening || 0) === 1));
+        setAlwaysActive(Boolean(cfg.is_always_active ?? Number(cfg.always_active || 0) === 1));
         const loadedOverrides = ((cfg.mode_overrides || cfg.modeOverrides || {}) as Record<string, ModeOverride>);
         const memoFromOverride = loadedOverrides?.MEMO?.memo_text;
         if (typeof memoFromOverride === "string" && memoFromOverride.trim()) {
@@ -917,7 +921,7 @@ function ConfigPageInner() {
       }
     }
     return true;
-  }, [modeSchemaMap, settingsJsonDrafts, showToast, updateModeOverride]);
+  }, [modeSchemaMap, settingsJsonDrafts, showToast, tr, updateModeOverride]);
 
   const handleSave = async () => {
     if (!mac) { showToast(tr("请先完成刷机和配网以获取设备 MAC", "Please flash and provision to get device MAC"), "error"); return; }
@@ -944,6 +948,7 @@ function ConfigPageInner() {
         modeOverrides: normalizedModeOverrides,
         memoText: memoText,
         is_focus_listening: isFocusListening,
+        always_active: alwaysActive,
       };
       const res = await fetch("/api/config", {
         method: "POST",
@@ -1006,6 +1011,7 @@ function ConfigPageInner() {
         modeOverrides: normalizedModeOverrides,
         memoText: memoText,
         is_focus_listening: isFocusListening,
+        always_active: alwaysActive,
       };
       const res = await fetch("/api/config", {
         method: "POST",
@@ -1054,7 +1060,7 @@ function ConfigPageInner() {
     } finally {
       setFocusToggleLoading(false);
     }
-  }, [isFocusListening, mac, showToast]);
+  }, [isFocusListening, mac, showToast, tr]);
 
   const buildPreviewParams = useCallback((mode?: string, forceNoCache = false, forcedModeOverride?: ModeOverride, clearSavedOverride = false) => {
     const m = mode || previewMode;
@@ -1676,6 +1682,51 @@ function ConfigPageInner() {
     );
   };
 
+  const handleCustomModeDelete = async (m: string) => {
+    const modeId = (m || "").toUpperCase();
+    if (!mac) {
+      showToast(tr("请先选择设备", "Please select a device first"), "error");
+      return;
+    }
+    const confirmed = window.confirm(
+      tr(`确定删除自定义模式 ${modeId} 吗？`, `Delete custom mode ${modeId}?`),
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(
+        `/api/modes/custom/${encodeURIComponent(modeId)}?mac=${encodeURIComponent(mac)}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        },
+      );
+      const data = await res.json().catch(() => ({} as { error?: string }));
+      if (!res.ok) {
+        throw new Error(data.error || tr("删除失败", "Delete failed"));
+      }
+      setSelectedModes((prev) => {
+        const next = new Set(prev);
+        next.delete(modeId);
+        return next;
+      });
+      setModeOverrides((prev) => {
+        const copied = { ...prev };
+        delete copied[modeId];
+        return copied;
+      });
+      if (previewMode === modeId) {
+        setPreviewMode("");
+      }
+      if (settingsMode === modeId) {
+        setSettingsMode(null);
+      }
+      refreshCatalog();
+      showToast(tr("自定义模式已删除", "Custom mode deleted"), "success");
+    } catch (e) {
+      showToast(`${tr("删除失败", "Delete failed")}: ${e instanceof Error ? e.message : ""}`, "error");
+    }
+  };
+
   const commitModalAction = useCallback(async (modeId: string, action: "preview" | "apply", forcedOverride?: ModeOverride, clearSavedOverride = false) => {
     setParamModal(null);
     if (clearSavedOverride) {
@@ -1699,7 +1750,7 @@ function ConfigPageInner() {
         showToast(tr("已加入轮播", "Added to rotation"), "success");
       }
     }
-  }, [clearModeOverride, handlePreview, selectedModes, showToast, toggleMode, updateModeOverride]);
+  }, [clearModeOverride, handlePreview, selectedModes, showToast, toggleMode, tr, updateModeOverride]);
 
   const handlePreviewFromSettings = (addToCarousel: boolean) => {
     if (!settingsMode) return;
@@ -2155,6 +2206,7 @@ function ConfigPageInner() {
                     extraModes={extraModes}
                     handleModePreview={handleModePreview}
                     handleModeApply={handleModeApply}
+                    handleCustomModeDelete={handleCustomModeDelete}
                     setEditingCustomMode={setEditingCustomMode}
                     setCustomDesc={setCustomDesc}
                     setCustomModeName={setCustomModeName}
@@ -2302,6 +2354,30 @@ function ConfigPageInner() {
                   personaPresets={PERSONA_PRESETS}
                   strategies={STRATEGIES}
                 />
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">{tr("设备活跃状态", "Device Active State")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <label className="flex items-start gap-3 text-sm text-ink">
+                      <input
+                        type="checkbox"
+                        checked={alwaysActive}
+                        onChange={(e) => setAlwaysActive(e.target.checked)}
+                        className="mt-1"
+                      />
+                      <div>
+                        <div className="font-medium">{tr("始终保持活跃", "Keep device always active")}</div>
+                        <div className="text-xs text-ink-light mt-1">
+                          {tr(
+                            "开启后，设备会持续保持活跃，不进入间歇状态或深度睡眠。",
+                            "When enabled, the device stays active continuously and will not enter interval mode or deep sleep.",
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  </CardContent>
+                </Card>
                 <Button
                   variant="outline"
                   onClick={handleSavePreferences}

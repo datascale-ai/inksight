@@ -32,8 +32,8 @@ void postConfigToBackend();
 bool ensureDeviceToken();
 bool postHeartbeat(bool force = false);
 
-// ── Focus listening helpers ─────────────────────────────────
-bool fetchFocusListeningFlag(bool *outEnabled);
+// ── Config flag helpers ─────────────────────────────────────
+bool fetchConfigFlags(bool *outFocusEnabled, bool *outAlwaysActive);
 bool fetchFocusAlertBMP();
 
 // ── Battery ─────────────────────────────────────────────────

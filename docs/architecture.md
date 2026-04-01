@@ -124,7 +124,7 @@ InkSight 当前由三部分组成：
 
 当前仓库内置多个屏幕尺寸与板型 profile，默认环境是：
 
-- `epd_42_c3`（对应 4.2 寸黑白屏、ESP32-C3 Pro mini / Super mini 开发板）
+- `epd_42_wsv2_ssd1683_c3_promini`（对应 4.2 寸黑白屏、ESP32-C3 Pro mini 开发板）
 
 ## 6. 外部依赖
 

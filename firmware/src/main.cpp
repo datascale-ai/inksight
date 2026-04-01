@@ -52,6 +52,7 @@ struct DeviceContext {
 
 static DeviceContext ctx;
 static bool focusListening = false;
+static bool alwaysActive = false;
 
 // Content dedup — skip display refresh when content unchanged
 static uint32_t lastContentChecksum = 0;
@@ -187,15 +188,18 @@ void setup() {
         return;
     }
 
-    // Best-effort fetch focus flag from backend
+    // Best-effort fetch config flags from backend
     bool focusFlag = false;
-    if (fetchFocusListeningFlag(&focusFlag)) {
+    bool alwaysActiveFlag = false;
+    if (fetchConfigFlags(&focusFlag, &alwaysActiveFlag)) {
         focusListening = focusFlag;
+        alwaysActive = alwaysActiveFlag;
     } else {
         focusListening = false;
+        alwaysActive = false;
     }
     if (g_userAborted) {
-        Serial.println("User aborted during focus fetch -> portal");
+        Serial.println("User aborted during config flag fetch -> portal");
         enterPortalMode();
         return;
     }
@@ -231,13 +235,19 @@ void setup() {
     ctx.lastClockTick = millis();
 
     bool firstInstallLivePending = isFirstInstallLiveModePending();
-    if (firstInstallLivePending) {
+    if (firstInstallLivePending || alwaysActive) {
         ctx.liveMode = true;
         ctx.lastLivePollAt = 0;
         ctx.lastLiveWiFiRetryAt = 0;
-        markFirstInstallLiveModeDone();
+        if (firstInstallLivePending) {
+            markFirstInstallLiveModeDone();
+        }
         postRuntimeMode("active");
-        Serial.println("[LIVE] First install: default to active mode");
+        if (alwaysActive) {
+            Serial.println("[LIVE] Always-active enabled");
+        } else {
+            Serial.println("[LIVE] First install: default to active mode");
+        }
     } else {
         postRuntimeMode("interval");
         if (focusListening) {
@@ -276,6 +286,11 @@ void loop() {
     if (ctx.wantEnterLiveMode) {
         ctx.wantEnterLiveMode = false;
         if (ctx.liveMode) {
+            if (alwaysActive) {
+                Serial.println("[LIVE] Always-active enabled, ignoring manual disable");
+                ledFeedback("ack");
+                return;
+            }
             ctx.liveMode = false;
             Serial.println("[LIVE] Live mode disabled, back to interval mode");
             ledFeedback("ack");
@@ -308,7 +323,7 @@ void loop() {
         ctx.lastClockTick += 1000UL;
         timeChanged = true;
     }
-    if (timeChanged && cfgSleepMin > 180 && !focusListening) {
+    if (timeChanged && cfgSleepMin > 180 && !focusListening && !alwaysActive) {
         int currentPeriod = currentPeriodIndex();
         if (currentPeriod != lastRenderedPeriod) {
             updateTimeDisplay();
@@ -381,8 +396,8 @@ void loop() {
 // ── Deep sleep helper ───────────────────────────────────────
 
 static void enterDeepSleep(int minutes) {
-    if (focusListening) {
-        Serial.println("[FOCUS] Focus listening enabled, skipping deep sleep");
+    if (focusListening || alwaysActive) {
+        Serial.println("[LIVE] Active keep-awake enabled, skipping deep sleep");
         return;
     }
     epdSleep();
@@ -447,8 +462,8 @@ static void handleFailure(const char *reason) {
     } else {
         Serial.println("Max retries reached, entering deep sleep");
         resetRetryCount();
-        if (focusListening) {
-            Serial.println("[FOCUS] Focus listening enabled, not entering deep sleep");
+        if (focusListening || alwaysActive) {
+            Serial.println("[LIVE] Active keep-awake enabled, not entering deep sleep");
             ctx.state = DeviceState::DISPLAYING;
             ctx.setupDoneAt = millis();
             return;
@@ -495,7 +510,7 @@ static void handleLiveMode() {
         ctx.setupDoneAt = millis();
         return;
     }
-    if (shouldExitLive) {
+    if (shouldExitLive && !alwaysActive) {
         ctx.liveMode = false;
         postRuntimeMode("interval");
         WiFi.disconnect(true);

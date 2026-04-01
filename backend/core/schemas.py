@@ -90,6 +90,10 @@ class ConfigRequest(BaseModel):
         default=False,
         description="是否开启专注监听（Focus Mode）",
     )
+    always_active: bool = Field(
+        default=False,
+        description="是否始终保持设备活跃状态",
+    )
 
     @field_validator("mac")
     @classmethod

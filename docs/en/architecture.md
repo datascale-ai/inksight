@@ -122,7 +122,7 @@ Key modules include:
 
 The repository includes multiple board/display profiles, with the default environment set to:
 
-- `epd_42_c3` (for 4.2-inch B/W e-paper and ESP32-C3 Pro mini / Super mini boards)
+- `epd_42_wsv2_ssd1683_c3_promini` (for 4.2-inch B/W e-paper and ESP32-C3 Pro mini boards)
 
 ## 6. External dependencies
 

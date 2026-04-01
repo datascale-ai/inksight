@@ -37,6 +37,7 @@ async def use_memory_db(tmp_path):
             if col not in cols:
                 await db.execute(f"ALTER TABLE configs ADD COLUMN {col} {ddl}")
         await _add("focus_listening", "INTEGER DEFAULT 0")
+        await _add("always_active", "INTEGER DEFAULT 0")
         await _add("latitude", "REAL")
         await _add("longitude", "REAL")
         await _add("timezone", "TEXT DEFAULT ''")
@@ -63,6 +64,7 @@ class TestConfigStore:
             "modes": ["STOIC", "ZEN"],
             "refreshStrategy": "cycle",
             "refreshInterval": 30,
+            "always_active": True,
             "language": "zh",
             "contentTone": "neutral",
             "city": "北京",
@@ -82,6 +84,8 @@ class TestConfigStore:
         assert config["nickname"] == "Test"
         assert "STOIC" in config["modes"]
         assert config["refresh_strategy"] == "cycle"
+        assert config["always_active"] == 1
+        assert config["is_always_active"] is True
         assert config["latitude"] == pytest.approx(39.9042)
         assert config["country"] == "中国"
         assert isinstance(config["countdown_events"], list)

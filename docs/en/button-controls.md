@@ -1,6 +1,6 @@
 # Button Controls
 
-On the recommended ESP32-C3 development boards (like the SuperMini), there are typically two physical buttons: **RST (Reset)** and **BOOT (Config)**.
+On the recommended ESP32-C3 development boards (like the Pro mini), there are typically two physical buttons: **RST (Reset)** and **BOOT (Config)**.
 
 The InkSight firmware uses these two buttons to handle device reboots, mode switching, and Wi-Fi provisioning.
 

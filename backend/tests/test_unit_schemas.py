@@ -16,6 +16,7 @@ class TestConfigRequest:
             modes=["STOIC", "ZEN"],
             refreshStrategy="cycle",
             refreshInterval=30,
+            always_active=True,
             language="zh",
             contentTone="neutral",
             city="北京市",
@@ -28,6 +29,7 @@ class TestConfigRequest:
         assert body.mac == "AA:BB:CC:DD:EE:FF"
         assert body.modes == ["STOIC", "ZEN"]
         assert body.refreshInterval == 30
+        assert body.always_active is True
         assert body.latitude == pytest.approx(39.9042)
 
     def test_invalid_mac_format(self):
@@ -84,6 +86,7 @@ class TestConfigRequest:
         assert body.modes == ["STOIC"]
         assert body.refreshStrategy == "random"
         assert body.refreshInterval == 60
+        assert body.always_active is False
         assert body.language == "zh"
         assert body.contentTone == "neutral"
         assert body.city == "杭州"

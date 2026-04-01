@@ -42,6 +42,7 @@ async def client(tmp_path):
             if col not in cols:
                 await db.execute(f"ALTER TABLE configs ADD COLUMN {col} {ddl}")
         await _add("focus_listening", "INTEGER DEFAULT 0")
+        await _add("always_active", "INTEGER DEFAULT 0")
         await _add("latitude", "REAL")
         await _add("longitude", "REAL")
         await _add("timezone", "TEXT DEFAULT ''")
@@ -370,6 +371,32 @@ async def test_config_save_preserves_active_runtime_mode(client):
     state = await get_device_state("AA:BB:CC:DD:EE:11")
     assert state["runtime_mode"] == "active"
     assert state["pending_refresh"] == 1
+
+
+@pytest.mark.asyncio
+async def test_config_save_persists_always_active_flag(client):
+    mac = "AA:BB:CC:DD:EE:12"
+    headers = await provision_device_headers(client, mac)
+
+    resp = await client.post(
+        "/api/config",
+        json={
+            "mac": mac,
+            "modes": ["STOIC"],
+            "refreshInterval": 30,
+            "always_active": True,
+            "llmProvider": "deepseek",
+            "llmModel": "deepseek-chat",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+
+    active = await client.get(f"/api/config/{mac}", headers=headers)
+    assert active.status_code == 200
+    data = active.json()
+    assert data["always_active"] == 1
+    assert data["is_always_active"] is True
 
 
 @pytest.mark.asyncio

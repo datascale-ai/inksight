@@ -61,6 +61,7 @@ async def init_db():
                 memo_text TEXT DEFAULT '',
                 mode_overrides TEXT DEFAULT '{}',
                 focus_listening INTEGER DEFAULT 0,
+                always_active INTEGER DEFAULT 0,
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL
             )
@@ -104,6 +105,7 @@ async def init_db():
                         memo_text TEXT DEFAULT '',
                         mode_overrides TEXT DEFAULT '{}',
                         focus_listening INTEGER DEFAULT 0,
+                        always_active INTEGER DEFAULT 0,
                         is_active INTEGER DEFAULT 1,
                         created_at TEXT NOT NULL
                     )
@@ -115,7 +117,7 @@ async def init_db():
                         refresh_interval, llm_provider, llm_model,
                         image_provider, image_model,
                         countdown_events, time_slot_rules, memo_text,
-                        mode_overrides, focus_listening, is_active, created_at
+                        mode_overrides, focus_listening, always_active, is_active, created_at
                     )
                     SELECT
                         id, mac, nickname, modes, refresh_strategy,
@@ -123,7 +125,7 @@ async def init_db():
                         refresh_interval, llm_provider, llm_model,
                         image_provider, image_model,
                         countdown_events, time_slot_rules, memo_text,
-                        mode_overrides, 0, is_active, created_at
+                        mode_overrides, 0, 0, is_active, created_at
                     FROM configs
                 """)
                 await db.execute("DROP TABLE configs")
@@ -146,6 +148,7 @@ async def init_db():
             "mode_overrides": "TEXT DEFAULT '{}'",
             "mode_language": "TEXT DEFAULT ''",
             "focus_listening": "INTEGER DEFAULT 0",
+            "always_active": "INTEGER DEFAULT 0",
             "latitude": "REAL",
             "longitude": "REAL",
             "timezone": "TEXT DEFAULT ''",
@@ -1397,8 +1400,8 @@ async def save_config(mac: str, data: dict) -> int:
            (mac, nickname, modes, refresh_strategy, character_tones,
             language, mode_language, content_tone, city, latitude, longitude, timezone, admin1, country,
             refresh_interval, llm_provider, llm_model, image_provider, image_model,
-            countdown_events, time_slot_rules, memo_text, mode_overrides, focus_listening, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            countdown_events, time_slot_rules, memo_text, mode_overrides, focus_listening, always_active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             mac,
             data.get("nickname", ""),
@@ -1424,6 +1427,7 @@ async def save_config(mac: str, data: dict) -> int:
             memo_text,
             mode_overrides_json,
             1 if bool(data.get("is_focus_listening", False)) else 0,
+            1 if bool(data.get("always_active", False)) else 0,
             now,
         ),
     )
@@ -1483,8 +1487,8 @@ async def update_focus_listening(mac: str, enabled: bool) -> bool:
                 """INSERT INTO configs
                    (mac, nickname, modes, refresh_strategy, character_tones,
                     language, mode_language, content_tone, city, refresh_interval, llm_provider, llm_model, image_provider, image_model,
-                    countdown_events, time_slot_rules, memo_text, mode_overrides, focus_listening, is_active, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+                    countdown_events, time_slot_rules, memo_text, mode_overrides, focus_listening, always_active, is_active, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
                 (
                     normalized_mac,
                     prev.get("nickname", "") or "",
@@ -1505,6 +1509,7 @@ async def update_focus_listening(mac: str, enabled: bool) -> bool:
                     str(prev.get("memo_text", "") or ""),
                     mode_overrides_json,
                     1 if enabled else 0,
+                    1 if bool(prev.get("always_active", False)) else 0,
                     datetime.now().isoformat(),
                 ),
             )
@@ -1612,6 +1617,8 @@ def _row_to_dict(row, columns) -> dict:
     d["modeOverrides"] = mo
     d["focus_listening"] = int(d.get("focus_listening", 0) or 0)
     d["is_focus_listening"] = bool(d["focus_listening"])
+    d["always_active"] = int(d.get("always_active", 0) or 0)
+    d["is_always_active"] = bool(d["always_active"])
     # Add mac field for cycle index tracking
     if "mac" not in d:
         d["mac"] = d.get("mac", "default")

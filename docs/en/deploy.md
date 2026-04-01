@@ -134,7 +134,7 @@ pio device monitor
 
 The default environment is:
 
-- `epd_42_c3`
+- `epd_42_wsv2_ssd1683_c3_promini`
 
 For other supported hardware profiles, see:
 

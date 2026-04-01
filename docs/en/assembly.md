@@ -8,14 +8,14 @@ This guide helps you complete basic assembly in 10-20 minutes.
 
 ## Preparation
 
-- ESP32-C3 SuperMini
+- ESP32-C3 Pro mini
 - 4.2-inch SPI e-ink panel
 - 6+ dupont wires
 - USB-C data cable
 
 ## 2. Recommended wiring for 4.2-inch + ESP32-C3
 
-If you use the recommended build (`epd_42_c3`), wire it like this:
+If you use the recommended build (`epd_42_wsv2_ssd1683_c3_promini`), wire it like this:
 
 | ESP32-C3 | E-paper |
 |----------|---------|
