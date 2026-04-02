@@ -13,13 +13,15 @@ function isBypassPath(pathname: string): boolean {
   );
 }
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   if (isBypassPath(pathname)) return NextResponse.next();
 
   const seg = pathname.split("/").filter(Boolean)[0] || "";
   if (isLocale(seg)) {
-    const res = NextResponse.next();
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-ink-locale", seg);
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
     res.cookies.set(LOCALE_COOKIE, seg, { path: "/" });
     return res;
   }

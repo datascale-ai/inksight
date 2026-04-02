@@ -8,6 +8,7 @@
 #include "epd_driver.h"
 #include "display.h"
 #include "network.h"
+#include "ota.h"
 #include "storage.h"
 #include "portal.h"
 #include "offline_cache.h"
@@ -80,7 +81,7 @@ static void ledInit() {
     digitalWrite(PIN_LED, LOW);
 }
 
-static void ledFeedback(const char *pattern) {
+void ledFeedback(const char *pattern) {
     if (strcmp(pattern, "ack") == 0) {
         for (int i = 0; i < 2; i++) {
             digitalWrite(PIN_LED, HIGH); delay(80);
@@ -504,7 +505,20 @@ static void handleLiveMode() {
     ctx.lastLivePollAt = now;
 
     bool shouldExitLive = false;
-    if (hasPendingRemoteAction(&shouldExitLive)) {
+    bool hasPendingOTA = hasPendingRemoteAction(&shouldExitLive);
+    if (hasPendingOTA) {
+        // Check if it's an OTA action (g_pending_ota_url is set)
+        if (g_pending_ota_url.length() > 0) {
+            Serial.println("[LIVE] Pending OTA detected, initiating firmware update...");
+            bool otaOk = checkAndPerformOTA();
+            if (!otaOk) {
+                Serial.println("[OTA] Firmware update failed, continuing normal operation");
+            }
+            // checkAndPerformOTA() reboots on success; on failure clears g_pending_ota_url and returns
+            g_pending_ota_url = "";
+            g_pending_ota_version = "";
+            return;
+        }
         Serial.println("[LIVE] Pending action detected, refreshing now");
         triggerImmediateRefresh(false, true);
         ctx.setupDoneAt = millis();

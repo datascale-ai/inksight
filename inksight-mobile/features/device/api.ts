@@ -171,6 +171,50 @@ export async function validateFirmwareUrl(url: string) {
   return apiRequest<{ reachable: boolean; final_url?: string; status_code?: number }>(`/firmware/validate-url?${params.toString()}`);
 }
 
+// ── OTA (Over-The-Air Firmware Update) ─────────────────────
+
+export type OTAStatus = {
+  pending_ota: number;   // 0=无任务, 1=待执行
+  ota_version: string;
+  ota_url: string;
+  ota_progress: number;   // 0-100
+  ota_result: string;    // '' | 'downloading' | 'flashing' | 'success' | 'failed:...'
+  is_online: boolean;
+  runtime_mode: string;  // 'active' | 'interval'
+};
+
+export type OTATriggerResult = {
+  ok: boolean;
+  message: string;
+  detail?: string;
+};
+
+export async function triggerOTA(
+  mac: string,
+  downloadUrl: string,
+  version: string,
+  token: string
+): Promise<OTATriggerResult> {
+  return apiRequest<OTATriggerResult>(
+    `/device/${encodeURIComponent(mac)}/ota`,
+    { method: 'POST', token, body: { download_url: downloadUrl, version } }
+  );
+}
+
+export async function getOTAStatus(mac: string, token: string): Promise<OTAStatus> {
+  return apiRequest<OTAStatus>(
+    `/device/${encodeURIComponent(mac)}/ota/status`,
+    { token }
+  );
+}
+
+export async function cancelOTA(mac: string, token: string) {
+  return apiRequest<{ ok: boolean }>(
+    `/device/${encodeURIComponent(mac)}/ota/cancel`,
+    { method: 'POST', token }
+  );
+}
+
 export async function favoriteDeviceContent(mac: string, token: string, mode?: string) {
   return apiRequest<{ ok: boolean; message: string; mode_id?: string }>(`/device/${encodeURIComponent(mac)}/favorite`, {
     method: 'POST',

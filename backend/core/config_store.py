@@ -210,6 +210,25 @@ async def init_db():
         except Exception:
             logger.warning("[MIGRATION] Failed to add alert token columns", exc_info=True)
 
+        # Migration: add OTA columns if missing
+        try:
+            cursor = await db.execute("PRAGMA table_info(device_state)")
+            columns = await cursor.fetchall()
+            names = [c[1] for c in columns]
+            if "pending_ota" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN pending_ota INTEGER DEFAULT 0")
+            if "ota_version" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_version TEXT DEFAULT ''")
+            if "ota_url" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_url TEXT DEFAULT ''")
+            if "ota_progress" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_progress INTEGER DEFAULT 0")
+            if "ota_result" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_result TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            logger.warning("[MIGRATION] Failed to add OTA columns", exc_info=True)
+
         # User system tables
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -1785,6 +1804,12 @@ async def update_device_state(mac: str, **kwargs):
             "runtime_mode",
             "expected_refresh_min",
             "last_reconnect_regen_at",
+            # OTA fields
+            "pending_ota",
+            "ota_version",
+            "ota_url",
+            "ota_progress",
+            "ota_result",
         ):
             await db.execute(
                 f"UPDATE device_state SET {key} = ? WHERE mac = ?",

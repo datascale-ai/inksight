@@ -1,4 +1,5 @@
 #include "network.h"
+#include "ota.h"
 #include "config.h"
 #include "storage.h"
 #include "certs.h"
@@ -24,9 +25,7 @@ static bool checkAbort() {
     return false;
 }
 
-static bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClientSecure &secClient, const String &url);
 static bool recoverDeviceTokenIfUnauthorized(int code);
-static String extractJsonStringField(const String &body, const char *key);
 
 // ── WiFi connection ─────────────────────────────────────────
 
@@ -158,7 +157,7 @@ static bool readExact(WiFiClient *s, uint8_t *buf, int len) {
     return true;
 }
 
-static bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClientSecure &secClient, const String &url) {
+bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClientSecure &secClient, const String &url) {
     if (url.startsWith("https://")) {
         secClient.setCACert(ROOT_CA);
         return http.begin(secClient, url);
@@ -166,7 +165,7 @@ static bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClien
     return http.begin(plainClient, url);
 }
 
-static String extractJsonStringField(const String &body, const char *key) {
+String extractJsonStringField(const String &body, const char *key) {
     String needle = String("\"") + key + "\":\"";
     int start = body.indexOf(needle);
     if (start < 0) return "";
@@ -592,7 +591,19 @@ bool hasPendingRemoteAction(bool *shouldExitLive) {
             body.indexOf("\"pending_mode\":\"\"") < 0 &&
             body.indexOf("\"pending_mode\": \"\"") < 0;
 
-        return pendingRefresh || pendingMode;
+        // Extract OTA fields
+        bool pendingOTA =
+            body.indexOf("\"pending_ota\":1") >= 0 ||
+            body.indexOf("\"pending_ota\": 1") >= 0 ||
+            body.indexOf("\"pending_ota\":true") >= 0 ||
+            body.indexOf("\"pending_ota\": true") >= 0;
+
+        if (pendingOTA) {
+            g_pending_ota_url = extractJsonStringField(body, "ota_url");
+            g_pending_ota_version = extractJsonStringField(body, "ota_version");
+        }
+
+        return pendingRefresh || pendingMode || pendingOTA;
     }
     return false;
 }

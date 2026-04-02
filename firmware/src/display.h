@@ -28,4 +28,10 @@ void smartDisplay(const uint8_t *image);
 // Show mode name preview screen (displayed briefly on double-click before loading)
 void showModePreview(const char *modeName);
 
+// ── LED feedback patterns ──────────────────────────────────────
+
+// Drive the LED with named feedback patterns.
+// Patterns: "ack", "connecting", "downloading", "success", "fail", "favorite", "portal", "off"
+void ledFeedback(const char *pattern);
+
 #endif // INKSIGHT_DISPLAY_H
