@@ -12,6 +12,7 @@ from phonenumbers.phonenumberutil import NumberParseException
 from core.auth import clear_session_cookie, create_session_token, require_user, set_session_cookie
 from core.config_store import authenticate_user, _hash_password, get_user_api_quota
 from core.db import get_main_db
+from core.email import send_verification_code, verify_code
 
 router = APIRouter(tags=["auth"])
 
@@ -62,13 +63,6 @@ async def _phone_exists(db, normalized_phone: str) -> bool:
 
 @router.post("/auth/register")
 async def auth_register(body: dict, response: Response):
-    """
-    用户注册接口。
-
-    说明：
-    - 注册时不再支持输入邀请码，邀请码仅通过单独的兑换接口使用（/api/user/redeem）
-    - 新用户注册后统一获得 50 次免费 LLM 调用额度
-    """
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     phone = (body.get("phone") or "").strip()
@@ -80,17 +74,16 @@ async def auth_register(body: dict, response: Response):
     if len(password) < 4:
         return JSONResponse({"error": "密码至少 4 位"}, status_code=400)
 
-    # 至少提供一个合法的手机号或邮箱
-    if not phone and not email:
-        return JSONResponse({"error": "手机号或邮箱至少填写一个"}, status_code=400)
+    if not email:
+        return JSONResponse({"error": "邮箱为必填项"}, status_code=400)
+    if not _EMAIL_RE.match(email):
+        return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
     normalized_phone = ""
     if phone:
         try:
             normalized_phone = _normalize_phone(phone, phone_region)
         except ValueError:
             return JSONResponse({"error": "手机号格式不正确"}, status_code=400)
-    if email and not _EMAIL_RE.match(email):
-        return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
 
     db = await get_main_db()
     now = datetime.now().isoformat()
@@ -155,60 +148,49 @@ async def auth_login(body: dict, response: Response):
     return {"ok": True, "user_id": user["id"], "username": user["username"], "token": token}
 
 
-@router.post("/auth/reset-password")
-async def auth_reset_password(body: dict):
-    username = (body.get("username") or "").strip()
-    password = body.get("password") or ""
-    phone = (body.get("phone") or "").strip()
-    phone_region = (body.get("phone_region") or "").strip()
-    email = (body.get("email") or "").strip()
-
-    if not username or len(username) < 2 or len(username) > 30:
-        return JSONResponse({"error": "用户名长度须为 2-30 字符"}, status_code=400)
-    if len(password) < 4:
-        return JSONResponse({"error": "密码至少 4 位"}, status_code=400)
-    if not phone and not email:
-        return JSONResponse({"error": "手机号或邮箱至少填写一个"}, status_code=400)
-
-    normalized_phone = ""
-    if phone:
-        try:
-            normalized_phone = _normalize_phone(phone, phone_region)
-        except ValueError:
-            return JSONResponse({"error": "手机号格式不正确"}, status_code=400)
-    if email and not _EMAIL_RE.match(email):
+@router.post("/auth/reset-password/send-code")
+async def auth_reset_send_code(body: dict):
+    """Step 1: send a verification code to the user's registered email."""
+    email = (body.get("email") or "").strip().lower()
+    if not email or not _EMAIL_RE.match(email):
         return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
 
     db = await get_main_db()
-    clauses = ["username = ?"]
-    params: list[str] = [username]
+    cursor = await db.execute("SELECT id FROM users WHERE email = ? LIMIT 1", (email,))
+    if not await cursor.fetchone():
+        return JSONResponse({"error": "该邮箱未注册"}, status_code=404)
 
-    if normalized_phone and email:
-        phone_candidates = _phone_lookup_candidates(normalized_phone)
-        clauses.append(f"(phone IN ({','.join('?' for _ in phone_candidates)}) OR email = ?)")
-        params.extend(phone_candidates)
-        params.append(email)
-    elif normalized_phone:
-        phone_candidates = _phone_lookup_candidates(normalized_phone)
-        clauses.append(f"phone IN ({','.join('?' for _ in phone_candidates)})")
-        params.extend(phone_candidates)
-    else:
-        clauses.append("email = ?")
-        params.append(email)
+    ok, message = await send_verification_code(email)
+    if not ok:
+        return JSONResponse({"error": message}, status_code=429)
+    return {"ok": True, "message": message}
 
-    cursor = await db.execute(
-        f"SELECT id FROM users WHERE {' AND '.join(clauses)} LIMIT 1",
-        tuple(params),
-    )
+
+@router.post("/auth/reset-password")
+async def auth_reset_password(body: dict):
+    """Step 2: verify code and set new password."""
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    password = body.get("password") or ""
+
+    if not email or not _EMAIL_RE.match(email):
+        return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
+    if not code:
+        return JSONResponse({"error": "验证码不能为空"}, status_code=400)
+    if len(password) < 4:
+        return JSONResponse({"error": "密码至少 4 位"}, status_code=400)
+
+    if not verify_code(email, code):
+        return JSONResponse({"error": "验证码无效或已过期"}, status_code=400)
+
+    db = await get_main_db()
+    cursor = await db.execute("SELECT id FROM users WHERE email = ? LIMIT 1", (email,))
     row = await cursor.fetchone()
     if not row:
-        return JSONResponse({"error": "用户名与手机号/邮箱不匹配"}, status_code=404)
+        return JSONResponse({"error": "该邮箱未注册"}, status_code=404)
 
     pw_hash, _ = _hash_password(password)
-    await db.execute(
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-        (pw_hash, row[0]),
-    )
+    await db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pw_hash, row[0]))
     await db.commit()
     return {"ok": True, "message": "密码已重置，请重新登录"}
 

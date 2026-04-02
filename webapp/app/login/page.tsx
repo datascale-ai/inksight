@@ -45,42 +45,111 @@ function LoginForm() {
   }
   const next = searchParams.get("next") || `/${locale}/config`;
   const [mode, setMode] = useState<"login" | "register" | "reset">("login");
+  const [resetStep, setResetStep] = useState<"email" | "verify">("email");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [phoneRegion, setPhoneRegion] = useState<(typeof PHONE_REGION_OPTIONS)[number]["region"]>("CN");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   const [successMsg, setSuccessMsg] = useState("");
 
+  const startCooldown = () => {
+    setCooldown(60);
+    const timer = setInterval(() => {
+      setCooldown((prev) => { if (prev <= 1) { clearInterval(timer); return 0; } return prev - 1; });
+    }, 1000);
+  };
+
+  const handleResetSendCode = async () => {
+    setError("");
+    if (!email.trim()) {
+      setError(locale === "en" ? "Email is required" : "请输入邮箱");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || (locale === "en" ? "Failed to send code" : "发送验证码失败"));
+        return;
+      }
+      setResetStep("verify");
+      startCooldown();
+    } catch {
+      setError(locale === "en" ? "Network error" : "网络错误");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetVerify = async () => {
+    setError("");
+    if (!verifyCode.trim()) {
+      setError(locale === "en" ? "Enter verification code" : "请输入验证码");
+      return;
+    }
+    if (password.length < 4) {
+      setError(locale === "en" ? "Password must be at least 4 characters" : "密码至少 4 位");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), code: verifyCode.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || (locale === "en" ? "Reset failed" : "重置失败"));
+        return;
+      }
+      setSuccessMsg(locale === "en" ? "Password reset successful, please sign in" : "密码重置成功，请登录");
+      setMode("login");
+      setResetStep("email");
+      setPassword("");
+      setEmail("");
+      setVerifyCode("");
+    } catch {
+      setError(locale === "en" ? "Network error" : "网络错误");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mode === "reset") {
+      if (resetStep === "email") return handleResetSendCode();
+      return handleResetVerify();
+    }
     setError("");
     setSuccessMsg("");
     setLoading(true);
     try {
-      // 基础前端校验：注册时强制要求手机号/邮箱（邀请码可选）
-      if (mode === "register" || mode === "reset") {
-        if (!phone.trim() && !email.trim()) {
-          setError(locale === "en" ? "Please enter phone or email" : "手机号或邮箱至少填写一个");
-          setLoading(false);
-          return;
-        }
+      if (mode === "register" && !email.trim()) {
+        setError(locale === "en" ? "Email is required" : "邮箱为必填项");
+        setLoading(false);
+        return;
       }
 
-      const endpoint = mode === "register"
-        ? "/api/auth/register"
-        : mode === "reset"
-          ? "/api/auth/reset-password"
-          : "/api/auth/login";
+      const endpoint = mode === "register" ? "/api/auth/register" : "/api/auth/login";
       const payload: Record<string, string> = { username, password };
-      if ((mode === "register" || mode === "reset") && phone.trim()) {
+      if (mode === "register" && phone.trim()) {
         payload.phone = phone.trim();
         payload.phone_region = phoneRegion;
       }
-      if ((mode === "register" || mode === "reset") && email.trim()) payload.email = email.trim();
+      if (mode === "register" && email.trim()) payload.email = email.trim();
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,12 +160,8 @@ function LoginForm() {
         setError(data.error || (locale === "en" ? "Operation failed" : "操作失败"));
         return;
       }
-      if (mode === "register" || mode === "reset") {
-        setSuccessMsg(
-          mode === "register"
-            ? (locale === "en" ? "Registration successful, please sign in" : "注册成功，请登录")
-            : (locale === "en" ? "Password reset successful, please sign in" : "密码重置成功，请登录")
-        );
+      if (mode === "register") {
+        setSuccessMsg(locale === "en" ? "Registration successful, please sign in" : "注册成功，请登录");
         setMode("login");
         setPassword("");
         setPhoneRegion("CN");
@@ -106,36 +171,23 @@ function LoginForm() {
       }
       if (data.token) {
         setToken(data.token);
-        // Set ink_session cookie for frontend domain (localhost:3000)
-        const maxAge = 30 * 24 * 60 * 60; // 30 days (same as backend JWT_EXPIRE_DAYS)
+        const maxAge = 30 * 24 * 60 * 60;
         document.cookie = `ink_session=${data.token}; path=/; max-age=${maxAge}; SameSite=Lax`;
-        console.log("[LOGIN] Set ink_session cookie for frontend");
       }
       
-      // Handle redirect: if redirect_url exists (external URL), use window.location.href
-      // Otherwise, use Next.js router for internal routes
       if (redirectUrl) {
-        // Check if it's an external URL (starts with http:// or https://)
         const trimmedUrl = redirectUrl.trim();
         if (trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")) {
-          // External URL (cross-port/cross-domain) - append token to URL for backend to set cookie
-          // Backend will detect the token parameter, set the cookie, and redirect to the original URL
           try {
             const urlObj = new URL(trimmedUrl);
             urlObj.searchParams.set("_token", data.token);
-            const redirectWithToken = urlObj.toString();
-            
-            // Redirect to backend with token parameter
-            window.location.href = redirectWithToken;
-          } catch (e) {
-            console.warn("[LOGIN] Failed to parse redirect URL:", e);
-            // Fallback: redirect without token
+            window.location.href = urlObj.toString();
+          } catch {
             window.location.href = trimmedUrl;
           }
           return;
         }
       }
-      // Internal route - use Next.js router (only if no redirectUrl or redirectUrl is not external)
       router.push(next);
       router.refresh();
     } catch {
@@ -159,43 +211,62 @@ function LoginForm() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">
-                {locale === "en" ? "Username" : "用户名"}
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                minLength={2}
-                maxLength={30}
-                autoComplete="username"
-                placeholder={
-                  locale === "en"
-                    ? "Choose a display name"
-                    : "用于显示的昵称（非手机号/邮箱）"
-                }
-                className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">{locale === "en" ? "Password" : "密码"}</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={4}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
-              />
-            </div>
-            {(mode === "register" || mode === "reset") && (
+            {mode !== "reset" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">
+                    {locale === "en" ? "Username" : "用户名"}
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    minLength={2}
+                    maxLength={30}
+                    autoComplete="username"
+                    placeholder={
+                      locale === "en"
+                        ? "Choose a display name"
+                        : "用于显示的昵称（非手机号/邮箱）"
+                    }
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">{locale === "en" ? "Password" : "密码"}</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={4}
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                  />
+                </div>
+              </>
+            )}
+            {mode === "register" && (
               <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">
+                    {locale === "en" ? "Email" : "邮箱"} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder={locale === "en" ? "Required, used for account recovery" : "必填，用于找回账号"}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">
                     {locale === "en" ? "Phone" : "手机号"}
+                    <span className="text-ink-light text-xs ml-1">({locale === "en" ? "optional" : "选填"})</span>
                   </label>
                   <div className="flex w-full flex-col gap-2">
                     <select
@@ -214,32 +285,72 @@ function LoginForm() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       autoComplete="tel"
-                      placeholder={
-                        locale === "en"
-                          ? "Local phone number"
-                          : "本地手机号，与邮箱至少填一项"
-                      }
+                      placeholder={locale === "en" ? "Local phone number" : "本地手机号"}
                       className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
                     />
                   </div>
                 </div>
+              </div>
+            )}
+            {mode === "reset" && (
+              <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">
-                    {locale === "en" ? "Email" : "邮箱"}
+                    {locale === "en" ? "Email" : "注册邮箱"}
                   </label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    required
                     autoComplete="email"
-                    placeholder={
-                      locale === "en"
-                        ? "Required: at least phone or email"
-                        : "与手机号至少填一项，用于找回账号"
-                    }
-                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                    disabled={resetStep === "verify"}
+                    placeholder={locale === "en" ? "Enter your registered email" : "输入注册时使用的邮箱"}
+                    className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm disabled:opacity-50"
                   />
                 </div>
+                {resetStep === "verify" && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-ink mb-1">
+                        {locale === "en" ? "Verification Code" : "验证码"}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={verifyCode}
+                          onChange={(e) => setVerifyCode(e.target.value)}
+                          maxLength={6}
+                          placeholder="000000"
+                          className="flex-1 rounded-sm border border-ink/20 px-3 py-2 text-sm tracking-widest"
+                        />
+                        <button
+                          type="button"
+                          disabled={cooldown > 0 || loading}
+                          onClick={handleResetSendCode}
+                          className="shrink-0 rounded-sm border border-ink/20 px-3 py-2 text-xs disabled:opacity-50"
+                        >
+                          {cooldown > 0
+                            ? `${cooldown}s`
+                            : (locale === "en" ? "Resend" : "重新发送")}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-ink mb-1">
+                        {locale === "en" ? "New Password" : "新密码"}
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        minLength={4}
+                        autoComplete="new-password"
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {successMsg && (
@@ -254,7 +365,9 @@ function LoginForm() {
                 ? (locale === "en" ? "Sign In" : "登录")
                 : mode === "register"
                   ? (locale === "en" ? "Sign Up" : "注册")
-                  : (locale === "en" ? "Reset Password" : "重置密码")}
+                  : resetStep === "email"
+                    ? (locale === "en" ? "Send Verification Code" : "发送验证码")
+                    : (locale === "en" ? "Reset Password" : "重置密码")}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm text-ink-light">
@@ -267,7 +380,7 @@ function LoginForm() {
                   </button>
                 </div>
                 <div>
-                  <button onClick={() => { setMode("reset"); setError(""); setSuccessMsg(""); setPassword(""); }} className="text-ink underline">
+                  <button onClick={() => { setMode("reset"); setResetStep("email"); setError(""); setSuccessMsg(""); setPassword(""); setEmail(""); setVerifyCode(""); }} className="text-ink underline">
                     {locale === "en" ? "Forgot password?" : "忘记密码？"}
                   </button>
                 </div>

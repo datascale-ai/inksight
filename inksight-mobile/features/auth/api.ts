@@ -37,16 +37,18 @@ export async function me(token: string) {
   return apiRequest<AuthUser>('/auth/me', { token });
 }
 
-export async function resetPassword(params: {
-  username: string;
-  password: string;
-  phone?: string;
-  email?: string;
-  phone_region?: string;
-}) {
+export async function sendResetCode(email: string) {
+  return apiRequest<{ ok: boolean; message: string }>('/auth/reset-password/send-code', {
+    method: 'POST',
+    body: { email },
+    token: null,
+  });
+}
+
+export async function resetPasswordWithCode(email: string, code: string, password: string) {
   return apiRequest<{ ok: boolean; message: string }>('/auth/reset-password', {
     method: 'POST',
-    body: params,
+    body: { email, code, password },
     token: null,
   });
 }

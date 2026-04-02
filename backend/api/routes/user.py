@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import aiosqlite
 from typing import Optional
 
@@ -26,8 +27,11 @@ from core.config_store import (
     unbind_device,
 )
 from core.db import get_main_db
+from core.email import send_verification_code, verify_code
 
 router = APIRouter(tags=["user"])
+
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 
 @router.get("/user/devices")
@@ -118,14 +122,16 @@ async def remove_device_member(
     return {"ok": True}
 
 
+def _mask_key(key: str) -> str:
+    if not key or len(key) <= 8:
+        return "****" if key else ""
+    return key[:4] + "****" + key[-4:]
+
+
 @router.get("/user/profile")
 async def get_user_profile(user_id: int = Depends(require_user)):
-    """获取当前用户的个人信息，包括额度、角色和 LLM 配置。"""
-    from core.db import get_main_db
-    
     db = await get_main_db()
-    
-    # 获取用户基本信息
+
     cursor = await db.execute(
         "SELECT id, username, phone, email, role FROM users WHERE id = ?",
         (user_id,),
@@ -133,13 +139,15 @@ async def get_user_profile(user_id: int = Depends(require_user)):
     user_row = await cursor.fetchone()
     if not user_row:
         return JSONResponse({"error": "用户不存在"}, status_code=404)
-    
-    # 获取额度信息
+
     quota = await get_user_api_quota(user_id)
-    
-    # 获取 LLM 配置
+
     llm_config = await get_user_llm_config(user_id)
-    
+    if llm_config:
+        for k in ("api_key", "image_api_key"):
+            if llm_config.get(k):
+                llm_config[k] = _mask_key(llm_config[k])
+
     return {
         "user_id": user_row[0],
         "username": user_row[1],
@@ -277,3 +285,44 @@ async def redeem_invite_code(body: dict, user_id: int = Depends(require_user)):
         logger = logging.getLogger(__name__)
         logger.error(f"[REDEEM_INVITE] Failed to redeem invite code: {e}", exc_info=True)
         return JSONResponse({"error": "兑换失败，请稍后重试"}, status_code=500)
+
+
+@router.post("/user/bind-email/send-code")
+async def bind_email_send_code(body: dict, user_id: int = Depends(require_user)):
+    """Send a verification code to the new email address."""
+    email = (body.get("email") or "").strip().lower()
+    if not email or not _EMAIL_RE.match(email):
+        return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
+
+    db = await get_main_db()
+    cursor = await db.execute("SELECT id FROM users WHERE email = ? AND id != ?", (email, user_id))
+    if await cursor.fetchone():
+        return JSONResponse({"error": "该邮箱已被其他账号使用"}, status_code=409)
+
+    ok, message = await send_verification_code(email)
+    if not ok:
+        return JSONResponse({"error": message}, status_code=429)
+    return {"ok": True, "message": message}
+
+
+@router.post("/user/bind-email")
+async def bind_email(body: dict, user_id: int = Depends(require_user)):
+    """Verify code and bind email to the current user."""
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+
+    if not email or not _EMAIL_RE.match(email):
+        return JSONResponse({"error": "邮箱格式不正确"}, status_code=400)
+    if not code:
+        return JSONResponse({"error": "验证码不能为空"}, status_code=400)
+    if not verify_code(email, code):
+        return JSONResponse({"error": "验证码无效或已过期"}, status_code=400)
+
+    db = await get_main_db()
+    cursor = await db.execute("SELECT id FROM users WHERE email = ? AND id != ?", (email, user_id))
+    if await cursor.fetchone():
+        return JSONResponse({"error": "该邮箱已被其他账号使用"}, status_code=409)
+
+    await db.execute("UPDATE users SET email = ? WHERE id = ?", (email, user_id))
+    await db.commit()
+    return {"ok": True, "message": "邮箱绑定成功"}

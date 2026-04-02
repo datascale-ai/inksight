@@ -58,7 +58,7 @@ def validate_mac_param(mac: str, lang: str = "zh") -> str:
 def is_admin_authorized(authorization: Optional[str]) -> bool:
     admin_token = os.environ.get("ADMIN_TOKEN")
     if not admin_token:
-        return True
+        return False
     if not authorization:
         return False
 

@@ -114,7 +114,7 @@ async def test_user(client: AsyncClient):
         json={
             "username": username,
             "password": password,
-            "phone": f"138{hash(username) % 100000000:08d}",
+            "email": f"{username}@example.com",
         },
     )
     assert resp.status_code == 200

@@ -28,9 +28,12 @@ class TestValidateMacParam:
 
 
 class TestRequireAdmin:
-    def test_no_admin_token_configured_allows_access(self, monkeypatch):
+    def test_no_admin_token_configured_denies_access(self, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
-        require_admin(authorization=None)
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            require_admin(authorization=None)
+        assert exc_info.value.status_code == 403
 
     def test_valid_admin_token(self, monkeypatch):
         monkeypatch.setenv("ADMIN_TOKEN", "secret123")
@@ -145,7 +148,10 @@ class TestAdminProtection:
         from core.auth import require_admin
         require_admin(authorization="Bearer admin-secret")
 
-    def test_admin_skips_when_not_configured(self, monkeypatch):
+    def test_admin_denies_when_not_configured(self, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         from core.auth import require_admin
-        require_admin(authorization=None)
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            require_admin(authorization=None)
+        assert exc_info.value.status_code == 403

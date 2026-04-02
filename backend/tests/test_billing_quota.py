@@ -74,44 +74,44 @@ class TestUserRegistration:
         from fastapi import Response
         from fastapi.responses import JSONResponse
         
-        # 测试无效手机号
+        # 测试无效邮箱
         body1 = {
             "username": "testuser5",
             "password": "testpass123",
-            "phone": "1234567890",  # 无效格式
+            "email": "invalid-email",
         }
         response1 = Response()
         result1 = await auth_register(body1, response1)
         assert isinstance(result1, JSONResponse)
         assert result1.status_code == 400
-        assert "手机号格式不正确" in result1.body.decode()
-        
-        # 测试无效邮箱
+        assert "邮箱格式不正确" in result1.body.decode()
+
+        # 测试邮箱未提供
         body2 = {
             "username": "testuser6",
             "password": "testpass123",
-            "email": "invalid-email",  # 无效格式
         }
         response2 = Response()
         result2 = await auth_register(body2, response2)
         assert isinstance(result2, JSONResponse)
         assert result2.status_code == 400
-        assert "邮箱格式不正确" in result2.body.decode()
-        
-        # 测试手机号和邮箱都未提供
+        assert "邮箱为必填项" in result2.body.decode()
+
+        # 测试无效手机号（email 有效但 phone 无效）
         body3 = {
             "username": "testuser7",
             "password": "testpass123",
+            "email": "valid@example.com",
+            "phone": "1234567890",
         }
         response3 = Response()
         result3 = await auth_register(body3, response3)
         assert isinstance(result3, JSONResponse)
         assert result3.status_code == 400
-        assert "手机号或邮箱至少填写一个" in result3.body.decode()
+        assert "手机号格式不正确" in result3.body.decode()
 
     @pytest.mark.asyncio
     async def test_register_supports_phone_region_and_normalizes(self):
-        """测试国际区号注册与手机号规范化存储"""
         await init_db()
 
         from api.routes.auth import auth_register
@@ -122,6 +122,7 @@ class TestUserRegistration:
             {
                 "username": "intluser",
                 "password": "testpass123",
+                "email": "intluser@example.com",
                 "phone": "415 555 2671",
                 "phone_region": "US",
             },
@@ -136,7 +137,6 @@ class TestUserRegistration:
 
     @pytest.mark.asyncio
     async def test_register_keeps_legacy_cn_input_compatible(self):
-        """测试不带区号的旧大陆手机号输入仍可注册"""
         await init_db()
 
         from api.routes.auth import auth_register
@@ -147,6 +147,7 @@ class TestUserRegistration:
             {
                 "username": "cnuser",
                 "password": "testpass123",
+                "email": "cnuser@example.com",
                 "phone": "13800138000",
             },
             response,
@@ -160,7 +161,6 @@ class TestUserRegistration:
 
     @pytest.mark.asyncio
     async def test_register_blocks_duplicate_against_legacy_cn_storage(self):
-        """测试新格式注册会拦截旧格式大陆手机号的重复账号"""
         await init_db()
 
         user_id = await create_user("legacyuser", "testpass123", phone="13800138000")
@@ -175,6 +175,7 @@ class TestUserRegistration:
             {
                 "username": "newuser",
                 "password": "testpass123",
+                "email": "newuser@example.com",
                 "phone": "+8613800138000",
             },
             response,
@@ -185,10 +186,11 @@ class TestUserRegistration:
 
 class TestPasswordReset:
     @pytest.mark.asyncio
-    async def test_reset_password_supports_phone_region(self):
+    async def test_reset_password_with_email_verification(self):
         await init_db()
 
-        from api.routes.auth import auth_register, auth_reset_password
+        from api.routes.auth import auth_register, auth_reset_send_code, auth_reset_password
+        from core.email import _pending_codes
         from fastapi import Response
 
         register_response = Response()
@@ -196,20 +198,19 @@ class TestPasswordReset:
             {
                 "username": "resetuser",
                 "password": "oldpass123",
-                "phone": "415 555 2671",
-                "phone_region": "US",
+                "email": "resetuser@example.com",
             },
             register_response,
         )
         assert register_result["ok"] is True
 
+        send_result = await auth_reset_send_code({"email": "resetuser@example.com"})
+        assert send_result["ok"] is True
+
+        code = _pending_codes["resetuser@example.com"][0]
+
         reset_result = await auth_reset_password(
-            {
-                "username": "resetuser",
-                "password": "newpass123",
-                "phone": "4155552671",
-                "phone_region": "US",
-            }
+            {"email": "resetuser@example.com", "code": code, "password": "newpass123"}
         )
         assert reset_result["ok"] is True
 
@@ -217,25 +218,29 @@ class TestPasswordReset:
         assert user is not None
 
     @pytest.mark.asyncio
-    async def test_reset_password_matches_legacy_cn_phone(self):
+    async def test_reset_password_wrong_code_rejected(self):
         await init_db()
 
-        user_id = await create_user("legacyreset", "oldpass123", phone="13800138000")
-        assert user_id is not None
+        from api.routes.auth import auth_register, auth_reset_send_code, auth_reset_password
+        from fastapi import Response
+        from fastapi.responses import JSONResponse
 
-        from api.routes.auth import auth_reset_password
+        register_response = Response()
+        await auth_register(
+            {
+                "username": "resetuser2",
+                "password": "oldpass123",
+                "email": "resetuser2@example.com",
+            },
+            register_response,
+        )
+        await auth_reset_send_code({"email": "resetuser2@example.com"})
 
         reset_result = await auth_reset_password(
-            {
-                "username": "legacyreset",
-                "password": "newpass123",
-                "phone": "+8613800138000",
-            }
+            {"email": "resetuser2@example.com", "code": "000000", "password": "newpass123"}
         )
-        assert reset_result["ok"] is True
-
-        user = await authenticate_user("legacyreset", "newpass123")
-        assert user is not None
+        assert isinstance(reset_result, JSONResponse)
+        assert reset_result.status_code == 400
 
 
 class TestInviteCodeRedemption:

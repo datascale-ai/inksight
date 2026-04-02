@@ -48,16 +48,13 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
     if (mode === 'register') {
       const p = phone.trim();
       const e = email.trim();
-      const hasPhone = Boolean(p);
-      const hasEmail = Boolean(e);
-      if (!hasPhone && !hasEmail) {
-        errs.contact = t('auth.errorContactRequired');
-      }
-      if (hasPhone && !/^\+?[0-9][0-9\s\-]{6,20}$/.test(p)) {
-        errs.contact = t('auth.errorPhoneFormat');
-      }
-      if (hasEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      if (!e) {
+        errs.contact = t('auth.errorEmailRequired');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
         errs.contact = t('auth.errorEmailFormat');
+      }
+      if (p && !/^\+?[0-9][0-9\s\-]{6,20}$/.test(p)) {
+        errs.contact = t('auth.errorPhoneFormat');
       }
     }
     if (mode === 'register' && password !== confirmPassword) {
@@ -112,22 +109,22 @@ export function AuthFormScreen({ initialMode = 'login' }: Props) {
         {mode === 'register' ? (
           <>
             <TextInput
-              value={phone}
-              onChangeText={(text) => { setPhone(text); if (errors.contact) setErrors((prev) => ({ ...prev, contact: undefined })); }}
-              placeholder={t('auth.phoneOptional')}
-              style={[styles.input, errors.contact ? styles.inputError : null]}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-            />
-            <TextInput
               value={email}
               onChangeText={(text) => { setEmail(text); if (errors.contact) setErrors((prev) => ({ ...prev, contact: undefined })); }}
-              placeholder={t('auth.emailOptional')}
+              placeholder={t('auth.emailRequired')}
               style={[styles.input, errors.contact ? styles.inputError : null]}
               keyboardType="email-address"
               autoCapitalize="none"
             />
             {errors.contact ? <InkText style={styles.errorText}>{errors.contact}</InkText> : null}
+            <TextInput
+              value={phone}
+              onChangeText={(text) => { setPhone(text); }}
+              placeholder={t('auth.phoneOptional')}
+              style={styles.input}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+            />
           </>
         ) : null}
 

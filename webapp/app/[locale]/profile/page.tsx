@@ -63,6 +63,12 @@ export default function ProfilePage() {
   const [savedAccessMode, setSavedAccessMode] = useState<"preset" | "custom_openai" | null>(null);
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
 
+  const [bindEmail, setBindEmail] = useState("");
+  const [bindCode, setBindCode] = useState("");
+  const [bindStep, setBindStep] = useState<"idle" | "code_sent">("idle");
+  const [bindLoading, setBindLoading] = useState(false);
+  const [bindCooldown, setBindCooldown] = useState(0);
+
   const showToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -194,6 +200,58 @@ export default function ProfilePage() {
       showToast(msg, "error");
     } finally {
       setRedeeming(false);
+    }
+  };
+
+  const handleBindEmailSendCode = async () => {
+    if (!bindEmail.trim()) {
+      showToast(tr("请输入邮箱", "Please enter email"), "error");
+      return;
+    }
+    setBindLoading(true);
+    try {
+      const res = await fetch("/api/user/bind-email/send-code", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ email: bindEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || tr("发送失败", "Failed to send code"));
+      setBindStep("code_sent");
+      setBindCooldown(60);
+      const timer = setInterval(() => {
+        setBindCooldown((prev) => { if (prev <= 1) { clearInterval(timer); return 0; } return prev - 1; });
+      }, 1000);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : tr("发送失败", "Failed"), "error");
+    } finally {
+      setBindLoading(false);
+    }
+  };
+
+  const handleBindEmailVerify = async () => {
+    if (!bindCode.trim()) {
+      showToast(tr("请输入验证码", "Please enter verification code"), "error");
+      return;
+    }
+    setBindLoading(true);
+    try {
+      const res = await fetch("/api/user/bind-email", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ email: bindEmail.trim(), code: bindCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || tr("绑定失败", "Binding failed"));
+      showToast(tr("邮箱绑定成功", "Email bound successfully"), "success");
+      setBindEmail("");
+      setBindCode("");
+      setBindStep("idle");
+      await loadProfile();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : tr("绑定失败", "Failed"), "error");
+    } finally {
+      setBindLoading(false);
     }
   };
 
@@ -346,10 +404,59 @@ export default function ProfilePage() {
                   <p className="text-base font-medium text-ink">{profileData.phone}</p>
                 </div>
               )}
-              {profileData?.email && (
+              {profileData?.email ? (
                 <div>
                   <p className="text-sm text-ink-light mb-1">{tr("邮箱", "Email")}</p>
                   <p className="text-base font-medium text-ink">{profileData.email}</p>
+                </div>
+              ) : (
+                <div className="md:col-span-2">
+                  <div className="flex items-start gap-2 p-3 rounded-sm border border-amber-200 bg-amber-50 text-sm text-amber-800 mb-3">
+                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                    <span>{tr("尚未绑定邮箱，绑定后可用于找回密码", "No email bound. Bind one for password recovery.")}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="email"
+                      value={bindEmail}
+                      onChange={(e) => setBindEmail(e.target.value)}
+                      disabled={bindStep === "code_sent"}
+                      placeholder={tr("输入邮箱地址", "Email")}
+                      className="w-52 rounded-sm border border-ink/20 px-3 py-2 text-sm disabled:opacity-50"
+                    />
+                    <input
+                      type="text"
+                      value={bindCode}
+                      onChange={(e) => setBindCode(e.target.value)}
+                      disabled={bindStep === "idle"}
+                      maxLength={6}
+                      placeholder={tr("验证码", "Code")}
+                      className="w-24 rounded-sm border border-ink/20 px-3 py-2 text-sm tracking-widest disabled:opacity-40"
+                    />
+                    {bindStep === "idle" ? (
+                      <Button
+                        size="sm"
+                        onClick={handleBindEmailSendCode}
+                        disabled={bindLoading || !bindEmail.trim()}
+                      >
+                        {bindLoading ? <Loader2 size={14} className="animate-spin" /> : tr("发送验证码", "Send Code")}
+                      </Button>
+                    ) : (
+                      <>
+                        <Button size="sm" onClick={handleBindEmailVerify} disabled={bindLoading || !bindCode.trim()}>
+                          {bindLoading ? <Loader2 size={14} className="animate-spin" /> : tr("绑定", "Bind")}
+                        </Button>
+                        <button
+                          type="button"
+                          disabled={bindCooldown > 0 || bindLoading}
+                          onClick={handleBindEmailSendCode}
+                          className="text-xs text-ink-light underline disabled:opacity-50"
+                        >
+                          {bindCooldown > 0 ? `${bindCooldown}s` : tr("重新发送", "Resend")}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
