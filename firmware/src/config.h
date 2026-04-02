@@ -96,3 +96,35 @@ static const int DEBUG_REFRESH_MIN = 1;  // 1 minute for debugging
 #define TIME_TEXT_Y   (H * 4 / 100)
 
 #endif // INKSIGHT_CONFIG_H
+
+// ==================== 威锋4in2b配置 ====================
+#define WFT_4IN2B
+
+// 引脚定义（根据您的24pin转9pin转接板调整）
+#define EPD_SCK   GPIO4   // 时钟
+#define EPD_MOSI  GPIO6   // 数据
+#define EPD_CS    GPIO7   // 片选
+#define EPD_DC    GPIO1   // 数据/命令选择
+#define EPD_RST   GPIO2   // 复位
+#define EPD_BUSY  GPIO10  // 忙信号
+
+// 屏幕参数
+#define EPD_WIDTH   400
+#define EPD_HEIGHT  300
+#define EPD_COLOR   3    // 三色屏幕 (黑/白/红)
+
+// 威锋4in2b初始化序列 (WFT0420CZ15LW专用)
+const uint8_t WFT_4IN2B_INIT[] = {
+    0x01, 0x05, 0x03, 0x00, 0x2b, 0x2b,  // Panel setting
+    0x06, 0x01, 0x3f,                      // Booster soft start
+    0x04, 0x01, 0x03, 0x00,                // Power on
+    0x50, 0x01, 0x97,                      // VCOM and data interval
+    0x60, 0x01, 0x22,                      // TCON setting
+    0x61, 0x03, 0x00, 0x00, 0x00,          // TCON resolution
+    0x62, 0x01, 0x00,                      // VCM DC setting
+    0x82, 0x01, 0x1c,                      // VCOM DC setting
+    0x00                                   // End marker
+};
+
+
+
