@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from api.routes import api_routers, page_routers
 from api.shared import (
@@ -16,14 +20,40 @@ from api.shared import (
 from core.errors import InkSightError
 
 
+def _build_allowed_hosts() -> list[str]:
+    hosts = [
+        "www.inksight.site",
+        "inksight.site",
+        "web.inksight.site",
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "test",
+        "testserver",
+    ]
+    seen = set()
+    result: list[str] = []
+    extra = os.getenv("INKSIGHT_ALLOWED_HOSTS", "")
+    for raw in [*hosts, *extra.split(",")]:
+        host = raw.strip().lower()
+        if not host:
+            continue
+        if host not in seen:
+            seen.add(host)
+            result.append(host)
+    return result
+
+
 def _build_cors_settings() -> tuple[list[str], str | None]:
     """Resolve allowed browser Origins for CORS.
 
-    - Default: local Next.js + Expo Web on 3000 / 8081.
+    - Default: official web origins + local Next.js + Expo Web on 3000 / 8081.
     - INKSIGHT_CORS_ORIGINS: comma-separated extra origins (e.g. LAN IP for phone / Expo).
     - INKSIGHT_CORS_ALLOW_LAN=1: allow any http(s) Origin on private IPv4 + localhost (dev only).
     """
     defaults = [
+        "https://www.inksight.site",
+        "https://inksight.site",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:8081",
@@ -53,10 +83,51 @@ def _build_cors_settings() -> tuple[list[str], str | None]:
     return origins, origin_regex
 
 
+class OriginValidationMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: FastAPI, allow_origins: list[str], allow_origin_regex: str | None = None):
+        super().__init__(app)
+        self.allow_origins = {origin.lower() for origin in allow_origins}
+        self.allow_origin_regex = allow_origin_regex
+
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("origin")
+        if not origin:
+            return await call_next(request)
+
+        try:
+            parsed = urlsplit(origin)
+        except ValueError:
+            return JSONResponse({"error": "origin_not_allowed"}, status_code=403)
+
+        if not parsed.scheme or not parsed.netloc:
+            return JSONResponse({"error": "origin_not_allowed"}, status_code=403)
+
+        normalized = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+        if normalized in self.allow_origins:
+            return await call_next(request)
+
+        if self.allow_origin_regex:
+            import re
+            if re.match(self.allow_origin_regex, normalized):
+                return await call_next(request)
+
+        return JSONResponse({"error": "origin_not_allowed"}, status_code=403)
+
+
 _cors_origins, _cors_origin_regex = _build_cors_settings()
+_allowed_hosts = _build_allowed_hosts()
 
 app = FastAPI(title="InkSight API", version="1.1.0", lifespan=lifespan)
 app.state.limiter = limiter
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=_allowed_hosts,
+)
+app.add_middleware(
+    OriginValidationMiddleware,
+    allow_origins=_cors_origins,
+    allow_origin_regex=_cors_origin_regex,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

@@ -112,6 +112,28 @@ async def provision_device_headers(client: AsyncClient, mac: str) -> dict[str, s
     return {"X-Device-Token": token}
 
 
+@pytest.mark.asyncio
+async def test_rejects_unknown_host_header(client):
+    resp = await client.get(
+        "/api/preview",
+        params={"persona": "STOIC"},
+        headers={"host": "zhigu.chat"},
+    )
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_rejects_unknown_origin_header(client):
+    resp = await client.get(
+        "/api/preview",
+        params={"persona": "STOIC"},
+        headers={"origin": "https://zhigu.chat"},
+    )
+
+    assert resp.status_code == 403
+
+
 async def register_user(client: AsyncClient, username: str, password: str = "pass1234") -> dict:
     # Register validates invite_code (optional). If provided, it must exist and be unused.
     # We generate a unique code per user and seed it into the test DB to keep tests isolated.
