@@ -18,6 +18,7 @@ const sidebarSections = [
     titleKey: "docs.section.usage",
     items: [
       { labelKey: "docs.item.website", href: "/docs/website" },
+      { labelKey: "docs.item.mobileApp", href: "/docs/mobile-app" },
       { labelKey: "docs.item.flash", href: "/docs/flash" },
       { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
       { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
@@ -35,8 +36,7 @@ const sidebarSections = [
   },
 ];
 
-async function Sidebar() {
-  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+async function Sidebar({ locale }: { locale: string }) {
   return (
     <nav className="space-y-6">
       {sidebarSections.map((section) => (
@@ -72,7 +72,7 @@ export default async function DocsLayout({
     <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Mobile nav trigger */}
       <div className="lg:hidden mb-6">
-        <DocsMobileNav />
+        <DocsMobileNav locale={locale} />
       </div>
 
       <div className="flex gap-10">
@@ -83,7 +83,7 @@ export default async function DocsLayout({
               <BookOpen size={16} className="text-ink" />
               <span className="text-sm font-semibold text-ink">{t(locale, "docs.center")}</span>
             </div>
-            <Sidebar />
+            <Sidebar locale={locale} />
           </div>
         </aside>
 

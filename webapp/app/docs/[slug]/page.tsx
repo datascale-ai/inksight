@@ -19,6 +19,7 @@ const DOCS: Record<string, DocConfig> = {
   hardware: { title: "Hardware", file: "hardware.md" },
   assembly: { title: "Assembly Guide", file: "assembly.md" },
   website: { title: "Website Guide", file: "website.md" },
+  "mobile-app": { title: "Mobile App Guide", file: "mobile-app.md" },
   flash: { title: "Web Flasher", file: "flash.md" },
   "button-controls": { title: "Button Controls", file: "button-controls.md" },
   "api-key": { title: "Configure API Key", file: "api-key.md" },

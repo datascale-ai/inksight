@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
-import { localeFromPathname, t, withLocalePath } from "@/lib/i18n";
+import { t, withLocalePath } from "@/lib/i18n";
+import { Locale } from "@/lib/i18n";
 
 const sidebarSections = [
   {
@@ -20,6 +20,7 @@ const sidebarSections = [
     titleKey: "docs.section.usage",
     items: [
       { labelKey: "docs.item.website", href: "/docs/website" },
+      { labelKey: "docs.item.mobileApp", href: "/docs/mobile-app" },
       { labelKey: "docs.item.flash", href: "/docs/flash" },
       { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
       { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
@@ -37,9 +38,7 @@ const sidebarSections = [
   },
 ];
 
-export function DocsMobileNav() {
-  const pathname = usePathname();
-  const locale = localeFromPathname(pathname || "/");
+export function DocsMobileNav({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
 
   return (

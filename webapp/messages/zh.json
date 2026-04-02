@@ -82,6 +82,7 @@
   "docs.item.hardware": "硬件清单",
   "docs.item.assembly": "组装指南",
   "docs.item.website": "网站使用指南",
+  "docs.item.mobileApp": "移动端使用指南",
   "docs.item.flash": "Web 在线刷机",
   "docs.item.buttonControls": "按键说明",
   "docs.item.apiKey": "配置 API Key",

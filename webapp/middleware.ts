@@ -13,7 +13,7 @@ function isBypassPath(pathname: string): boolean {
   );
 }
 
-export function proxy(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   if (isBypassPath(pathname)) return NextResponse.next();
 
