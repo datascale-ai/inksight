@@ -1,11 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { Lightbulb, Zap } from "lucide-react";
-import { normalizeLocale, withLocalePath } from "@/lib/i18n";
+import { withLocalePath } from "@/lib/i18n";
+import { localeForRequest } from "@/lib/locale-server";
 
 export default async function DocsPage() {
-  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  const locale = await localeForRequest();
   if (locale === "en") {
     return (
       <article className="docs-prose">

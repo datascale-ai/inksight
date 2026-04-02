@@ -59,7 +59,9 @@ export function proxy(req: NextRequest) {
 
   const seg = pathname.split("/").filter(Boolean)[0] || "";
   if (isLocale(seg)) {
-    const res = NextResponse.next();
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-ink-locale", seg);
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
     res.cookies.set(LOCALE_COOKIE, seg, { path: "/" });
     return res;
   }

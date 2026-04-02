@@ -104,7 +104,7 @@ def create_session_token(user_id: int, username: str) -> str:
     return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
 
 
-def decode_session_token(token: str) -> dict | None:
+def decode_session_token(token: str) -> Optional[dict]:
     """Decode JWT session token.
     
     Returns:
@@ -144,7 +144,7 @@ def clear_session_cookie(response: Response):
 def _extract_user(
     ink_session: Optional[str],
     request: Request,
-) -> dict | None:
+) -> Optional[dict]:
     """Extract user payload from cookie or authorization header."""
     sources = []
     if ink_session:
@@ -185,7 +185,7 @@ async def require_user(
 async def optional_user(
     request: Request,
     ink_session: Optional[str] = Cookie(default=None),
-) -> int | None:
+) -> Optional[int]:
     payload = _extract_user(ink_session, request)
     return int(payload["sub"]) if payload else None
 
@@ -193,7 +193,7 @@ async def optional_user(
 async def get_current_user_optional(
     request: Request,
     ink_session: Optional[str] = Cookie(default=None),
-) -> dict | None:
+) -> Optional[dict]:
     """FastAPI 依赖：可选获取当前用户信息（包含 user_id 和 role）。
     
     尝试解析 Token（Cookie 或 Header），如果无效则返回 None，不抛出异常。

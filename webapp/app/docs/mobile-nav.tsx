@@ -16,21 +16,22 @@ const sidebarSections = [
       { labelKey: "docs.item.assembly", href: "/docs/assembly" },
     ],
   },
-  {
-    titleKey: "docs.section.usage",
-    items: [
-      { labelKey: "docs.item.website", href: "/docs/website" },
-      { labelKey: "docs.item.flash", href: "/docs/flash" },
-      { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
-      { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
-      { labelKey: "docs.item.config", href: "/docs/config" },
-    ],
-  },
+      {
+        titleKey: "docs.section.usage",
+        items: [
+          { labelKey: "docs.item.website", href: "/docs/website" },
+          { labelKey: "docs.item.mobileApp", href: "/docs/mobile-app" },
+          { labelKey: "docs.item.flash", href: "/docs/flash" },
+          { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
+          { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
+          { labelKey: "docs.item.config", href: "/docs/config" },
+        ],
+      },
   {
     titleKey: "docs.section.advanced",
     items: [
       { labelKey: "docs.item.deploy", href: "/docs/deploy" },
-      { labelKey: "docs.item.pluginDev", href: "/docs/plugin-dev" },
+      { labelKey: "docs.item.pluginDev", href: "/docs/custom-mode-dev" },
       { labelKey: "docs.item.apiReference", href: "/docs/api-reference" },
       { labelKey: "docs.item.faq", href: "/docs/faq" },
     ],

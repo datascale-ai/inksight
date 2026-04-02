@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import aiosqlite
 from datetime import datetime, timedelta
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 PAIR_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -209,6 +210,25 @@ async def init_db():
             await db.commit()
         except Exception:
             logger.warning("[MIGRATION] Failed to add alert token columns", exc_info=True)
+
+        # Migration: add OTA columns if missing
+        try:
+            cursor = await db.execute("PRAGMA table_info(device_state)")
+            columns = await cursor.fetchall()
+            names = [c[1] for c in columns]
+            if "pending_ota" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN pending_ota INTEGER DEFAULT 0")
+            if "ota_version" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_version TEXT DEFAULT ''")
+            if "ota_url" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_url TEXT DEFAULT ''")
+            if "ota_progress" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_progress INTEGER DEFAULT 0")
+            if "ota_result" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN ota_result TEXT DEFAULT ''")
+            await db.commit()
+        except Exception:
+            logger.warning("[MIGRATION] Failed to add OTA columns", exc_info=True)
 
         # User system tables
         await db.execute("""
@@ -514,7 +534,7 @@ async def init_db():
 # ── User system ─────────────────────────────────────────────
 
 
-def _hash_password(password: str, salt: bytes | None = None) -> tuple[str, str]:
+def _hash_password(password: str, salt: Optional[bytes] = None) -> tuple[str, str]:
     if salt is None:
         salt = secrets.token_bytes(16)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 200_000)
@@ -534,10 +554,10 @@ async def create_user(
     username: str,
     password: str,
     *,
-    phone: str | None = None,
-    email: str | None = None,
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
     invite_code: str = "",
-) -> int | None:
+) -> Optional[int]:
     """创建用户基础记录。
 
     注意：本函数**只负责 users 表插入**，不涉及邀请码占用或额度初始化。
@@ -568,7 +588,7 @@ async def create_user(
         return None
 
 
-async def get_user_by_username(username: str) -> dict | None:
+async def get_user_by_username(username: str) -> Optional[dict]:
     db = await get_main_db()
     cursor = await db.execute(
         "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
@@ -580,7 +600,7 @@ async def get_user_by_username(username: str) -> dict | None:
     return {"id": row[0], "username": row[1], "password_hash": row[2], "created_at": row[3]}
 
 
-def _parse_json_blob(value: str | None, fallback):
+def _parse_json_blob(value: Optional[str], fallback):
     try:
         parsed = json.loads(value) if isinstance(value, str) else value
     except (json.JSONDecodeError, TypeError):
@@ -709,7 +729,7 @@ async def unregister_push_token(user_id: int, push_token: str) -> int:
     return cursor.rowcount
 
 
-async def authenticate_user(username: str, password: str) -> dict | None:
+async def authenticate_user(username: str, password: str) -> Optional[dict]:
     user = await get_user_by_username(username)
     if not user:
         return None
@@ -718,7 +738,7 @@ async def authenticate_user(username: str, password: str) -> dict | None:
     return user
 
 
-async def get_user_role(user_id: int) -> str | None:
+async def get_user_role(user_id: int) -> Optional[str]:
     """根据 user_id 获取用户的 role（权限）。
 
     返回 'root' 或 'user'，如果用户不存在则返回 None。
@@ -753,7 +773,7 @@ async def init_user_api_quota(user_id: int, *, free_quota: int = 5) -> None:
     await db.commit()
 
 
-async def get_user_api_quota(user_id: int) -> dict | None:
+async def get_user_api_quota(user_id: int) -> Optional[dict]:
     """查询用户当前额度信息。"""
     db = await get_main_db()
     cursor = await db.execute(
@@ -795,7 +815,7 @@ async def consume_user_free_quota(user_id: int, *, amount: int = 1) -> bool:
     return cursor.rowcount > 0
 
 
-async def get_quota_owner_for_mac(mac: str) -> int | None:
+async def get_quota_owner_for_mac(mac: str) -> Optional[int]:
     """根据设备 MAC 查找与其绑定的计费用户（当前策略：设备 owner）。
 
     如果找不到 owner，则返回 None，上层可以选择降级为不计费或使用其他策略。
@@ -884,7 +904,7 @@ async def get_device_membership(
     user_id: int,
     *,
     include_pending: bool = False,
-) -> dict | None:
+) -> Optional[dict]:
     db = await get_main_db()
     query = """SELECT dm.mac, dm.user_id, dm.role, dm.status, dm.nickname,
                       dm.granted_by, dm.created_at, dm.updated_at, u.username
@@ -912,7 +932,7 @@ async def get_device_membership(
     }
 
 
-async def get_device_owner(mac: str) -> dict | None:
+async def get_device_owner(mac: str) -> Optional[dict]:
     db = await get_main_db()
     cursor = await db.execute(
         """SELECT dm.mac, dm.user_id, dm.nickname, dm.created_at, u.username
@@ -951,7 +971,7 @@ async def upsert_device_membership(
     role: str,
     status: str = "active",
     nickname: str = "",
-    granted_by: int | None = None,
+    granted_by: Optional[int] = None,
 ) -> dict:
     now = datetime.now().isoformat()
     db = await get_main_db()
@@ -979,7 +999,7 @@ async def create_claim_token(
     source: str = "portal",
     ttl_minutes: int = 10,
     preferred_pair_code: str = "",
-) -> dict | None:
+) -> Optional[dict]:
     now = datetime.now()
     token = secrets.token_urlsafe(32)
     now_iso = now.isoformat()
@@ -1047,7 +1067,7 @@ async def get_or_create_claim_token(
     return created
 
 
-async def get_pending_access_request(mac: str, requester_user_id: int) -> dict | None:
+async def get_pending_access_request(mac: str, requester_user_id: int) -> Optional[dict]:
     db = await get_main_db()
     cursor = await db.execute(
         """SELECT id, mac, requester_user_id, status, reviewed_by, created_at, updated_at
@@ -1290,7 +1310,7 @@ async def get_pending_requests_for_owner(owner_user_id: int) -> list[dict]:
     ]
 
 
-async def approve_access_request(request_id: int, owner_user_id: int) -> dict | None:
+async def approve_access_request(request_id: int, owner_user_id: int) -> Optional[dict]:
     db = await get_main_db()
     cursor = await db.execute(
         """SELECT dar.id, dar.mac, dar.requester_user_id, dar.status
@@ -1629,7 +1649,7 @@ def _row_to_dict(row, columns) -> dict:
     return d
 
 
-async def get_active_config(mac: str, log_load: bool = True) -> dict | None:
+async def get_active_config(mac: str, log_load: bool = True) -> Optional[dict]:
     db = await get_main_db()
     db.row_factory = None
     cursor = await db.execute(
@@ -1683,7 +1703,7 @@ async def activate_config(mac: str, config_id: int) -> bool:
     return True
 
 
-async def remove_mode_from_all_configs(mode_id: str, mac: str | None = None) -> int:
+async def remove_mode_from_all_configs(mode_id: str, mac: Optional[str] = None) -> int:
     normalized_mode_id = str(mode_id or "").strip().upper()
     if not normalized_mode_id:
         return 0
@@ -1785,6 +1805,12 @@ async def update_device_state(mac: str, **kwargs):
             "runtime_mode",
             "expected_refresh_min",
             "last_reconnect_regen_at",
+            # OTA fields
+            "pending_ota",
+            "ota_version",
+            "ota_url",
+            "ota_progress",
+            "ota_result",
         ):
             await db.execute(
                 f"UPDATE device_state SET {key} = ? WHERE mac = ?",
@@ -1793,7 +1819,7 @@ async def update_device_state(mac: str, **kwargs):
     await db.commit()
 
 
-async def get_device_state(mac: str) -> dict | None:
+async def get_device_state(mac: str) -> Optional[dict]:
     db = await get_main_db()
     db.row_factory = None
     cursor = await db.execute(
@@ -1855,7 +1881,7 @@ async def generate_device_token(mac: str) -> str:
 # ── Custom Modes (Database) ──────────────────────────────────────
 
 
-async def get_user_custom_modes(user_id: int, mac: str | None = None) -> list[dict]:
+async def get_user_custom_modes(user_id: int, mac: Optional[str] = None) -> list[dict]:
     """Get all custom modes for a specific user, optionally filtered by device MAC."""
     db = await get_main_db()
     if mac:
@@ -1895,7 +1921,7 @@ async def get_user_custom_modes(user_id: int, mac: str | None = None) -> list[di
     return modes
 
 
-async def get_custom_mode(user_id: int, mode_id: str, mac: str | None = None) -> dict | None:
+async def get_custom_mode(user_id: int, mode_id: str, mac: Optional[str] = None) -> Optional[dict]:
     """
     Get a specific custom mode for a user *and* device.
 
@@ -1964,7 +1990,7 @@ async def save_custom_mode(user_id: int, mode_id: str, definition: dict, mac: st
         return False
 
 
-async def delete_custom_mode(user_id: int, mode_id: str, mac: str | None = None) -> bool:
+async def delete_custom_mode(user_id: int, mode_id: str, mac: Optional[str] = None) -> bool:
     """
     Delete a custom mode for a specific user and device.
 
@@ -2029,7 +2055,7 @@ async def validate_device_token(mac: str, token: str) -> bool:
 # ── User LLM Config (Global user-level settings) ──────────────────────
 
 
-async def get_user_llm_config(user_id: int) -> dict | None:
+async def get_user_llm_config(user_id: int) -> Optional[dict]:
     """获取用户级别的 LLM 配置（包含可选的自定义模型名）。"""
     db = await get_main_db()
     # 检查表结构，兼容旧版本（没有 image / model 相关列）

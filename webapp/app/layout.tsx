@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Serif_SC } from "next/font/google";
-import { cookies } from "next/headers";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
-import { normalizeLocale, t } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { localeForRequest } from "@/lib/locale-server";
 import "./globals.css";
 
 const inter = Inter({
@@ -30,7 +30,7 @@ const baseMetadata: Metadata = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  const locale = await localeForRequest();
   return {
     ...baseMetadata,
     title: t(locale, "meta.title"),
@@ -43,7 +43,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  const locale = await localeForRequest();
   const lang = locale === "en" ? "en-US" : "zh-CN";
 
   return (

@@ -56,7 +56,7 @@ class ContentCache:
         self._lock = asyncio.Lock()
         self._regenerating: set[str] = set()
         self._db_failure_count = 0
-        self._db_disabled_until: datetime | None = None
+        self._db_disabled_until: Optional[datetime] = None
 
     def _get_cache_key(
         self, mac: str, persona: str,
@@ -103,7 +103,7 @@ class ContentCache:
 
     async def get(
         self, mac: str, persona: str, config: dict,
-        ttl_minutes: int | None = None,
+        ttl_minutes: Optional[int] = None,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> Optional[Image.Image]:
         """Get cached image if available and not expired"""
@@ -281,7 +281,7 @@ class ContentCache:
         screen_w: int = SCREEN_WIDTH,
         screen_h: int = SCREEN_HEIGHT,
         colors: int = 2,
-    ) -> tuple[str, Image.Image] | None:
+    ) -> Optional[tuple[str, Image.Image]]:
         try:
             logger.info(f"[CACHE] Generating {mac}:{persona}...")
             effective_cfg = get_effective_mode_config(config, persona)
@@ -339,7 +339,7 @@ class ContentCache:
             logger.error(f"[CACHE] ✗ {mac}:{persona} failed: {e}")
             return False
 
-    async def _get_from_db(self, key: str, ttl_minutes: int | None = None) -> Image.Image | None:
+    async def _get_from_db(self, key: str, ttl_minutes: Optional[int] = None) -> Optional[Image.Image]:
         db = await get_cache_db()
         cursor = await db.execute(
             "SELECT image_data, created_at FROM image_cache WHERE cache_key = ?",

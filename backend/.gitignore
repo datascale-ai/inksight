@@ -26,3 +26,7 @@ fonts/*.pcf
 
 md/
 runtime_uploads/
+
+scripts\fix_ota_url.py
+scripts\query_ota.py
+scripts\test_github_firmware.py

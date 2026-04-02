@@ -1,10 +1,10 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { normalizeLocale, t } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { localeForRequest } from "@/lib/locale-server";
 
 import Image from "next/image";
 
@@ -20,6 +20,7 @@ const DOCS: Record<string, DocConfig> = {
   bom: { title: "Hardware BOM", file: "bom.md" },
   assembly: { title: "Assembly Guide", file: "assembly.md" },
   website: { title: "Website Guide", file: "website.md" },
+  "mobile-app": { title: "Mobile App Guide", file: "mobile-app.md" },
   flash: { title: "Web Flasher", file: "flash.md" },
   "button-controls": { title: "Button Controls", file: "button-controls.md" },
   "api-key": { title: "Configure API Key", file: "api-key.md" },
@@ -57,7 +58,7 @@ export default async function DocSlugPage({
   const { slug } = await params;
   const cfg = DOCS[slug];
   if (!cfg) notFound();
-  const locale = normalizeLocale((await cookies()).get("ink_locale")?.value);
+  const locale = await localeForRequest();
 
   const markdown = cfg.file ? await readDocMarkdown(cfg.file, locale) : null;
   const content =
@@ -67,7 +68,7 @@ export default async function DocSlugPage({
 
   return (
     <article className="docs-prose">
-      <ReactMarkdown 
+      <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({...props}) => (

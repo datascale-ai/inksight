@@ -163,7 +163,7 @@ def build_claim_url(request: Request, token: str) -> str:
     return f"{scheme}://{host}/claim?token={token}"
 
 
-async def resolve_user_id(request: Request, ink_session: Optional[str]) -> int | None:
+async def resolve_user_id(request: Request, ink_session: Optional[str]) -> Optional[int]:
     return await optional_user(request, ink_session)
 
 
@@ -343,7 +343,7 @@ async def build_image(
     battery_pct = calc_battery_pct(v)
     config = await get_active_config(mac) if mac else None
     persona = await resolve_mode(mac, config, persona_override, force_next=force_next)
-    owner_user_id: int | None = None
+    owner_user_id: Optional[int] = None
     if mac:
         from core.config_store import get_device_owner
 
@@ -390,7 +390,7 @@ async def build_image(
     is_mode_cacheable = bool(mode_info.cacheable) if mode_info else True
 
     # ── 合入用户级别的 LLM / 图像 API 配置 ─────────────────────────────
-    selected_config_user_id: int | None = None
+    selected_config_user_id: Optional[int] = None
     usage_source = "server_api_key"
     current_user_llm_cfg = None
     owner_user_llm_cfg = None
@@ -583,7 +583,7 @@ async def build_image(
     # 当前设备对应的计费用户（策略：owner）
     # 对于设备端：使用设备 owner 的 user_id
     # 对于 Web 预览：使用当前登录用户的 user_id（如果提供了 current_user_id）
-    quota_user_id: int | None = None
+    quota_user_id: Optional[int] = None
     if mac:
         try:
             quota_user_id = await get_quota_owner_for_mac(mac)

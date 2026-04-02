@@ -99,6 +99,12 @@ async def device_state(
     state["is_online"] = is_online
     state["refresh_minutes"] = refresh_minutes
 
+    # Auto-fix legacy ota_url missing /api prefix so devices always get a
+    # working proxy URL even if the database was written before the fix.
+    ota_url = state.get("ota_url", "")
+    if ota_url and "/firmware/download" in ota_url and "/api/firmware/download" not in ota_url:
+        state["ota_url"] = ota_url.replace("/firmware/download", "/api/firmware/download")
+
     explicit_mode = str(state.get("runtime_mode") or "").lower()
     if explicit_mode in ("active", "interval"):
         state["runtime_mode"] = explicit_mode

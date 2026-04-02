@@ -265,3 +265,5 @@ paper/*
 .playwright-cli/*
 scripts/*
 docs/mobile-app-design.md
+
+inksight_tech/

@@ -2,6 +2,8 @@
 #define INKSIGHT_NETWORK_H
 
 #include <Arduino.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 
 extern bool g_userAborted;
 
@@ -41,12 +43,21 @@ bool fetchFocusAlertBMP();
 // Read battery voltage via ADC (returns volts)
 float readBatteryVoltage();
 
-// ── NTP time ────────────────────────────────────────────────
+// ── NTP time ───────────────────────────────────────────────
 
 // Sync time from NTP servers
 void syncNTP();
 
 // Advance software clock by one second
 void tickTime();
+
+// ── Shared HTTP helpers ─────────────────────────────────────
+
+// Initialize HTTP client based on URL scheme (HTTP or HTTPS).
+// Returns false if URL scheme is unknown.
+bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClientSecure &secClient, const String &url);
+
+// Extract a string value from a simple JSON response (handles quoted strings).
+String extractJsonStringField(const String &body, const char *key);
 
 #endif // INKSIGHT_NETWORK_H
