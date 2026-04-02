@@ -380,3 +380,19 @@ class TestRecipeAndArtwallFallbacks:
         assert result["artwork_title"] == "墨韵天成"
         assert result["image_url"] == ""
         assert result["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_artwall_color_device_uses_color_prompt(self):
+        with patch("core.content._call_llm", new_callable=AsyncMock, side_effect=LLMKeyMissingError("missing key")):
+            result = await generate_artwall_content(
+                date_str="2月14日",
+                weather_str="晴 15°C",
+                festival="情人节",
+                colors=4,
+                image_api_key="",
+                fallback_title="墨韵天成",
+            )
+
+        assert result["image_url"] == ""
+        assert "黑、白、红、黄" in result["prompt"]
+        assert result["description"] == "彩色极简插画"

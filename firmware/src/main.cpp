@@ -543,7 +543,8 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi) {
     }
     if (connected) {
         ledFeedback("downloading");
-        if (fetchBMP(nextMode)) {
+        bool forceRefresh = false;
+        if (fetchBMP(nextMode, nullptr, &forceRefresh)) {
             bool hasRaw2bpp = false;
 #if EPD_BPP >= 2
             hasRaw2bpp = useColorBuf;
@@ -561,7 +562,7 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi) {
             newChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
 #endif
             syncNTP();
-            if (newChecksum == lastContentChecksum && !nextMode) {
+            if (newChecksum == lastContentChecksum && !nextMode && !forceRefresh) {
                 Serial.println("Content unchanged, skipping display refresh");
                 ledFeedback("success");
             } else {

@@ -1,9 +1,9 @@
 #include "epd_driver.h"
 #include "config.h"
 
-#if defined(EPD_PANEL_42_WSV2) || defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
+#if defined(EPD_PANEL_42_SSD1683_BW) || defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
 
-// ── Software SPI (bit-bang) for 4.2" Waveshare V2 (SSD1683) ──
+// ── Software SPI (bit-bang) for 4.2" SSD1683 BW panels ──
 // Avoids Busy Timeout on ESP32-C3 with non-default pins; no GxEPD2 dependency.
 
 static void spiWriteByte(uint8_t data) {
@@ -107,7 +107,7 @@ void gpioInit() {
     digitalWrite(PIN_EPD_SCK, LOW);
 }
 
-// ── EPD full init (standard mode, Waveshare 4.2" V2 SSD1683) ──
+// ── EPD full init (standard mode, 4.2" SSD1683 BW) ──
 
 void epdInit() {
 #if defined(EPD_PANEL_42_DKE_RY683)
@@ -565,10 +565,18 @@ void epdSleep() {
 #include <SPI.h>
 #include <GxEPD2_BW.h>
 
+#ifndef EPD_GXEPD2_SPI_HZ
+#define EPD_GXEPD2_SPI_HZ 4000000
+#endif
+
 #if defined(EPD_PANEL_42_GXEPD2_T81)
   #include <gdey/GxEPD2_420_GDEY042T81.h>
   GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT / 4> display(
       GxEPD2_420_GDEY042T81(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
+#elif defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+  #include <other/GxEPD2_420_GYE042A87.h>
+  GxEPD2_BW<GxEPD2_420_GYE042A87, GxEPD2_420_GYE042A87::HEIGHT / 4> display(
+      GxEPD2_420_GYE042A87(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 #elif defined(EPD_PANEL_42_GXEPD2_420)
   #include <epd/GxEPD2_420.h>
   GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT / 4> display(
@@ -613,12 +621,15 @@ void epdSleep() {
   GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 4> display(
       GxEPD2_750_T7(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 #else
-  #error "No EPD panel type defined. Use -DEPD_PANEL_42_WSV2, -DEPD_PANEL_42_DKE_RY683, -DEPD_PANEL_42_GDEM042F52, -DEPD_PANEL_42_GXEPD2_T81, -DEPD_PANEL_42_GXEPD2_420, -DEPD_PANEL_42_GXEPD2_M01, -DEPD_PANEL_29, -DEPD_PANEL_583, or -DEPD_PANEL_75"
+  #error "No EPD panel type defined. Use -DEPD_PANEL_42_SSD1683_BW, -DEPD_PANEL_42_DKE_RY683, -DEPD_PANEL_42_GDEM042F52, -DEPD_PANEL_42_GXEPD2_T81, -DEPD_PANEL_42_GXEPD2_GYE042A87, -DEPD_PANEL_42_GXEPD2_420, -DEPD_PANEL_42_GXEPD2_M01, -DEPD_PANEL_29, -DEPD_PANEL_583, or -DEPD_PANEL_75"
 #endif
 
 static bool _initialized = false;
+#if defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+static bool _needs_full_refresh_write = true;
+#endif
 static const uint8_t DISPLAY_ROTATION =
-#if defined(EPD_PANEL_42_GXEPD2_T81) || defined(EPD_PANEL_42_GXEPD2_420) || defined(EPD_PANEL_42_GXEPD2_M01)
+#if defined(EPD_PANEL_42_GXEPD2_T81) || defined(EPD_PANEL_42_GXEPD2_GYE042A87) || defined(EPD_PANEL_42_GXEPD2_420) || defined(EPD_PANEL_42_GXEPD2_M01)
     0;
 #else
     1;
@@ -631,6 +642,7 @@ void gpioInit() {
 
 void epdInit() {
     if (!_initialized) {
+        display.epd2.selectSPI(SPI, SPISettings(EPD_GXEPD2_SPI_HZ, MSBFIRST, SPI_MODE0));
         display.init(0);
         display.setRotation(DISPLAY_ROTATION);
         _initialized = true;
@@ -655,6 +667,13 @@ void epdDisplay(const uint8_t *image) {
         false,
         false
     );
+#elif defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+    if (_needs_full_refresh_write) {
+        display.epd2.writeImageForFullRefresh(image, 0, 0, W, H, false, false, false);
+        _needs_full_refresh_write = false;
+    } else {
+        display.writeImage(image, 0, 0, W, H, false, false, false);
+    }
 #else
     display.writeImage(image, 0, 0, W, H, false, false, false);
 #endif
@@ -663,6 +682,10 @@ void epdDisplay(const uint8_t *image) {
 }
 
 void epdDisplayFast(const uint8_t *image) {
+#if defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+    epdDisplay(image);
+    return;
+#endif
     epdInit();
 #if defined(EPD_PANEL_29)
     rotate_landscape_to_panel(image);
@@ -710,6 +733,9 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
 void epdSleep() {
     display.hibernate();
     _initialized = false;
+#if defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+    _needs_full_refresh_write = true;
+#endif
 }
 
-#endif // EPD_PANEL_42_WSV2
+#endif // EPD_PANEL_42_SSD1683_BW

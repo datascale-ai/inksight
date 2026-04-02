@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from api.index import app
 from api import shared as shared_api
 from core.cache import content_cache
-from core.config_store import init_db
+from core.config_store import get_device_state, init_db
 from core.config_store import validate_alert_token
 from core.db import get_main_db
 from core.mode_registry import reset_registry
@@ -730,10 +730,21 @@ async def test_device_preview_stats_and_share_flow(client, monkeypatch):
     )
     assert preview_resp.status_code == 200
 
+    state_after_preview = await get_device_state(mac)
+    assert state_after_preview is not None
+    assert state_after_preview["pending_refresh"] == 1
+    assert not state_after_preview["pending_mode"]
+
     render_resp = await client.get("/api/render", params={"mac": mac, "v": "3.91"}, headers=headers)
     assert render_resp.status_code == 200
     assert render_resp.headers["x-preview-push"] == "1"
+    assert render_resp.headers["x-pending-refresh"] == "1"
     assert render_resp.content[:2] == b"BM"
+
+    state_after_render = await get_device_state(mac)
+    assert state_after_render is not None
+    assert state_after_render["pending_refresh"] == 0
+    assert not state_after_render["pending_mode"]
 
     favorite_resp = await client.post(
         f"/api/device/{mac}/favorite",

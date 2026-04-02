@@ -394,10 +394,6 @@ void showModePreview(const char *modeName) {
     Serial.printf("Mode preview shown: %s\n", modeName);
 }
 
-// ── Smart display with hybrid refresh strategy ──────────────
-// Uses fast refresh (0xC7 + temperature LUT, ~1.5s, minimal flash) most of the time.
-// Performs a full refresh (0xF7, clears ghosting) every FULL_REFRESH_INTERVAL cycles.
-
 static int refreshCount = 0;
 
 void smartDisplay(const uint8_t *image) {
@@ -414,7 +410,11 @@ void smartDisplay(const uint8_t *image) {
         Serial.printf("smartDisplay: full refresh (cycle %d)\n", refreshCount);
         epdDisplay(image);
     } else {
+#if defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+        Serial.printf("smartDisplay: full refresh fallback (cycle %d)\n", refreshCount);
+#else
         Serial.printf("smartDisplay: fast refresh (cycle %d)\n", refreshCount);
+#endif
         epdDisplayFast(image);
     }
     refreshCount++;

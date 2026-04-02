@@ -38,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _UPLOAD_DIR = _BACKEND_ROOT / "runtime_uploads"
+_PALETTE_RGB = {
+    0: (0, 0, 0),
+    1: (255, 255, 255),
+    2: (232, 176, 0),
+    3: (200, 0, 0),
+}
 
 STATUS_BAR_BOTTOM_DEFAULT = 36  # Used when screen_h unknown (e.g. dataclass default)
 
@@ -123,6 +129,36 @@ def _localized_footer_attribution(mode_id: str, attribution: str, language: str)
         return attribution
     localized = _BUILTIN_STATIC_ATTRIBUTIONS.get(language, {}).get((mode_id or "").upper())
     return localized or attribution
+
+
+def _convert_image_block(src: Image.Image, width: int, height: int, colors: int) -> Image.Image:
+    resized = src.convert("RGBA").resize((width, height))
+    base = Image.new("RGBA", resized.size, (255, 255, 255, 255))
+    base.alpha_composite(resized)
+    rgb = base.convert("RGB")
+    if colors < 3:
+        return rgb.convert("L").convert("1")
+    out = Image.new("P", rgb.size, EINK_BG)
+    pal = EINK_4COLOR_PALETTE + [0] * (768 - len(EINK_4COLOR_PALETTE))
+    out.putpalette(pal)
+    allowed = (0, 1, 3) if colors == 3 else (0, 1, 2, 3)
+    cache: dict[tuple[int, int, int], int] = {}
+    mapped: list[int] = []
+    for pixel in rgb.getdata():
+        idx = cache.get(pixel)
+        if idx is None:
+            idx = min(
+                allowed,
+                key=lambda candidate: (
+                    (pixel[0] - _PALETTE_RGB[candidate][0]) ** 2
+                    + (pixel[1] - _PALETTE_RGB[candidate][1]) ** 2
+                    + (pixel[2] - _PALETTE_RGB[candidate][2]) ** 2
+                ),
+            )
+            cache[pixel] = idx
+        mapped.append(idx)
+    out.putdata(mapped)
+    return out
 
 
 @dataclass
@@ -1185,17 +1221,21 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
     prefetched = ctx.content.get(f"_prefetched_{field_name}")
     if prefetched:
         from io import BytesIO
-        img = Image.open(BytesIO(prefetched)).convert("L").resize((width, height))
-        mono = img.convert("1")
-        ctx.paste_icon(mono, (x, y))
+        img = _convert_image_block(Image.open(BytesIO(prefetched)), width, height, ctx.colors)
+        if ctx.colors >= 3:
+            ctx.img.paste(img, (x, y))
+        else:
+            ctx.paste_icon(img, (x, y))
         ctx.y = y + height + int(block.get("margin_bottom", 6))
         return
     local_path = _resolve_local_asset(image_url)
     if local_path:
         try:
-            img = Image.open(local_path).convert("L").resize((width, height))
-            mono = img.convert("1")
-            ctx.paste_icon(mono, (x, y))
+            img = _convert_image_block(Image.open(local_path), width, height, ctx.colors)
+            if ctx.colors >= 3:
+                ctx.img.paste(img, (x, y))
+            else:
+                ctx.paste_icon(img, (x, y))
             ctx.y = y + height + int(block.get("margin_bottom", 6))
             return
         except (OSError, UnidentifiedImageError):
@@ -1224,9 +1264,11 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
         if resp is None:
             raise last_error if last_error else ValueError("image fetch failed")
         from io import BytesIO
-        img = Image.open(BytesIO(resp.content)).convert("L").resize((width, height))
-        mono = img.convert("1")
-        ctx.paste_icon(mono, (x, y))
+        img = _convert_image_block(Image.open(BytesIO(resp.content)), width, height, ctx.colors)
+        if ctx.colors >= 3:
+            ctx.img.paste(img, (x, y))
+        else:
+            ctx.paste_icon(img, (x, y))
         ctx.y = y + height + int(block.get("margin_bottom", 6))
     except (httpx.HTTPError, ValueError, OSError, UnidentifiedImageError):
         logger.warning("[JSONRenderer] Failed to render image block", exc_info=True)

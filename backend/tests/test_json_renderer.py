@@ -5,6 +5,7 @@
 import json
 import os
 import sys
+from io import BytesIO
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -238,6 +239,31 @@ def test_render_with_footer_template():
         date_str="2月18日", weather_str="晴", battery_pct=80,
     )
     assert img.size == (SCREEN_W, SCREEN_H)
+
+
+def test_render_image_block_preserves_palette_colors():
+    src = Image.new("RGB", (4, 2), "white")
+    src.putpixel((0, 0), (200, 0, 0))
+    src.putpixel((1, 0), (232, 176, 0))
+    src.putpixel((2, 0), (0, 0, 0))
+    buf = BytesIO()
+    src.save(buf, format="PNG")
+    mode_def = _make_mode_def([
+        {"type": "image", "field": "image_url", "width": 40, "height": 20, "x": 100, "y": 80}
+    ])
+    content = {
+        "image_url": "prefetched://artwall",
+        "_prefetched_image_url": buf.getvalue(),
+    }
+    img = render_json_mode(
+        mode_def, content,
+        date_str="2月18日", weather_str="晴", battery_pct=80,
+        colors=4,
+    )
+    assert img.mode == "P"
+    palette_indexes = set(img.crop((100, 80, 140, 100)).getdata())
+    assert 3 in palette_indexes
+    assert 2 in palette_indexes
 
 
 def test_builtin_footer_localization():

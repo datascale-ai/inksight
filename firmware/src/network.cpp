@@ -400,8 +400,9 @@ bool fetchFocusAlertBMP() {
 
 // ── Fetch BMP from backend ──────────────────────────────────
 
-bool fetchBMP(bool nextMode, bool *isFallback) {
+bool fetchBMP(bool nextMode, bool *isFallback, bool *outForceRefresh) {
     if (isFallback) *isFallback = false;
+    if (outForceRefresh) *outForceRefresh = false;
     if (!ensureDeviceToken()) return false;
     float v = readBatteryVoltage();
     String mac = WiFi.macAddress();
@@ -441,8 +442,8 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
         }
         http.setTimeout(HTTP_TIMEOUT);
         http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-        const char *headerKeys[] = {"X-Content-Fallback", "X-Refresh-Minutes"};
-        http.collectHeaders(headerKeys, 2);
+        const char *headerKeys[] = {"X-Content-Fallback", "X-Refresh-Minutes", "X-Preview-Push"};
+        http.collectHeaders(headerKeys, 3);
 
         http.addHeader("Accept-Encoding", "identity");
         if (cfgDeviceToken.length() > 0) {
@@ -464,6 +465,13 @@ bool fetchBMP(bool nextMode, bool *isFallback) {
         if (serverRefreshMin >= 10 && serverRefreshMin <= 1440 && serverRefreshMin != cfgSleepMin) {
             saveSleepMin(serverRefreshMin);
             Serial.printf("[RENDER] Applied refresh interval: %d min\n", serverRefreshMin);
+        }
+        if (outForceRefresh) {
+            String previewPushHeader = http.header("X-Preview-Push");
+            *outForceRefresh = (previewPushHeader == "1" || previewPushHeader == "true");
+            if (*outForceRefresh) {
+                Serial.println("[RENDER] Preview push received, forcing display refresh");
+            }
         }
 
         if (code != 200) {

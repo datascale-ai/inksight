@@ -945,6 +945,7 @@ async def generate_artwall_content(
     date_str: str = "",
     weather_str: str = "",
     festival: str = "",
+    colors: int = 2,
     llm_provider: str = DEFAULT_LLM_PROVIDER,
     llm_model: str = DEFAULT_LLM_MODEL,
     image_provider: str = "aliyun",
@@ -970,6 +971,9 @@ async def generate_artwall_content(
     logger.info("[ARTWALL] Starting content generation (lang=%s)...", language)
 
     is_en = language == "en"
+    supports_color = colors >= 3
+    supports_yellow = colors >= 4
+    art_description = "彩色极简插画" if supports_color else "黑白线描作品"
 
     context_parts = []
     if weather_str:
@@ -1025,7 +1029,20 @@ Requirements:
         logger.warning(f"[ARTWALL] Title generation failed, use fallback title: {e}")
 
     try:
-        image_prompt = f"""
+        if supports_color:
+            palette_text = "黑、白、红、黄" if supports_yellow else "黑、白、红"
+            image_prompt = f"""
+绘画风格：适配彩色墨水屏的极简几何插画，现代海报感，清晰块面与克制线条。
+核心要求：只能使用{palette_text}，不得出现渐变、半透明、照片质感、复杂纹理。
+颜色约束：黑色用于主体轮廓和结构；红色用于主视觉强调；{"黄色用于次级高亮和温暖点缀；" if supports_yellow else ""}白色作为主要留白背景。
+强制约束：画面中绝对禁止出现任何汉字、英文、印章或签名，纯图像表达。
+构图：远距离也清晰，主体明确，色块边界利落，适合400x300彩色墨水屏显示。
+意境：宁静、克制、现代东方感。
+主题约束：{intent or artwork_title}。
+画面内容：围绕{artwork_title}创作彩色极简构图。环境：{context}（高度概括，只保留少量意象）。
+"""
+        else:
+            image_prompt = f"""
 绘画风格：极简黑白线条艺术，现代矢量简笔画，墨水屏二值化风格。
 核心要求：线条干净流畅肯定，禁止任何水墨晕染、毛笔笔触、焦墨枯笔。
 强制约束：画面中绝对禁止出现任何汉字、英文、印章或签名，纯图像表达。
@@ -1043,7 +1060,7 @@ Requirements:
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
-                "description": "黑白线描作品",
+                "description": art_description,
                 "prompt": image_prompt,
             }
 
@@ -1062,7 +1079,7 @@ Requirements:
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
-                "description": "黑白线描作品",
+                "description": art_description,
                 "prompt": image_prompt,
             }
         
@@ -1073,7 +1090,7 @@ Requirements:
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
-                "description": "黑白线描作品",
+                "description": art_description,
                 "prompt": image_prompt,
             }
 
@@ -1093,7 +1110,11 @@ Requirements:
             stream=False,
             watermark=False,
             prompt_extend=True,
-            negative_prompt="低分辨率，彩色，复杂细节，文字，标签，过度装饰，花哨元素，浓墨重彩，密集笔触",
+            negative_prompt=(
+                "低分辨率，复杂细节，文字，标签，过度装饰，花哨元素，照片质感，渐变，半透明，真实阴影，脏污纹理"
+                if supports_color
+                else "低分辨率，彩色，复杂细节，文字，标签，过度装饰，花哨元素，浓墨重彩，密集笔触"
+            ),
             size="512*512",
         )
 
@@ -1104,7 +1125,7 @@ Requirements:
             return {
                 "artwork_title": artwork_title,
                 "image_url": image_url,
-                "description": "黑白线描作品",
+                "description": art_description,
                 "prompt": image_prompt,
                 "model_name": image_model,
             }
@@ -1114,7 +1135,7 @@ Requirements:
             return {
                 "artwork_title": artwork_title,
                 "image_url": "",
-                "description": "黑白线描作品",
+                "description": art_description,
                 "prompt": image_prompt,
             }
 

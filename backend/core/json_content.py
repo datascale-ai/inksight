@@ -987,6 +987,7 @@ async def _generate_image_gen_content(mode_def: dict, content_cfg: dict, fallbac
                 date_str=kwargs.get("date_str", ""),
                 weather_str=kwargs.get("weather_str", ""),
                 festival=kwargs.get("festival", ""),
+                colors=int(kwargs.get("colors", 2) or 2),
                 llm_provider=llm_provider,
                 llm_model=llm_model,
                 image_provider=kwargs.get("image_provider") or DEFAULT_IMAGE_PROVIDER,

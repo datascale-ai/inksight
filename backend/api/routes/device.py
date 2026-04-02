@@ -356,12 +356,7 @@ async def apply_preview_to_device(
     async with _preview_push_queue_lock:
         _preview_push_queue[mac] = {"image": normalized_bytes, "mode": mode_hint}
         logger.info("[APPLY-PREVIEW] Queue now: mac=%s, mode=%s, image_size=%d bytes", mac, mode_hint, len(normalized_bytes))
-    # Set both pending_refresh (triggers next wake) and pending_mode (locks to this mode)
-    if mode_hint:
-        await update_device_state(mac, pending_mode=mode_hint, pending_refresh=1)
-    else:
-        await set_pending_refresh(mac, True)
-    # Log the actual state after update
+    await set_pending_refresh(mac, True)
     from core.config_store import get_device_state as _get_ds
     st = await _get_ds(mac)
     logger.info("[APPLY-PREVIEW] Device state after push: mac=%s, pending_refresh=%s, pending_mode=%s", mac, st.get("pending_refresh") if st else "N/A", st.get("pending_mode") if st else "N/A")
