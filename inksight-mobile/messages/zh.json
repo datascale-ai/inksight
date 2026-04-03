@@ -376,6 +376,8 @@
   "firmware.ota.cancelConfirm": "确认取消",
   "firmware.ota.connecting": "正在连接设备...",
   "firmware.ota.retry": "重试",
+  "firmware.ota.concurrentLimitTitle": "服务器忙碌",
+  "firmware.ota.concurrentLimitBody": "服务器同时刷机人数已达上限，请稍后重试。",
   "auth.loginTitle": "登录 InkSight",
   "auth.registerTitle": "创建 InkSight 账号",
   "auth.subtitle": "登录或注册后即可同步设备、收藏与偏好设置。",

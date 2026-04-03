@@ -376,6 +376,8 @@
   "firmware.ota.cancelConfirm": "Confirm Cancel",
   "firmware.ota.connecting": "Connecting to device...",
   "firmware.ota.retry": "Retry",
+  "firmware.ota.concurrentLimitTitle": "Server Busy",
+  "firmware.ota.concurrentLimitBody": "Too many firmware updates in progress. Please try again shortly.",
   "auth.loginTitle": "Sign in to InkSight",
   "auth.registerTitle": "Create your InkSight account",
   "auth.subtitle": "Sign in or create an account to sync your devices, favorites, and preferences.",

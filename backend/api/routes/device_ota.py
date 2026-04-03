@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -15,6 +16,19 @@ from core.stats_store import get_latest_heartbeat
 
 
 router = APIRouter(tags=["device-ota"])
+
+
+def _build_firmware_proxy_url(request: Request, version: str, mac: str) -> str:
+    """Build the backend firmware proxy URL for a given version and device MAC."""
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or request.url.netloc
+        or ""
+    ).strip()
+    scheme = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").strip()
+    base = f"{scheme}://{host}"
+    return f"{base}/api/firmware/download/{version.lstrip('v')}?mac={mac}"
 
 
 class OTATriggerRequest(BaseModel):
@@ -55,18 +69,19 @@ async def trigger_ota(
             detail="设备未处于活跃模式，请在设备旁按一次按钮唤醒设备后重试",
         )
 
-    # 3. Validate firmware URL (checks that GitHub URL is reachable from backend)
-    try:
-        url_check = await validate_firmware_url(req.download_url)
-        if not url_check.get("reachable"):
-            raise HTTPException(status_code=400, detail="固件 URL 不可达")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except (RuntimeError, Exception) as exc:
-        raise HTTPException(status_code=503, detail=f"固件 URL 校验失败: {exc}")
-
-    # Use the final redirect destination so the ESP32 doesn't need to follow 302s
-    ota_url = url_check.get("final_url") or req.download_url
+    # 3. Validate the GitHub CDN URL so we can confirm it's reachable before
+    #    sending a task to the device.  The proxy endpoint uses this to fetch.
+    #    We only validate if it looks like a GitHub URL; proxy URLs bypass this.
+    ota_url = _build_firmware_proxy_url(request, req.version, mac)
+    if req.download_url and not req.download_url.startswith("/"):
+        try:
+            url_check = await validate_firmware_url(req.download_url)
+            if not url_check.get("reachable"):
+                raise HTTPException(status_code=400, detail="固件 URL 不可达")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except (RuntimeError, Exception) as exc:
+            raise HTTPException(status_code=503, detail=f"固件 URL 校验失败: {exc}")
 
     # 4. Write OTA task
     await update_device_state(
@@ -138,11 +153,27 @@ async def report_ota_progress(
     await require_device_token(mac, x_device_token)
 
     ota_result = req.result if req.result else ""
-    await update_device_state(
-        mac,
-        ota_progress=req.progress,
-        ota_result=ota_result if ota_result else None,
+
+    # Once the device reports "downloading", the OTA has started on the device.
+    # Clear pending_ota immediately so a failed/flashed OTA can never re-trigger,
+    # even if the device retries its poll loop before the final result is posted.
+    clear_pending = (
+        ota_result in ("downloading", "flashing")
+        or (ota_result.startswith("failed:") and req.progress == 0)
     )
+    if clear_pending:
+        await update_device_state(
+            mac,
+            pending_ota=0,
+            ota_progress=req.progress,
+            ota_result=ota_result if ota_result else None,
+        )
+    else:
+        await update_device_state(
+            mac,
+            ota_progress=req.progress,
+            ota_result=ota_result if ota_result else None,
+        )
     return {"ok": True}
 
 

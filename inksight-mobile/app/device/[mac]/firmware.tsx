@@ -49,6 +49,9 @@ export default function DeviceFirmwareScreen() {
       return t('firmware.ota.success');
     }
     if (otaStage === 'error') {
+      if (otaResult === 'failed:concurrent_limit') {
+        return t('firmware.ota.concurrentLimitTitle');
+      }
       const reason = otaResult.replace('failed:', '');
       return t('firmware.ota.error', { reason });
     }
@@ -67,6 +70,18 @@ export default function DeviceFirmwareScreen() {
         setOtaProgress(100);
         setOtaStage('success');
         clearPollTimer();
+        return;
+      }
+
+      if (status.ota_result === 'failed:concurrent_limit') {
+        setOtaResult('failed:concurrent_limit');
+        setOtaStage('error');
+        clearPollTimer();
+        Alert.alert(
+          t('firmware.ota.concurrentLimitTitle'),
+          t('firmware.ota.concurrentLimitBody'),
+          [{ text: t('common.ok') }],
+        );
         return;
       }
 
