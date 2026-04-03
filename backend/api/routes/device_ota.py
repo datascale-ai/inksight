@@ -65,10 +65,8 @@ async def trigger_ota(
     except (RuntimeError, Exception) as exc:
         raise HTTPException(status_code=503, detail=f"固件 URL 校验失败: {exc}")
 
-    # Tell ESP32 to download from our proxy instead of GitHub CDN directly.
-    # The proxy (GET /firmware/download/{version}) streams GitHub's .bin to ESP32.
-    base = str(request.base_url).rstrip("/")
-    ota_url = f"{base}/firmware/download/{req.version}?mac={mac}"
+    # Use the final redirect destination so the ESP32 doesn't need to follow 302s
+    ota_url = url_check.get("final_url") or req.download_url
 
     # 4. Write OTA task
     await update_device_state(

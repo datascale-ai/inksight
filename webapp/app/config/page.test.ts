@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { queueImmediateRefreshIfOnline } from "./page";
+import { queueImmediateRefreshIfOnline } from "@/lib/device-utils";
 
 test("queueImmediateRefreshIfOnline triggers refresh for online device", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
