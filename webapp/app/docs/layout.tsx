@@ -11,6 +11,7 @@ const sidebarSections = [
       { labelKey: "docs.item.intro", href: "/docs" },
       { labelKey: "docs.item.architecture", href: "/docs/architecture" },
       { labelKey: "docs.item.hardware", href: "/docs/hardware" },
+      { labelKey: "docs.item.bom", href: "/docs/bom" },
       { labelKey: "docs.item.assembly", href: "/docs/assembly" },
     ],
   },

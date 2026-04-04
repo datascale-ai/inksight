@@ -17,6 +17,7 @@ type DocConfig = {
 const DOCS: Record<string, DocConfig> = {
   architecture: { title: "Architecture", file: "architecture.md" },
   hardware: { title: "Hardware", file: "hardware.md" },
+  bom: { title: "Hardware BOM", file: "bom.md" },
   assembly: { title: "Assembly Guide", file: "assembly.md" },
   website: { title: "Website Guide", file: "website.md" },
   flash: { title: "Web Flasher", file: "flash.md" },

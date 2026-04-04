@@ -61,7 +61,7 @@ InkSight is easiest to build with the following setup:
 | Power | USB for development, optional lithium battery build (recommended `505060-2000mAh` + TP5000) |
 | Cost | Typical DIY BOM around **CNY 220** |
 
-> **For detailed purchasing schemes and part links**, please refer to the [**Hardware Purchasing Guide**](硬件清单.md) (Note: links are mostly for Taobao, but equivalent parts can be found on AliExpress/Amazon).
+> **For detailed purchasing schemes and part links**, please refer to the [**Hardware Purchasing Guide**](docs/bom.md) (Note: links are mostly for Taobao, but equivalent parts can be found on AliExpress/Amazon).
 
 The public documentation and setup flow are centered on **ESP32-C3 + 4.2-inch e-paper**.
 

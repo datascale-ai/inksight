@@ -46,7 +46,7 @@ Buy a "screen module" (where the driver circuit is integrated onto the back of t
 - **4.2-inch Screen Module**: Waveshare 4.2-inch module (screen and driver board integrated).
 - **Dupont Wires**: Female-to-Female.
 
-> **Note for international builders**: The specific Taobao links are available in the [`硬件清单.md`](../硬件清单.md) file for reference. For builders outside of China, you can easily find equivalent ESP32-C3 boards and 4.2-inch SPI e-paper displays (like Waveshare or generic SSD1683 panels) on AliExpress or Amazon.
+> **Note for international builders**: The specific Taobao links are available in the [**Hardware BOM**](bom) page for reference. For builders outside of China, you can easily find equivalent ESP32-C3 boards and 4.2-inch SPI e-paper displays (like Waveshare or generic SSD1683 panels) on AliExpress or Amazon.
 
 ### Optional Power Accessories
 | Part | Recommended choice | Notes |
