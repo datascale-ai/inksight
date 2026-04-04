@@ -61,6 +61,8 @@ InkSight is easiest to build with the following setup:
 | Power | USB for development, optional lithium battery build (recommended `505060-2000mAh` + TP5000) |
 | Cost | Typical DIY BOM around **CNY 220** |
 
+> **For detailed purchasing schemes and part links**, please refer to the [**Hardware Purchasing Guide**](硬件清单.md) (Note: links are mostly for Taobao, but equivalent parts can be found on AliExpress/Amazon).
+
 The public documentation and setup flow are centered on **ESP32-C3 + 4.2-inch e-paper**.
 
 For a first build, start with **ESP32-C3 + 4.2-inch e-paper**.
@@ -91,6 +93,25 @@ We also provide the matching docs:
 - Assembly guide: [`docs/assembly.md`](docs/assembly.md)
 - Flashing guide: [`docs/flash.md`](docs/flash.md)
 - Configuration guide: [`docs/config.md`](docs/config.md)
+
+## Community Showcase
+
+We are thrilled to see the amazing cases and custom PCBs created by the InkSight community! Here are some excellent community contributions:
+
+### 3D Printable Cases
+- **[Orange Desktop Case (MakerWorld)](https://makerworld.com.cn/zh/models/2315926-gua-pei-inksight-4-2cun-zhi-neng-dian-zi-mo-shui-p#profileId-2617500)**
+  
+  <img src="images/community/case1.png" width="400">
+
+- **[Pink/Red Minimalist Cases (MakerWorld)](https://makerworld.com.cn/zh/models/2319168-fu-ke-jiao-cheng-gua-pei-inksight-4-2cun-zhi-neng#profileId-2621798)**
+  
+  <img src="images/community/case2.png" width="400">
+  <img src="images/community/case3.png" width="400">
+
+### Custom PCBs
+- **[InkSight 4.2" Custom Driver Board (OSHWHUB)](https://oshwhub.com/kidstory/4-2)**
+  
+  <img src="images/community/pcb1.png" width="400">
 
 ## Self-Host or Develop
 

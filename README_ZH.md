@@ -61,6 +61,8 @@
 | 供电 | 开发期 USB，长期使用可选锂电池方案（推荐 `505060-2000mAh` + TP5000） |
 | 成本 | DIY BOM 通常约 **220 元** |
 
+> **详细的硬件购买方案与淘宝链接**，请参考：[**硬件购买清单与方案推荐**](硬件清单.md)
+
 当前对外推荐统一以 **ESP32-C3 + 4.2寸墨水屏** 为主。
 
 如果你是第一次上手，建议从 **ESP32-C3 + 4.2寸** 开始。
@@ -89,6 +91,25 @@
 - 组装指南：[`docs/assembly.md`](docs/assembly.md)
 - 刷机指南：[`docs/flash.md`](docs/flash.md)
 - 配置指南：[`docs/config.md`](docs/config.md)
+
+## 社区优秀作品展示
+
+非常感谢社区开发者们为 InkSight 创作的精美外壳和定制 PCB！以下是一些优秀的社区开源硬件和 3D 打印模型：
+
+### 3D 打印外壳
+- **[适配 InkSight 4.2寸 桌面外壳 18650电池版](https://makerworld.com.cn/zh/models/2315926-gua-pei-inksight-4-2cun-zhi-neng-dian-zi-mo-shui-p#profileId-2617500)**
+  
+  <img src="images/community/case1.png" width="400">
+
+- **[InkSight 4.2寸](https://makerworld.com.cn/zh/models/2319168-fu-ke-jiao-cheng-gua-pei-inksight-4-2cun-zhi-neng#profileId-2621798)**
+  
+  <img src="images/community/case2.png" width="400">
+  <img src="images/community/case3.png" width="400">
+
+### 定制 PCB 驱动板
+- **[4.2寸墨水屏驱动（InkSight 定制版）](https://oshwhub.com/kidstory/4-2)**
+  
+  <img src="images/community/pcb1.png" width="400">
 
 ## 本地部署服务 / 二次开发
 
