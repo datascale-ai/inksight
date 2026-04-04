@@ -28,3 +28,28 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
 void epdSleep();
 
 #endif // INKSIGHT_EPD_DRIVER_H
+// ==================== 威锋4in2b函数声明 ====================
+
+/**
+ * @brief 威锋4in2b初始化
+ * WFT0420CZ15LW 专用初始化函数
+ */
+void epd_wft_4in2b_init();
+
+/**
+ * @brief 威锋4in2b清屏
+ * @param color 颜色: 0=黑, 1=白, 2=红
+ */
+void epd_wft_4in2b_clear(uint8_t color);
+
+/**
+ * @brief 威锋4in2b显示图像
+ * @param image 图像数据指针
+ * @param len 图像数据长度
+ */
+void epd_wft_4in2b_display(const uint8_t* image, size_t len);
+
+/**
+ * @brief 威锋4in2b进入睡眠模式
+ */
+void epd_wft_4in2b_sleep();
