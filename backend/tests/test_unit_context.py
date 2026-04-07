@@ -4,7 +4,16 @@ Unit tests for context helpers (battery, city, weather).
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from core.context import calc_battery_pct, _resolve_city, get_weather, search_locations, _generate_weather_advice
+from core.context import (
+    calc_battery_pct,
+    _resolve_city,
+    get_weather,
+    search_locations,
+    _generate_weather_advice,
+    _qweather_current,
+    _qweather_forecast_to_standard,
+    _qweather_icon_to_wmo,
+)
 from core.config import DEFAULT_LATITUDE, DEFAULT_LONGITUDE
 
 
@@ -105,6 +114,110 @@ class TestGetWeather:
             result = await get_weather(city="杭州")
             assert result["temp"] == 0
             assert result["weather_str"] == "--°C"
+
+    @pytest.mark.asyncio
+    async def test_open_meteo_failure_falls_back_to_qweather(self):
+        qw_resp = MagicMock()
+        qw_resp.status_code = 200
+        qw_resp.raise_for_status = MagicMock()
+        qw_resp.json.return_value = {
+            "code": "200",
+            "now": {"temp": "22", "icon": "100"},
+        }
+
+        call_count = 0
+
+        async def _routed_get(url, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if "open-meteo" in url:
+                raise Exception("Open-Meteo down")
+            return qw_resp
+
+        with (
+            patch("core.context.QWEATHER_API_KEY", "test-key"),
+            patch("core.context.QWEATHER_API_HOST", "devapi.qweather.com"),
+            patch("core.context.httpx.AsyncClient") as MockClient,
+        ):
+            instance = AsyncMock()
+            instance.get = AsyncMock(side_effect=_routed_get)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
+
+            result = await get_weather(city="杭州")
+            assert result["temp"] == 22
+            assert result["weather_code"] == 0
+            assert "22°C" in result["weather_str"]
+
+
+class TestQWeatherHelpers:
+    def test_icon_to_wmo_sunny(self):
+        assert _qweather_icon_to_wmo(100) == 0
+
+    def test_icon_to_wmo_rain(self):
+        assert _qweather_icon_to_wmo(305) == 51
+
+    def test_icon_to_wmo_unknown(self):
+        assert _qweather_icon_to_wmo(9999) == -1
+
+    def test_icon_to_wmo_invalid(self):
+        assert _qweather_icon_to_wmo("abc") == -1
+
+    @pytest.mark.asyncio
+    async def test_qweather_current_returns_none_without_key(self):
+        with patch("core.context.QWEATHER_API_KEY", ""):
+            result = await _qweather_current(39.9, 116.4)
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_qweather_forecast_to_standard_builds_result(self):
+        qw_resp = MagicMock()
+        qw_resp.status_code = 200
+        qw_resp.raise_for_status = MagicMock()
+        qw_resp.json.return_value = {
+            "code": "200",
+            "daily": [
+                {
+                    "fxDate": "2026-04-07",
+                    "tempMax": "25",
+                    "tempMin": "14",
+                    "iconDay": "100",
+                    "textDay": "晴",
+                    "humidity": "55",
+                    "windDirDay": "西南风",
+                    "windScaleDay": "3",
+                },
+                {
+                    "fxDate": "2026-04-08",
+                    "tempMax": "22",
+                    "tempMin": "12",
+                    "iconDay": "101",
+                    "textDay": "多云",
+                    "humidity": "60",
+                    "windDirDay": "东风",
+                    "windScaleDay": "2",
+                },
+            ],
+        }
+
+        with (
+            patch("core.context.QWEATHER_API_KEY", "test-key"),
+            patch("core.context.QWEATHER_API_HOST", "devapi.qweather.com"),
+            patch("core.context.httpx.AsyncClient") as MockClient,
+        ):
+            instance = AsyncMock()
+            instance.get = AsyncMock(return_value=qw_resp)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
+
+            result = await _qweather_forecast_to_standard(39.9, 116.4, 3, "北京", "zh")
+            assert result is not None
+            assert result["today_high"] == "25"
+            assert result["today_desc"] == "晴"
+            assert len(result["forecast"]) >= 1
+            assert result["forecast"][0]["desc"] == "多云"
 
 
 class TestSearchLocations:

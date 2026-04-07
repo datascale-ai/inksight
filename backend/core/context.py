@@ -33,6 +33,12 @@ from .config import (
     HOLIDAY_WORK_API_URL,
     HOLIDAY_NEXT_API_URL,
     DEFAULT_CITY,
+    QWEATHER_API_KEY,
+    QWEATHER_API_HOST,
+    QWEATHER_PRIVATE_KEY,
+    QWEATHER_CREDENTIAL_ID,
+    QWEATHER_PROJECT_ID,
+    _QWEATHER_ICON_TO_WMO,
 )
 
 _context_cache: dict[str, tuple[Any, float]] = {}
@@ -914,6 +920,93 @@ async def _fetch_weather_data(url: str, params: dict) -> dict:
         return resp.json()
 
 
+def _qweather_jwt() -> str | None:
+    """Generate a short-lived JWT for QWeather Ed25519 auth."""
+    if not (QWEATHER_PRIVATE_KEY and QWEATHER_CREDENTIAL_ID and QWEATHER_PROJECT_ID):
+        return None
+    try:
+        import jwt as pyjwt
+        import time
+        now = int(time.time())
+        payload = {"sub": QWEATHER_PROJECT_ID, "iat": now - 30, "exp": now + 900}
+        headers = {"kid": QWEATHER_CREDENTIAL_ID}
+        return pyjwt.encode(payload, QWEATHER_PRIVATE_KEY, algorithm="EdDSA", headers=headers)
+    except Exception as e:
+        logger.warning("[QWeather] JWT generation failed: %s", e)
+        return None
+
+
+def _qweather_has_credentials() -> bool:
+    return bool(QWEATHER_API_KEY) or bool(QWEATHER_PRIVATE_KEY and QWEATHER_CREDENTIAL_ID and QWEATHER_PROJECT_ID)
+
+
+def _qweather_auth_headers() -> dict[str, str]:
+    """Build auth headers: prefer JWT over API KEY."""
+    token = _qweather_jwt()
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    if QWEATHER_API_KEY:
+        return {"X-QW-Api-Key": QWEATHER_API_KEY}
+    return {}
+
+
+async def _qweather_get(path: str, params: dict) -> dict | None:
+    """Call QWeather API. Returns parsed JSON on success, None on failure."""
+    if not _qweather_has_credentials():
+        return None
+    url = f"https://{QWEATHER_API_HOST}{path}"
+    headers = _qweather_auth_headers()
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            if str(data.get("code")) != "200":
+                logger.warning("[QWeather] API returned code=%s for %s", data.get("code"), path)
+                return None
+            return data
+    except (httpx.HTTPError, TypeError, ValueError, JSONDecodeError) as e:
+        logger.warning("[QWeather] Failed to call %s: %s", path, e)
+        return None
+
+
+def _qweather_icon_to_wmo(icon_code: int | str) -> int:
+    try:
+        return _QWEATHER_ICON_TO_WMO.get(int(icon_code), -1)
+    except (TypeError, ValueError):
+        return -1
+
+
+async def _qweather_current(lat: float, lon: float) -> dict | None:
+    """Fallback: get current weather from QWeather."""
+    location = f"{round(lon, 2)},{round(lat, 2)}"
+    data = await _qweather_get("/v7/weather/now", {"location": location})
+    if not data or "now" not in data:
+        return None
+    now = data["now"]
+    try:
+        temp = round(float(now.get("temp", 0)))
+    except (TypeError, ValueError):
+        temp = 0
+    wmo = _qweather_icon_to_wmo(now.get("icon", -1))
+    return {"temp": temp, "weather_code": wmo, "weather_str": f"{temp}°C"}
+
+
+async def _qweather_forecast(lat: float, lon: float, days: int, language: str) -> dict | None:
+    """Fallback: get forecast from QWeather."""
+    location = f"{round(lon, 2)},{round(lat, 2)}"
+    need = days + 1
+    for tier in (3, 7, 10, 15, 30):
+        if tier >= need:
+            break
+    day_key = f"{tier}d"
+    lang_param = "en" if language == "en" else "zh"
+    data = await _qweather_get(f"/v7/weather/{day_key}", {"location": location, "lang": lang_param})
+    if not data or "daily" not in data:
+        return None
+    return data
+
+
 async def get_weather(
     lat: float | None = None, lon: float | None = None, city: str | None = None
 ) -> dict:
@@ -935,8 +1028,15 @@ async def get_weather(
             "weather_str": f"{round(current['temperature_2m'])}°C",
         }
     except (httpx.HTTPError, KeyError, TypeError, ValueError, Exception):
-        logger.warning("[Context] Failed to fetch weather for city=%s lat=%s lon=%s", city, lat, lon, exc_info=True)
-        return {"temp": 0, "weather_code": -1, "weather_str": "--°C"}
+        logger.warning("[Context] Open-Meteo failed for city=%s, trying QWeather fallback", city)
+
+    qw = await _qweather_current(lat, lon)
+    if qw:
+        logger.info("[Context] QWeather fallback succeeded for city=%s", city)
+        return qw
+
+    logger.warning("[Context] All weather sources failed for city=%s", city)
+    return {"temp": 0, "weather_code": -1, "weather_str": "--°C"}
 
 
 async def get_weather_cached(city: str | None = None, ttl: float = 1800) -> dict:
@@ -1260,18 +1360,125 @@ async def get_weather_forecast(
             "forecast": full_forecast[1 : days + 1] if len(full_forecast) > 1 else [],
         }
     except (httpx.HTTPError, KeyError, TypeError, ValueError, JSONDecodeError) as e:
-        logger.warning(f"[WeatherForecast] Failed to get weather forecast: {e}", exc_info=True)
-        return {
-            "city": city or DEFAULT_CITY,
-            "today_temp": "--",
-            "today_desc": "No data" if language == "en" else "暂无数据",
-            "today_code": -1,
-            "today_low": "--",
-            "today_high": "--",
-            "today_range": "-- / --",
-            "advice": "Dress for the weather." if language == "en" else "注意根据天气添减衣物",
-            "forecast": [],
-        }
+        logger.warning("[WeatherForecast] Open-Meteo failed (%s), trying QWeather fallback", e)
+
+    qw_result = await _qweather_forecast_to_standard(lat, lon, days, display_city, language)
+    if qw_result:
+        logger.info("[WeatherForecast] QWeather fallback succeeded for city=%s", display_city)
+        return qw_result
+
+    logger.warning("[WeatherForecast] All weather sources failed for city=%s", display_city)
+    return {
+        "city": city or DEFAULT_CITY,
+        "today_temp": "--",
+        "today_desc": "No data" if language == "en" else "暂无数据",
+        "today_code": -1,
+        "today_low": "--",
+        "today_high": "--",
+        "today_range": "-- / --",
+        "advice": "Dress for the weather." if language == "en" else "注意根据天气添减衣物",
+        "forecast": [],
+    }
+
+
+async def _qweather_forecast_to_standard(
+    lat: float, lon: float, days: int, display_city: str, language: str
+) -> dict | None:
+    """Convert QWeather forecast response to the same dict shape as Open-Meteo path."""
+    data = await _qweather_forecast(lat, lon, days, language)
+    if not data:
+        return None
+    daily_list = data.get("daily", [])
+    if not daily_list:
+        return None
+
+    weekday_short = (
+        ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        if language == "en"
+        else ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    )
+    today_date = datetime.now().date()
+
+    full_forecast: list[dict] = []
+    for item in daily_list:
+        try:
+            d = datetime.strptime(item.get("fxDate", ""), "%Y-%m-%d")
+        except (TypeError, ValueError):
+            continue
+        date_obj = d.date()
+        date_str = d.strftime("%m/%d")
+        delta = (date_obj - today_date).days
+        if delta == -1:
+            day_label = "Yesterday" if language == "en" else "昨天"
+        elif delta == 0:
+            day_label = "Today" if language == "en" else "今天"
+        elif delta == 1:
+            day_label = "Tomorrow" if language == "en" else "明天"
+        else:
+            day_label = weekday_short[d.weekday()]
+
+        wmo = _qweather_icon_to_wmo(item.get("iconDay", -1))
+        desc = item.get("textDay", "") or _weather_code_to_desc(wmo, language=language)
+        try:
+            temp_min = round(float(item.get("tempMin", 0)))
+            temp_max = round(float(item.get("tempMax", 0)))
+        except (TypeError, ValueError):
+            temp_min, temp_max = 0, 0
+        temp_range = (
+            f"{temp_min}° / {temp_max}°" if language == "en" else f"{temp_min}℃ / {temp_max}℃"
+        )
+        full_forecast.append({
+            "day": day_label,
+            "date": date_str,
+            "temp_range": temp_range,
+            "temp_min": str(temp_min),
+            "temp_max": str(temp_max),
+            "desc": desc,
+            "code": wmo,
+        })
+
+    if not full_forecast:
+        return None
+
+    today = full_forecast[0]
+    today_high = today.get("temp_max", "--")
+    today_low = today.get("temp_min", "--")
+    today_desc = today.get("desc", "")
+    today_code = today.get("code", -1)
+    today_range = f"{today_low}°C / {today_high}°C" if today_low != "--" else "-- / --"
+
+    first_item = daily_list[0] if daily_list else {}
+    today_humidity = str(first_item.get("humidity", "--"))
+    today_wind_dir = str(first_item.get("windDirDay", ""))
+    today_wind_level = str(first_item.get("windScaleDay", ""))
+    if today_wind_level and today_wind_level != "--":
+        today_wind_level = f"Lv {today_wind_level}" if language == "en" else f"{today_wind_level}级"
+
+    advice = _generate_weather_advice(
+        today_desc=today_desc,
+        today_low=today_low,
+        today_high=today_high,
+        today_humidity=today_humidity,
+        today_wind_level=today_wind_level,
+        language=language,
+    )
+
+    return {
+        "city": display_city,
+        "today_temp": today_high,
+        "today_desc": today_desc,
+        "today_code": today_code,
+        "today_low": today_low,
+        "today_high": today_high,
+        "today_range": today_range,
+        "today_humidity": today_humidity,
+        "today_wind_dir": today_wind_dir,
+        "today_wind_level": today_wind_level,
+        "sunrise": "",
+        "sunset": "",
+        "advice": advice,
+        "forecast": full_forecast[1 : days + 1] if len(full_forecast) > 1 else [],
+    }
 
 
 def calc_battery_pct(voltage: float) -> int:
