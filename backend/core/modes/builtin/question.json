@@ -21,20 +21,27 @@
   },
   "layout": {
     "status_bar": { "line_width": 1, "dashed": true },
-    "body": [
-      { "type": "spacer", "height": 10 },
-      { "type": "text", "field": "category", "font_size": 10, "align": "center" },
-      {
-        "type": "centered_text",
-        "field": "question",
-        "font": "noto_serif_bold",
-        "font_size": 20,
-        "max_width_ratio": 0.78,
-        "vertical_center": true,
-        "line_spacing": 12
-      },
-      { "type": "text", "field": "context_note", "font": "noto_serif_light", "font_size": 10, "align": "center", "max_lines": 2 }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "prompt_card",
+    "preset_props": {
+      "padding_x": 18,
+      "padding_y": 10,
+      "justify": "center",
+      "gap": 8,
+      "meta_template": "{category}",
+      "meta_font_size": 10,
+      "separator_width": 60,
+      "hero_inset_x": 44,
+      "hero_field": "question",
+      "hero_font": "noto_serif_bold",
+      "hero_font_size": 20,
+      "hero_max_lines": 3,
+      "note_field": "context_note",
+      "note_font": "noto_serif_light",
+      "note_font_size": 10,
+      "note_max_lines": 2,
+      "note_divider_margin_x": 50
+    },
     "footer": {
       "label": "?",
       "attribution_template": "— Take a Moment",
@@ -43,34 +50,33 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "question",
-          "font": "noto_serif_bold",
-          "font_size": 14,
-          "max_width_ratio": 0.92,
-          "vertical_center": true,
-          "line_spacing": 8
-        }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "padding_y": 4,
+        "gap": 6,
+        "meta_template": null,
+        "hero_inset_x": 8,
+        "hero_font_size": 14,
+        "hero_max_lines": 3,
+        "note_field": null,
+        "show_note_divider": false
+      },
       "footer": { "label": "?", "attribution_template": "— Take a Moment", "dashed": true, "height": 18 }
     },
     "800x480": {
-      "body": [
-        { "type": "spacer", "height": 16 },
-        { "type": "text", "field": "category", "font_size": 14, "align": "center" },
-        {
-          "type": "centered_text",
-          "field": "question",
-          "font": "noto_serif_bold",
-          "font_size": 28,
-          "max_width_ratio": 0.72,
-          "vertical_center": true,
-          "line_spacing": 16
-        },
-        { "type": "text", "field": "context_note", "font": "noto_serif_light", "font_size": 14, "align": "center", "max_lines": 2 }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "padding_y": 16,
+        "gap": 12,
+        "meta_font_size": 14,
+        "separator_width": 90,
+        "hero_inset_x": 112,
+        "hero_font_size": 28,
+        "hero_max_lines": 3,
+        "note_font_size": 14,
+        "note_max_lines": 2,
+        "note_divider_margin_x": 80
+      }
     }
   }
 }

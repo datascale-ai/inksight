@@ -13,7 +13,8 @@ from core.auth import require_user, optional_user
 from core.config import SCREEN_HEIGHT, SCREEN_WIDTH, get_default_llm_model_for_provider
 from core.config_store import remove_mode_from_all_configs
 from core.context import get_date_context, get_weather
-from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def, get_registry
+from core.layout_presets import get_public_layout_dsl_catalog
+from core.mode_registry import CUSTOM_JSON_DIR, _validate_mode_def, _validate_mode_def_with_error, get_registry
 from core.mode_catalog import BUILTIN_CATALOG, builtin_catalog_map
 from core.config_store import (
     get_user_custom_modes,
@@ -135,6 +136,7 @@ async def mode_catalog(
     try:
         catalog = builtin_catalog_map()
         registry = get_registry()
+        composer_catalog = get_public_layout_dsl_catalog()
 
         # Normalize mac if provided
         if mac:
@@ -171,7 +173,7 @@ async def mode_catalog(
                             },
                         }
                     )
-                return {"items": items}
+                return {"items": items, "custom_mode_composer": composer_catalog}
 
             # User has access: load their custom modes
             registry.unregister_device_modes(mac)
@@ -278,10 +280,10 @@ async def mode_catalog(
                     }
                 )
 
-        return {"items": items}
+        return {"items": items, "custom_mode_composer": composer_catalog}
     except Exception as e:
         logger.exception("[CATALOG] Error in mode_catalog endpoint")
-        return JSONResponse({"error": str(e), "items": []}, status_code=500)
+        return JSONResponse({"error": str(e), "items": [], "custom_mode_composer": {}}, status_code=500)
 
 
 def _preview_payload(content: dict) -> dict:
@@ -290,6 +292,97 @@ def _preview_payload(content: dict) -> dict:
         if isinstance(value, str) and value.strip():
             return {"preview_text": value.strip()[:200], "content": content}
     return {"preview_text": "", "content": content}
+
+
+_PLACEHOLDER_SAMPLES = {
+    "title": "标题示例 / Sample Title",
+    "subtitle": "副标题 / Subtitle",
+    "text": "这是一段示例正文，用于预览布局效果。This is sample body text for layout preview.",
+    "body": "正文内容预览。Body content preview text goes here.",
+    "quote": "生活不是等待暴风雨过去，而是学会在雨中跳舞。",
+    "author": "佚名 / Anonymous",
+    "source": "示例来源 / Sample Source",
+    "summary": "摘要内容预览。Summary preview text.",
+    "question": "今天你想思考什么问题？",
+    "answer": "这是一个示例回答，用于展示布局。",
+    "interpretation": "释义预览文本。Interpretation preview.",
+    "challenge": "每日挑战：尝试一件新事物。",
+    "word": "墨鱼",
+    "pinyin": "mò yú",
+    "phonetic": "/ˈsæm.pəl/",
+    "meaning": "示例释义 / Sample meaning",
+    "definition": "一种用于展示布局效果的示例文本。A sample text used for layout preview.",
+    "example": "示例例句 / Sample example sentence",
+    "tip": "小贴士：调整参数可以改变布局效果。",
+    "description": "描述文本预览 / Description preview.",
+    "number": "42",
+    "label": "标签 / Label",
+    "value": "数值 / Value",
+    "category": "脑筋急转弯 / Brain Teaser",
+    "date": "2026-04-10",
+    "items": ["条目一 / Item 1", "条目二 / Item 2", "条目三 / Item 3"],
+    "name": "示例名称 / Sample Name",
+    "meta": "元信息 / Meta Info",
+    "greeting": "亲爱的朋友：",
+    "closing": "此致敬意",
+    "postscript": "P.S. 这是附言示例。",
+    "hint": "提示：答案就在你身边。",
+    "note": "注：此为示例注释文本。",
+    "antidote": "试着从对方的角度思考问题。",
+    "lines": ["白日依山尽", "黄河入海流", "欲穷千里目", "更上一层楼"],
+    "message": "距离这些重要日子还有...",
+    "events": [{"name": "新年", "date": "2027-01-01", "days": 266}, {"name": "生日", "date": "2026-08-15", "days": 127}],
+    "days": 42,
+}
+
+
+def _build_placeholder_content(mode_def: dict) -> dict:
+    content_def = mode_def.get("content", {})
+    schema = content_def.get("output_schema", {})
+    fallback = content_def.get("fallback", {})
+    result: dict = {}
+    if schema:
+        for key, default_val in schema.items():
+            if key in fallback and fallback[key]:
+                result[key] = fallback[key]
+            elif key in _PLACEHOLDER_SAMPLES:
+                result[key] = _PLACEHOLDER_SAMPLES[key]
+            elif isinstance(default_val, str):
+                result[key] = default_val if default_val else f"[{key}]"
+            elif isinstance(default_val, list):
+                result[key] = _PLACEHOLDER_SAMPLES.get("items", [f"[{key} 1]", f"[{key} 2]"])
+            elif isinstance(default_val, (int, float)):
+                result[key] = default_val if default_val else 42
+            else:
+                result[key] = f"[{key}]"
+    elif fallback:
+        result = dict(fallback)
+    else:
+        layout = mode_def.get("layout", {})
+        body = layout.get("body", [])
+        fields: set[str] = set()
+        _collect_fields_from_blocks(body, fields)
+        for f in fields:
+            result[f] = _PLACEHOLDER_SAMPLES.get(f, f"[{f}]")
+    for key in list(result.keys()):
+        if isinstance(result[key], str) and result[key] == f"[{key}]" and key in _PLACEHOLDER_SAMPLES:
+            result[key] = _PLACEHOLDER_SAMPLES[key]
+    if not result:
+        result = {"text": _PLACEHOLDER_SAMPLES["text"]}
+    return result
+
+
+def _collect_fields_from_blocks(blocks: list | dict, fields: set[str]) -> None:
+    if isinstance(blocks, dict):
+        if "field" in blocks and isinstance(blocks["field"], str):
+            fields.add(blocks["field"])
+        for v in blocks.values():
+            if isinstance(v, (list, dict)):
+                _collect_fields_from_blocks(v, fields)
+    elif isinstance(blocks, list):
+        for item in blocks:
+            if isinstance(item, (list, dict)):
+                _collect_fields_from_blocks(item, fields)
 
 
 @router.post("/modes/custom/preview")
@@ -305,6 +398,7 @@ async def custom_mode_preview(
     screen_h = body.get("h", SCREEN_HEIGHT)
     colors = int(body.get("colors", 2))
     response_type = str(body.get("responseType", body.get("response_type", "image"))).strip().lower()
+    layout_only = bool(body.get("layout_only", False))
 
     # 解析 API key：优先使用用户级别配置，其次使用设备配置中的加密 key
     user_api_key = None
@@ -357,13 +451,6 @@ async def custom_mode_preview(
             ctype = content_def.get("type")
             if ctype in ("llm", "llm_json", "image_gen"):
                 llm_mode_requires_quota = True
-            elif ctype == "external_data":
-                provider = content_def.get("provider", "")
-                if provider == "briefing":
-                    summarize = content_def.get("summarize", True)
-                    include_insight = content_def.get("include_insight", True)
-                    if summarize or include_insight:
-                        llm_mode_requires_quota = True
             elif ctype == "composite":
                 steps = content_def.get("steps", [])
                 if isinstance(steps, list):
@@ -374,14 +461,6 @@ async def custom_mode_preview(
                         if step_type in ("llm", "llm_json", "image_gen"):
                             llm_mode_requires_quota = True
                             break
-                        if step_type == "external_data":
-                            step_provider = step.get("provider", "")
-                            if step_provider == "briefing":
-                                step_summarize = step.get("summarize", True)
-                                step_include_insight = step.get("include_insight", True)
-                                if step_summarize or step_include_insight:
-                                    llm_mode_requires_quota = True
-                                    break
         except Exception:
             logger.warning("[CUSTOM_PREVIEW] Failed to detect llm requirements for custom mode", exc_info=True)
 
@@ -405,22 +484,30 @@ async def custom_mode_preview(
                         status_code=402,
                     )
 
-        date_ctx = await get_date_context()
-        weather = await get_weather()
-        content = await generate_json_mode_content(
-            mode_def,
-            date_ctx=date_ctx,
-            date_str=date_ctx["date_str"],
-            weather_str=weather["weather_str"],
-            screen_w=screen_w,
-            screen_h=screen_h,
-            # 自定义模式预览中的 LLM 调用也优先使用用户配置的 provider + API key
-            llm_provider=user_llm_provider,
-            llm_model=user_llm_model,
-            llm_base_url=user_llm_base_url,
-            api_key=effective_api_key,
-            image_api_key=effective_image_api_key,
-        )
+        ok, error = _validate_mode_def_with_error(mode_def, allow_raw_component_tree=False)
+        if not ok:
+            return JSONResponse({"error": error or "Invalid mode definition"}, status_code=400)
+
+        if layout_only:
+            content = _build_placeholder_content(mode_def)
+            date_ctx = await get_date_context()
+            weather = await get_weather()
+        else:
+            date_ctx = await get_date_context()
+            weather = await get_weather()
+            content = await generate_json_mode_content(
+                mode_def,
+                date_ctx=date_ctx,
+                date_str=date_ctx["date_str"],
+                weather_str=weather["weather_str"],
+                screen_w=screen_w,
+                screen_h=screen_h,
+                llm_provider=user_llm_provider,
+                llm_model=user_llm_model,
+                llm_base_url=user_llm_base_url,
+                api_key=effective_api_key,
+                image_api_key=effective_image_api_key,
+            )
 
         # 额度扣减：仅在使用平台 Key、模式需要 LLM 且本次确实成功调用 LLM 时扣费，root 用户豁免
         if (
@@ -476,8 +563,9 @@ async def create_custom_mode(body: dict, user_id: int = Depends(require_user)):
     mac = body.get("mac", "").strip().upper()
     if not mode_id:
         return JSONResponse({"error": "mode_id is required"}, status_code=400)
-    if not _validate_mode_def(body):
-        return JSONResponse({"error": "Invalid mode definition"}, status_code=400)
+    ok, error = _validate_mode_def_with_error(body, allow_raw_component_tree=False)
+    if not ok:
+        return JSONResponse({"error": error or "Invalid mode definition"}, status_code=400)
 
     body["mode_id"] = mode_id
     registry = get_registry()

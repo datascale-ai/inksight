@@ -16,43 +16,36 @@
   },
   "layout": {
     "status_bar": {"line_width": 1, "dashed": false},
-    "body": [
-      {
-        "type": "centered_text",
-        "field": "summary",
-        "font": "noto_serif_regular",
-        "font_size": 16,
-        "max_width_ratio": 0.85,
-        "vertical_center": true
-      }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "quote_focus_card",
+    "preset_props": {
+      "padding_x": 18,
+      "justify": "center",
+      "quote_inset_x": 30,
+      "quote_field": "summary",
+      "quote_font": "noto_serif_regular",
+      "quote_font_size": 16,
+      "quote_max_lines": 4
+    },
     "footer": {"label": "HABIT"}
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "summary",
-          "font": "noto_serif_regular",
-          "font_size": 12,
-          "max_width_ratio": 0.92,
-          "vertical_center": true
-        }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "quote_inset_x": 8,
+        "quote_font_size": 12,
+        "quote_max_lines": 3
+      },
       "footer": { "label": "HABIT", "height": 18 }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "summary",
-          "font": "noto_serif_regular",
-          "font_size": 24,
-          "max_width_ratio": 0.8,
-          "vertical_center": true
-        }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "quote_inset_x": 80,
+        "quote_font_size": 24,
+        "quote_max_lines": 4
+      }
     }
   }
 }

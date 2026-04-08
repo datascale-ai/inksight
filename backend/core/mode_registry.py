@@ -12,6 +12,8 @@ from typing import Awaitable, Callable, Optional
 
 from PIL import Image
 
+from .layout_presets import compile_layout_dsl, validate_layout_dsl
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -380,40 +382,55 @@ class ModeRegistry:
 # ── Validation ───────────────────────────────────────────────
 
 
-def _validate_mode_def(definition: dict) -> bool:
-    """Lightweight validation without jsonschema dependency."""
+def _validate_mode_def_with_error(definition: dict, *, allow_raw_component_tree: bool = True) -> tuple[bool, str | None]:
     mode_id = definition.get("mode_id", "")
     if not isinstance(mode_id, str) or not mode_id:
-        return False
+        return False, "mode_id is required"
 
     content = definition.get("content")
     if not isinstance(content, dict):
-        return False
+        return False, "content must be an object"
     ctype = content.get("type", "")
     if ctype not in ("llm", "llm_json", "static", "external_data", "image_gen", "computed", "composite"):
-        return False
+        return False, "content.type is invalid"
     if ctype in ("llm", "llm_json") and not content.get("prompt_template"):
-        return False
+        return False, "content.prompt_template is required"
     if ctype in ("llm", "llm_json") and not content.get("fallback"):
-        return False
+        return False, "content.fallback is required"
 
     layout = definition.get("layout")
     if not isinstance(layout, dict):
-        return False
+        return False, "layout must be an object"
+    layout_engine = layout.get("layout_engine")
+    try:
+        validate_layout_dsl(layout, allow_raw_body=allow_raw_component_tree)
+        layout = compile_layout_dsl(layout, allow_raw_body=allow_raw_component_tree)
+    except ValueError as exc:
+        return False, str(exc)
     body = layout.get("body")
-    if not isinstance(body, list) or len(body) == 0:
-        return False
+    if layout_engine == "component_tree":
+        if not isinstance(body, dict) or not body.get("type"):
+            return False, "component_tree layout requires a compiled body"
+    else:
+        if not isinstance(body, list) or len(body) == 0:
+            return False, "layout.body must contain at least one block"
 
     # Validate optional layout_overrides
     overrides = definition.get("layout_overrides")
     if overrides is not None:
         if not isinstance(overrides, dict):
-            return False
+            return False, "layout_overrides must be an object"
         for key, val in overrides.items():
             if not isinstance(val, dict):
-                return False
+                return False, f"layout_overrides.{key} must be an object"
 
-    return True
+    return True, None
+
+
+def _validate_mode_def(definition: dict, *, allow_raw_component_tree: bool = True) -> bool:
+    """Lightweight validation without jsonschema dependency."""
+    ok, _ = _validate_mode_def_with_error(definition, allow_raw_component_tree=allow_raw_component_tree)
+    return ok
 
 
 # ── Singleton ────────────────────────────────────────────────

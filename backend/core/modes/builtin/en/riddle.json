@@ -34,74 +34,33 @@
     }
   },
   "layout": {
+    "layout_engine": "component_tree",
     "status_bar": {
       "line_width": 1,
       "dashed": false
     },
-    "body": [
-      {
-        "type": "spacer",
-        "height": 10
-      },
-      {
-        "type": "text",
-        "field": "category",
-        "font_size": 11,
-        "align": "center"
-      },
-      {
-        "type": "spacer",
-        "height": 10
-      },
-      {
-        "type": "separator",
-        "style": "short",
-        "width": 60
-      },
-      {
-        "type": "spacer",
-        "height": 16
-      },
-      {
-        "type": "centered_text",
-        "field": "question",
-        "font_name": "Lora-Bold.ttf",
-        "font_size": 18,
-        "max_width_ratio": 0.82,
-        "vertical_center": false,
-        "line_spacing": 10
-      },
-      {
-        "type": "spacer",
-        "height": 12
-      },
-      {
-        "type": "text",
-        "template": "Hint: {hint}",
-        "font_name": "Lora-Italic.ttf",
-        "font_size": 11,
-        "align": "center"
-      },
-      {
-        "type": "spacer",
-        "height": 20
-      },
-      {
-        "type": "separator",
-        "style": "dashed",
-        "margin_x": 60
-      },
-      {
-        "type": "spacer",
-        "height": 8
-      },
-      {
-        "type": "text",
-        "field": "answer",
-        "font_size": 12,
-        "align": "center"
-      }
-    ],
+    "body_preset": "riddle_card",
+    "preset_props": {
+      "top_gap": 10,
+      "meta_field": "category",
+      "meta_font": "noto_serif_light",
+      "meta_font_size": 11,
+      "separator_width": 60,
+      "question_inset_x": 26,
+      "question_field": "question",
+      "question_font": "noto_serif_bold",
+      "question_font_size": 18,
+      "question_max_lines": 4,
+      "hint_field": "hint",
+      "hint_template": "Hint: {hint}",
+      "hint_font": "noto_serif_light",
+      "hint_font_size": 11,
+      "hint_max_lines": 2,
+      "answer_divider_margin_x": 60,
+      "answer_field": "answer",
+      "answer_font": "noto_serif_regular",
+      "answer_font_size": 12
+    },
     "footer": {
       "label": "Riddle",
       "attribution_template": "— Think About It"
@@ -109,34 +68,18 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "text",
-          "field": "category",
-          "font_size": 9,
-          "align": "center"
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 40
-        },
-        {
-          "type": "centered_text",
-          "field": "question",
-          "font_name": "Lora-Bold.ttf",
-          "font_size": 13,
-          "max_width_ratio": 0.92,
-          "vertical_center": true,
-          "line_spacing": 6
-        },
-        {
-          "type": "text",
-          "field": "answer",
-          "font_size": 10,
-          "align": "center"
-        }
-      ],
+      "preset_props": {
+        "top_gap": 0,
+        "gap": 6,
+        "meta_font_size": 9,
+        "separator_width": 40,
+        "question_inset_x": 10,
+        "question_font_size": 13,
+        "question_max_lines": 3,
+        "hint_field": null,
+        "show_answer_divider": false,
+        "answer_font_size": 10
+      },
       "footer": {
         "label": "Riddle",
         "attribution_template": "— Think About It",
@@ -144,70 +87,18 @@
       }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "spacer",
-          "height": 16
-        },
-        {
-          "type": "text",
-          "field": "category",
-          "font_size": 15,
-          "align": "center"
-        },
-        {
-          "type": "spacer",
-          "height": 14
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 90
-        },
-        {
-          "type": "spacer",
-          "height": 24
-        },
-        {
-          "type": "centered_text",
-          "field": "question",
-          "font_name": "Lora-Bold.ttf",
-          "font_size": 26,
-          "max_width_ratio": 0.75,
-          "vertical_center": false,
-          "line_spacing": 14
-        },
-        {
-          "type": "spacer",
-          "height": 18
-        },
-        {
-          "type": "text",
-          "template": "Hint: {hint}",
-          "font_name": "Lora-Italic.ttf",
-          "font_size": 15,
-          "align": "center"
-        },
-        {
-          "type": "spacer",
-          "height": 28
-        },
-        {
-          "type": "separator",
-          "style": "dashed",
-          "margin_x": 90
-        },
-        {
-          "type": "spacer",
-          "height": 12
-        },
-        {
-          "type": "text",
-          "field": "answer",
-          "font_size": 18,
-          "align": "center"
-        }
-      ]
+      "preset_props": {
+        "top_gap": 16,
+        "gap": 14,
+        "meta_font_size": 15,
+        "separator_width": 90,
+        "question_inset_x": 70,
+        "question_font_size": 26,
+        "question_max_lines": 4,
+        "hint_font_size": 15,
+        "answer_divider_margin_x": 90,
+        "answer_font_size": 18
+      }
     }
   }
 }

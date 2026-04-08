@@ -113,7 +113,7 @@ def _load_bitmap_font(font_name: str, size: int) -> ImageFont.ImageFont | None:
     return None
 
 
-def load_font(font_key: str, size: int) -> ImageFont.ImageFont:
+def load_font(font_key: str, size: int, force_truetype: bool = False) -> ImageFont.ImageFont:
     """从配置加载字体"""
     font_name = FONTS.get(font_key)
     if not font_name:
@@ -123,7 +123,7 @@ def load_font(font_key: str, size: int) -> ImageFont.ImageFont:
         if os.path.exists(fallback_path):
             return ImageFont.truetype(fallback_path, size)
         return ImageFont.load_default()
-    if _force_bitmap:
+    if _force_bitmap and not force_truetype:
         bitmap_font = _load_bitmap_font(font_name, size)
         if bitmap_font is not None:
             return bitmap_font
@@ -149,9 +149,9 @@ def load_font(font_key: str, size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def load_font_by_name(name: str, size: int) -> ImageFont.ImageFont:
+def load_font_by_name(name: str, size: int, force_truetype: bool = False) -> ImageFont.ImageFont:
     """直接通过文件名加载字体（兼容旧代码）"""
-    if _force_bitmap:
+    if _force_bitmap and not force_truetype:
         bitmap_font = _load_bitmap_font(name, size)
         if bitmap_font is not None:
             return bitmap_font

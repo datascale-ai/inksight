@@ -4,11 +4,14 @@
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import random
+import re
 from json import JSONDecodeError
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -16,12 +19,17 @@ from urllib.parse import urlparse
 import os
 
 import httpx
+from alibabacloud_alimt20181012 import models as alimt_models
+from alibabacloud_alimt20181012.client import Client as AlimtClient
+from alibabacloud_tea_openapi import models as open_api_models
 from httpx import HTTPStatusError
 from openai import OpenAIError
 
 from .config import DEFAULT_LLM_PROVIDER, DEFAULT_LLM_MODEL, DEFAULT_IMAGE_PROVIDER, DEFAULT_IMAGE_MODEL
 from .content import _build_context_str, _build_style_instructions, _call_llm, _clean_json_response
+from .db import get_cache_db
 from .errors import LLMKeyMissingError
+from .layout_presets import expand_layout_presets
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,17 @@ DEDUP_MAX_RETRIES = 2
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _UPLOAD_DIR = _BACKEND_ROOT / "runtime_uploads"
+_ALIYUN_MT_ENDPOINT = os.environ.get("ALIYUN_MT_ENDPOINT", "mt.cn-hangzhou.aliyuncs.com").strip()
+_TIANAPI_ALMANAC_URL = "https://apis.tianapi.com/lunar/index"
+_ALMANAC_FETCH_LOCK = asyncio.Lock()
+_ALMANAC_CACHE_VERSION = 5
+_MONTH_NAME_TO_NUM = {
+    "一月": 1, "二月": 2, "三月": 3, "四月": 4, "五月": 5, "六月": 6,
+    "七月": 7, "八月": 8, "九月": 9, "十月": 10, "十一月": 11, "十二月": 12,
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
 
 
 def _resolve_uploaded_image_bytes(url: str) -> bytes | None:
@@ -63,20 +82,430 @@ def _resolve_uploaded_image_bytes(url: str) -> bytes | None:
     except OSError:
         return None
 
-def _collect_image_fields(blocks: list, fields: set):
-    """Recursively collect image field names from layout blocks."""
-    for block in blocks:
+
+def _has_cjk_text(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in str(text or ""))
+
+
+def _resolve_month_number(month_name: Any) -> int:
+    key = str(month_name or "").strip().lower()
+    return _MONTH_NAME_TO_NUM.get(key, 0)
+
+
+def _resolve_almanac_date(date_ctx: dict | None = None) -> str:
+    if isinstance(date_ctx, dict):
+        try:
+            year = int(date_ctx.get("year") or 0)
+            day = int(date_ctx.get("day") or 0)
+            month = _resolve_month_number(date_ctx.get("month_cn"))
+            if year and month and day:
+                return f"{year:04d}-{month:02d}-{day:02d}"
+        except (TypeError, ValueError):
+            pass
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _normalize_lunar_day_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text.replace("廿", "二十").replace("卅", "三十")
+
+
+def _normalize_lunar_display(value: Any) -> str:
+    text = str(value or "").strip().removeprefix("农历")
+    if not text:
+        return ""
+    text = re.sub(r"^[〇零一二三四五六七八九十廿卅]+年", "", text)
+    if "月" not in text:
+        return _normalize_lunar_day_text(text)
+    month, day = text.split("月", 1)
+    return f"{month}月{_normalize_lunar_day_text(day)}"
+
+
+def _normalize_almanac_list(value: Any, limit: int | None = None) -> str:
+    text = str(value or "").strip().strip(".,，。、 ")
+    if not text:
+        return ""
+    parts = [
+        part.strip()
+        for part in text.replace("，", ".").replace("、", ".").replace(",", ".").split(".")
+        if part.strip()
+    ]
+    if limit is not None:
+        parts = parts[:limit]
+    return "、".join(parts)
+
+
+def _normalize_almanac_shenwei(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return " ".join(part.strip() for part in re.split(r"\s+", text) if part.strip())
+
+
+def _normalize_almanac_compact(value: Any) -> str:
+    return re.sub(r"\s+", "", str(value or "").strip())
+
+
+def _normalize_almanac_chongsha(value: Any) -> str:
+    text = _normalize_almanac_compact(value)
+    return text.replace("(", "（").replace(")", "）")
+
+
+def _summarize_almanac_payload(result: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+    solar_term = str(result.get("jieqi") or "").strip() or str(fallback.get("solar_term") or "").strip()
+    yi = _normalize_almanac_list(result.get("fitness"), limit=3) or str(fallback.get("yi") or "").strip()
+    ji = _normalize_almanac_list(result.get("taboo"), limit=3) or str(fallback.get("ji") or "").strip()
+    shenwei = _normalize_almanac_shenwei(result.get("shenwei")) or str(fallback.get("shenwei") or "").strip()
+    lunar_date_display = (
+        f"{str(result.get('lubarmonth') or '').strip()}{_normalize_lunar_day_text(result.get('lunarday'))}"
+        or str(fallback.get("lunar_date_display") or "").strip()
+    )
+    xingsu = str(result.get("xingsu") or "").strip() or str(fallback.get("xingsu") or "").strip()
+    suisha = _normalize_almanac_compact(result.get("suisha")) or str(fallback.get("suisha") or "").strip()
+    chongsha = _normalize_almanac_chongsha(result.get("chongsha")) or str(fallback.get("chongsha") or "").strip()
+    return {
+        "cache_version": _ALMANAC_CACHE_VERSION,
+        "solar_term": solar_term,
+        "lunar_date_display": lunar_date_display,
+        "yi": yi,
+        "ji": ji,
+        "shenwei": shenwei,
+        "xingsu": xingsu,
+        "suisha": suisha,
+        "chongsha": chongsha,
+    }
+
+
+def _base_almanac_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in {"cache_version", "translations"}
+    }
+
+
+def _get_almanac_translation(payload: dict[str, Any], language: str) -> dict[str, Any] | None:
+    translations = payload.get("translations")
+    if not isinstance(translations, dict):
+        return None
+    translated = translations.get(language)
+    if not isinstance(translated, dict):
+        return None
+    return dict(translated)
+
+
+async def _get_cached_almanac_payload(cache_date: str) -> dict[str, Any] | None:
+    db = await get_cache_db()
+    try:
+        cursor = await db.execute(
+            "SELECT cache_date, payload FROM daily_almanac_cache ORDER BY created_at DESC LIMIT 1",
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        if str(row[0]) != cache_date:
+            await db.execute("DELETE FROM daily_almanac_cache")
+            await db.commit()
+            return None
+        payload = json.loads(row[1])
+        if not isinstance(payload, dict):
+            return None
+        if int(payload.get("cache_version") or 0) != _ALMANAC_CACHE_VERSION:
+            await db.execute("DELETE FROM daily_almanac_cache")
+            await db.commit()
+            return None
+        return payload
+    except (json.JSONDecodeError, TypeError, ValueError):
+        logger.warning("[ALMANAC] Failed to decode cached payload for %s", cache_date, exc_info=True)
+        return None
+    finally:
+        await db.close()
+
+
+async def _save_cached_almanac_payload(cache_date: str, payload: dict[str, Any]) -> None:
+    db = await get_cache_db()
+    try:
+        data = json.dumps(payload, ensure_ascii=False)
+        now = datetime.now().isoformat()
+        await db.execute("DELETE FROM daily_almanac_cache")
+        await db.execute(
+            "INSERT INTO daily_almanac_cache (cache_date, payload, created_at) VALUES (?, ?, ?)",
+            (cache_date, data, now),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def _fetch_tianapi_almanac_payload(cache_date: str) -> dict[str, Any] | None:
+    api_key = os.environ.get("TIANAPI_KEY", "").strip()
+    if not api_key:
+        logger.warning("[ALMANAC] Missing TIANAPI_KEY, using fallback")
+        return None
+    last_error: Exception | None = None
+    for trust_env in (True, False):
+        try:
+            async with httpx.AsyncClient(timeout=8.0, trust_env=trust_env) as client:
+                response = await client.get(
+                    _TIANAPI_ALMANAC_URL,
+                    params={"key": api_key, "date": cache_date},
+                )
+                response.raise_for_status()
+            data = response.json()
+            if int(data.get("code") or 0) != 200 or not isinstance(data.get("result"), dict):
+                logger.warning("[ALMANAC] TianAPI returned error for %s: %s", cache_date, data)
+                return None
+            return data["result"]
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            last_error = exc
+    logger.warning("[ALMANAC] Failed to fetch TianAPI almanac for %s: %s", cache_date, last_error)
+    return None
+
+
+async def _generate_almanac_health_tip(result: dict[str, Any], fallback_tip: str) -> str:
+    prompt = (
+        "你是一个言简意赅、温和专业的黄历生活助手。\n"
+        f"节气：{str(result.get('jieqi') or '').strip()}\n"
+        f"宜：{_normalize_almanac_list(result.get('fitness'), limit=3)}\n"
+        f"忌：{_normalize_almanac_list(result.get('taboo'), limit=3)}\n"
+        f"神位：{_normalize_almanac_shenwei(result.get('shenwei'))}\n"
+        f"星宿：{str(result.get('xingsu') or '').strip()}\n"
+        f"岁煞：{str(result.get('suisha') or '').strip()}\n"
+        f"冲煞：{str(result.get('chongsha') or '').strip()}\n"
+        f"彭祖：{str(result.get('pengzu') or '').strip()}\n"
+        "请结合上述黄历信息，生成一句今日的 health_tip。\n"
+        "要求：只输出一句中文；严格控制在12到20个字；偏向起居、饮食、节律或情绪建议；直接输出正文，绝对不要解释，不要加引号。"
+    )
+    try:
+        text = await _call_llm(
+            DEFAULT_LLM_PROVIDER,
+            DEFAULT_LLM_MODEL,
+            prompt,
+            temperature=0.4,
+            max_tokens=48,
+        )
+        cleaned = str(text or "").strip().strip("“”\"' ")
+        cleaned = re.sub(r"\s+", "", cleaned)
+        if cleaned:
+            return cleaned[:20]
+    except (LLMKeyMissingError, httpx.HTTPError, HTTPStatusError, OpenAIError, OSError, TypeError, ValueError):
+        logger.warning("[ALMANAC] Failed to generate daily health tip", exc_info=True)
+    return fallback_tip
+
+
+def _make_aliyun_mt_client() -> AlimtClient | None:
+    access_key_id = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "").strip()
+    access_key_secret = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "").strip()
+    if not access_key_id or not access_key_secret:
+        return None
+    config = open_api_models.Config(
+        access_key_id=access_key_id,
+        access_key_secret=access_key_secret,
+        endpoint=_ALIYUN_MT_ENDPOINT,
+    )
+    return AlimtClient(config)
+
+
+def _translate_texts_with_aliyun_sync(
+    texts: list[str],
+    source_language: str = "en",
+    target_language: str = "zh",
+) -> list[str] | None:
+    client = _make_aliyun_mt_client()
+    if client is None:
+        return None
+    translated: list[str] = []
+    try:
+        for text in texts:
+            request = alimt_models.TranslateGeneralRequest(
+                source_language=source_language,
+                target_language=target_language,
+                format_type="text",
+                scene="general",
+                source_text=text,
+            )
+            response = client.translate_general(request)
+            body = getattr(response, "body", None)
+            data = getattr(body, "data", None)
+            translated_text = getattr(data, "translated", "") if data is not None else ""
+            translated_text = str(translated_text or "").strip()
+            if not translated_text:
+                return None
+            translated.append(translated_text)
+        return translated
+    except Exception as e:
+        logger.warning("[JSONContent] Aliyun translation error: %s", e)
+        return None
+
+
+async def _translate_with_aliyun_mt(
+    texts: list[str],
+    *,
+    source_language: str = "en",
+    target_language: str = "zh",
+) -> list[str] | None:
+    if not texts:
+        return []
+    return await asyncio.to_thread(
+        _translate_texts_with_aliyun_sync,
+        texts,
+        source_language,
+        target_language,
+    )
+
+
+async def _translate_almanac_payload_to_en(
+    payload: dict[str, Any],
+    fallback: dict[str, Any],
+) -> dict[str, Any] | None:
+    base = _base_almanac_payload(payload)
+    fields = (
+        "solar_term",
+        "lunar_date_display",
+        "yi",
+        "ji",
+        "shenwei",
+        "xingsu",
+        "health_tip",
+    )
+    texts = [str(base.get(field) or "").strip() for field in fields]
+    non_empty = [(field, text) for field, text in zip(fields, texts) if text]
+    if not non_empty:
+        return None
+    translated = await _translate_with_aliyun_mt(
+        [text for _, text in non_empty],
+        source_language="zh",
+        target_language="en",
+    )
+    if not translated or len(translated) != len(non_empty):
+        return None
+    result = dict(fallback)
+    for (field, _), text in zip(non_empty, translated):
+        cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+        if cleaned:
+            result[field] = cleaned
+    return result
+
+
+async def _translate_briefing_result(result: dict, language: str) -> dict:
+    if language != "zh":
+        return result
+    targets: list[tuple[str, int | None, str]] = []
+    texts: list[str] = []
+    hn_items = result.get("hn_items")
+    if isinstance(hn_items, list):
+        for idx, item in enumerate(hn_items):
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title", "")).strip()
+            if title and not _has_cjk_text(title):
+                targets.append(("hn_items", idx, "title"))
+                texts.append(title)
+    devto_items = result.get("devto_items")
+    if isinstance(devto_items, list):
+        for idx, item in enumerate(devto_items):
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title", "")).strip()
+            if title and not _has_cjk_text(title):
+                targets.append(("devto_items", idx, "title"))
+                texts.append(title)
+    ph_tagline = str(result.get("ph_tagline", "")).strip()
+    if ph_tagline and not _has_cjk_text(ph_tagline):
+        targets.append(("root", None, "ph_tagline"))
+        texts.append(ph_tagline)
+    if not texts:
+        return result
+    translated = await _translate_with_aliyun_mt(texts)
+    if not translated:
+        return result
+    for (container, idx, field_name), text in zip(targets, translated):
+        if container == "root":
+            result[field_name] = text
+            continue
+        items = result.get(container)
+        if isinstance(items, list) and idx is not None and 0 <= idx < len(items) and isinstance(items[idx], dict):
+            items[idx][field_name] = text
+    if isinstance(result.get("devto_items"), list) and result["devto_items"]:
+        first = result["devto_items"][0]
+        if isinstance(first, dict):
+            result["devto_title"] = str(first.get("title", result.get("devto_title", "")))
+    return result
+
+def _collect_image_fields(blocks: Any, fields: set):
+    """Recursively collect image field names from legacy blocks or component trees."""
+    if isinstance(blocks, dict):
+        block = blocks
         if block.get("type") == "image":
             fields.add(block.get("field", "image_url"))
-        for child_key in ("children", "left", "right"):
-            children = block.get(child_key, [])
-            if isinstance(children, list):
+        for child_key in ("children", "left", "right", "item"):
+            children = block.get(child_key)
+            if isinstance(children, (list, dict)):
                 _collect_image_fields(children, fields)
+        return
+    if isinstance(blocks, list):
+        for block in blocks:
+            if isinstance(block, (list, dict)):
+                _collect_image_fields(block, fields)
+
+
+def _daily_history_line(content: dict, language: str) -> str:
+    quote = str(content.get("quote", "") or "").strip()
+    book_title = str(content.get("book_title", "") or "").strip()
+    tip = str(content.get("tip", "") or "").strip()
+    season_text = str(content.get("season_text", "") or "").strip()
+    parts: list[str] = []
+    if language == "en":
+        if quote:
+            parts.append(f'quote="{quote[:80]}"')
+        if book_title:
+            parts.append(f'book="{book_title[:60]}"')
+        if tip:
+            parts.append(f'tip="{tip[:80]}"')
+        if season_text:
+            parts.append(f'season="{season_text[:60]}"')
+    else:
+        if quote:
+            parts.append(f"语录「{quote[:40]}」")
+        if book_title:
+            parts.append(f"书籍「{book_title[:30]}」")
+        if tip:
+            parts.append(f"提示「{tip[:40]}」")
+        if season_text:
+            parts.append(f"时令「{season_text[:24]}」")
+    return " | ".join(parts)
+
+
+def _build_daily_dedup_hint(entries: list[dict], language: str) -> str:
+    lines: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        content = entry.get("content", {})
+        if not isinstance(content, dict):
+            continue
+        line = _daily_history_line(content, language)
+        if line:
+            lines.append(line)
+    if not lines:
+        return ""
+    if language == "en":
+        return (
+            "\nAvoid repeating these recent DAILY outputs. Do not reuse the same quote, the same book, "
+            "or a very similar tip/theme:\n- "
+            + "\n- ".join(lines[:4])
+        )
+    return (
+        "\n请避免与这些最近的 DAILY 内容重复，不要复用相同或相近的语录、书籍、tip 或时令表达：\n- "
+        + "\n- ".join(lines[:4])
+    )
 
 
 async def _prefetch_images(content: dict, mode_def: dict) -> dict:
     """Pre-fetch any image URLs referenced by the layout into content dict."""
-    layout = mode_def.get("layout", {})
+    layout = expand_layout_presets(mode_def.get("layout", {}))
     body_blocks = layout.get("body", [])
     image_fields: set = set()
     _collect_image_fields(body_blocks, image_fields)
@@ -176,7 +605,7 @@ async def generate_json_mode_content(
     - static: returns static_data from the definition
     - llm: calls LLM with prompt template, parses output per output_format
     - llm_json: calls LLM, parses JSON response using output_schema
-    - external_data: fetches data from built-in providers (HN/PH/V2EX)
+    - external_data: fetches data from built-in providers (HN/PH/Dev.to)
     - image_gen: generates image data payload (ARTWALL provider)
     - computed: computes content from config/date without LLM
     - composite: merges results from multiple nested content steps
@@ -287,6 +716,7 @@ async def generate_json_mode_content(
     provider = llm_provider or DEFAULT_LLM_PROVIDER
     model = llm_model or DEFAULT_LLM_MODEL
     temperature = content_cfg.get("temperature", 0.8)
+    max_tokens = content_cfg.get("max_tokens")
 
     context = _build_context_str(
         date_str, weather_str, festival, daily_word,
@@ -311,9 +741,10 @@ async def generate_json_mode_content(
     # Load recent content hashes for dedup
     recent_hashes: list[str] = []
     dedup_hint = ""
+    first_attempt_hint = ""
     if mac and ctype in ("llm", "llm_json") and not DISABLE_DEDUP:
         try:
-            from .stats_store import get_recent_content_hashes, get_recent_content_summaries
+            from .stats_store import get_content_history, get_recent_content_hashes, get_recent_content_summaries
             recent_hashes = await get_recent_content_hashes(mac, mode_id, limit=20)
             summaries = await get_recent_content_summaries(mac, mode_id, limit=3)
             if summaries:
@@ -321,18 +752,31 @@ async def generate_json_mode_content(
                     dedup_hint = "\nAvoid repeating these recent topics: " + "; ".join(summaries)
                 else:
                     dedup_hint = "\n请避免与以下近期内容重复：" + "；".join(summaries)
+            if mode_id == "DAILY":
+                recent_entries = await get_content_history(mac, limit=4, mode=mode_id)
+                first_attempt_hint = _build_daily_dedup_hint(recent_entries, language)
         except (OSError, TypeError, ValueError):
             logger.warning("[JSONContent] Failed to load dedup context for %s:%s", mac, mode_id, exc_info=True)
 
     for attempt in range(1 + DEDUP_MAX_RETRIES):
         prompt = base_prompt
+        if first_attempt_hint:
+            prompt += first_attempt_hint
         if attempt > 0 and dedup_hint:
             prompt += dedup_hint
 
         llm_ok = False
         api_key_invalid = False
         try:
-            text = await _call_llm(provider, model, prompt, temperature=temperature, api_key=api_key, base_url=llm_base_url)
+            text = await _call_llm(
+                provider,
+                model,
+                prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                api_key=api_key,
+                base_url=llm_base_url,
+            )
             llm_ok = True
         except (LLMKeyMissingError, httpx.HTTPError, HTTPStatusError, OpenAIError, OSError, TypeError, ValueError) as e:
             # 这里捕获所有 LLM 调用异常（包括 OpenAI/DeepSeek 的 BadRequestError 等），
@@ -441,7 +885,6 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
                     ]
         return await generate_countdown_content(config=cfg)
     if provider == "daily_meta":
-        from datetime import datetime as _dt
         date_ctx = kwargs.get("date_ctx", {}) or {}
         lang = kwargs.get("language", "zh")
         result = dict(fallback)
@@ -449,7 +892,7 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             _MONTH_EN = ["January", "February", "March", "April", "May", "June",
                          "July", "August", "September", "October", "November", "December"]
             _WEEKDAY_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            _now = _dt.now()
+            _now = datetime.now()
             month_idx = _now.month - 1
             weekday_idx = date_ctx.get("weekday", _now.weekday())
             result.update({
@@ -461,6 +904,16 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
                 "days_in_year": date_ctx.get("days_in_year"),
             })
         else:
+            lunar_date = fallback.get("lunar_date", "")
+            lunar_date_display = fallback.get("lunar_date_display", "")
+            try:
+                from zhdate import ZhDate
+                lunar_source = datetime.fromisoformat(_resolve_almanac_date(date_ctx))
+                lunar_date = f"农历{ZhDate.from_datetime(lunar_source).chinese()}"
+                lunar_date_display = _normalize_lunar_display(lunar_date)
+            except (ImportError, ValueError, OverflowError):
+                lunar_date = fallback.get("lunar_date", "")
+                lunar_date_display = fallback.get("lunar_date_display", "")
             result.update({
                 "year": date_ctx.get("year"),
                 "day": date_ctx.get("day"),
@@ -468,11 +921,71 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
                 "weekday_cn": date_ctx.get("weekday_cn"),
                 "day_of_year": date_ctx.get("day_of_year"),
                 "days_in_year": date_ctx.get("days_in_year"),
+                "lunar_date": lunar_date,
+                "lunar_date_display": lunar_date_display,
             })
         return result
+    if provider == "almanac_api":
+        date_ctx = kwargs.get("date_ctx", {}) or {}
+        lang = str(kwargs.get("language") or "zh").strip().lower()
+        cache_date = _resolve_almanac_date(date_ctx)
+        cached = await _get_cached_almanac_payload(cache_date)
+        if cached:
+            merged = dict(fallback)
+            if lang == "en":
+                translated = _get_almanac_translation(cached, "en")
+                if translated:
+                    merged.update(translated)
+                    return merged
+            else:
+                merged.update(_base_almanac_payload(cached))
+                return merged
+        async with _ALMANAC_FETCH_LOCK:
+            cached = await _get_cached_almanac_payload(cache_date)
+            if cached:
+                merged = dict(fallback)
+                if lang == "en":
+                    translated = _get_almanac_translation(cached, "en")
+                    if not translated:
+                        translated = await _translate_almanac_payload_to_en(cached, fallback)
+                        if translated:
+                            updated = dict(cached)
+                            translations = updated.get("translations")
+                            if not isinstance(translations, dict):
+                                translations = {}
+                            translations["en"] = translated
+                            updated["translations"] = translations
+                            await _save_cached_almanac_payload(cache_date, updated)
+                    if translated:
+                        merged.update(translated)
+                        return merged
+                else:
+                    merged.update(_base_almanac_payload(cached))
+                    return merged
+            raw = await _fetch_tianapi_almanac_payload(cache_date)
+            if raw:
+                payload = _summarize_almanac_payload(raw, fallback)
+                payload["health_tip"] = await _generate_almanac_health_tip(
+                    raw,
+                    str(fallback.get("health_tip") or "").strip(),
+                )
+                if lang == "en":
+                    translated = await _translate_almanac_payload_to_en(payload, fallback)
+                    if translated:
+                        payload["translations"] = {"en": translated}
+                await _save_cached_almanac_payload(cache_date, payload)
+                merged = dict(fallback)
+                if lang == "en":
+                    translated = _get_almanac_translation(payload, "en")
+                    if translated:
+                        merged.update(translated)
+                        return merged
+                else:
+                    merged.update(_base_almanac_payload(payload))
+                    return merged
+        return dict(fallback)
     if provider == "lifebar":
         import calendar
-        from datetime import datetime
         now = datetime.now()
         date_ctx = kwargs.get("date_ctx", {}) or {}
         cfg = kwargs.get("config") or {}
@@ -574,7 +1087,6 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
 
     if provider == "calendar_grid":
         import calendar as cal_mod
-        from datetime import datetime
         from zhdate import ZhDate
         from .config import SOLAR_FESTIVALS, LUNAR_FESTIVALS, SOLAR_TERMS
 
@@ -682,7 +1194,7 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             reminder_key = f"{month}-{d}"
             if reminder_key in reminders:
                 text = str(reminders[reminder_key])
-                max_len = 8 if is_en else 5
+                max_len = 7
                 day_labels[ds] = (text[:max_len] + "…") if len(text) > max_len else text
                 day_label_types[ds] = "reminder"
                 continue
@@ -745,7 +1257,6 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
         }
 
     if provider == "timetable":
-        from datetime import datetime
         lang = kwargs.get("language", "zh")
         is_en = lang == "en"
         now = datetime.now()
@@ -862,9 +1373,7 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
     from .content import (
         fetch_hn_top_stories,
         fetch_ph_top_product,
-        fetch_v2ex_hot,
-        summarize_briefing_content,
-        generate_briefing_insight,
+        fetch_devto_top,
     )
 
     provider = content_cfg.get("provider", "")
@@ -876,69 +1385,43 @@ async def _generate_external_data_content(mode_def: dict, content_cfg: dict, fal
 
     if provider == "briefing":
         hn_limit = int(content_cfg.get("hn_limit", 2))
-        v2ex_limit = int(content_cfg.get("v2ex_limit", 1))
-        summarize = bool(content_cfg.get("summarize", True))
-        include_insight = bool(content_cfg.get("include_insight", True))
+        devto_limit = int(content_cfg.get("devto_limit", 1))
+        devto_fallback_title = "Dev.to unavailable" if language == "en" else "Dev.to 暂无数据"
 
         import asyncio as _asyncio
-        hn_items, ph_item, v2ex_items = await _asyncio.gather(
+        hn_items, ph_item, devto_items = await _asyncio.gather(
             fetch_hn_top_stories(limit=hn_limit),
             fetch_ph_top_product(),
-            fetch_v2ex_hot(limit=v2ex_limit),
+            fetch_devto_top(limit=devto_limit),
         )
-        if not hn_items and not ph_item and not v2ex_items:
+        if not hn_items and not ph_item and not devto_items:
             fb = dict(fallback)
             fb["_is_fallback"] = True
             fb["_used_fallback"] = True
             fb["_llm_used"] = False
             fb["_llm_ok"] = False
             return fb
-        
-        llm_failed = False
-        if summarize:
-            summarized_hn, summarized_ph = await summarize_briefing_content(
-                hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
-            )
-            # 如果返回 None，说明 summarize 失败了
-            if summarized_hn is None or summarized_ph is None:
-                llm_failed = True
-            else:
-                hn_items = summarized_hn
-                ph_item = summarized_ph
-        
-        insight = ""
-        if include_insight:
-            insight = await generate_briefing_insight(hn_items, ph_item, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language)
-            # 如果返回 None，说明 insight 生成失败了
-            if insight is None:
-                llm_failed = True
-                insight = ""
-        
+
         result = dict(fallback)
         ph_name = ""
         ph_tagline = ""
         if isinstance(ph_item, dict):
             ph_name = str(ph_item.get("name", ""))
             ph_tagline = str(ph_item.get("tagline", ""))
+        devto_title = ""
+        if isinstance(devto_items, list) and devto_items:
+            devto_title = str(devto_items[0].get("title", ""))
         result.update({
             "hn_items": hn_items or result.get("hn_items", []),
             "ph_item": ph_item or result.get("ph_item", {}),
-            "v2ex_items": v2ex_items or result.get("v2ex_items", []),
-            "insight": insight or result.get("insight", ""),
+            "devto_items": devto_items or [{"title": devto_fallback_title}],
             "ph_name": ph_name,
             "ph_tagline": ph_tagline,
+            "devto_title": devto_title or devto_fallback_title,
         })
-        
-        # 标记 LLM 使用情况
-        if summarize or include_insight:
-            result["_llm_used"] = True
-            if llm_failed:
-                result["_llm_ok"] = False
-                result["_used_fallback"] = True
-                logger.warning(f"[JSONContent] BRIEFING LLM calls failed, marked as fallback")
-            else:
-                result["_llm_ok"] = True
-        
+        result = await _translate_briefing_result(result, language)
+        result["_llm_used"] = False
+        result["_llm_ok"] = False
         return result
 
     if provider == "weather_forecast":
@@ -1161,7 +1644,10 @@ def _parse_llm_json_output(text: str, content_cfg: dict, fallback: dict) -> dict
 
         result = {}
         for field_name, field_def in schema.items():
-            default = field_def.get("default", "")
+            if isinstance(field_def, dict):
+                default = field_def.get("default", "")
+            else:
+                default = field_def
             result[field_name] = data.get(field_name, default)
         return result
     except (json.JSONDecodeError, KeyError) as e:

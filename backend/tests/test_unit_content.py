@@ -17,10 +17,10 @@ from core.content import (
     generate_content,
     fetch_hn_top_stories,
     fetch_ph_top_product,
-    summarize_briefing_content,
-    generate_briefing_content,
+    fetch_devto_top,
 )
 from core.errors import LLMKeyMissingError
+from core.json_content import _collect_image_fields
 
 
 class TestCleanJsonResponse:
@@ -102,15 +102,31 @@ class TestFallbackContent:
         assert "book_title" in c
         assert "tip" in c
 
-    def test_briefing_fallback(self):
-        c = _fallback_content("BRIEFING")
-        assert "hn_items" in c
-        assert "ph_item" in c
-        assert "insight" in c
-
     def test_unknown_fallback(self):
         c = _fallback_content("UNKNOWN")
         assert "quote" in c
+
+
+class TestJsonContentHelpers:
+    def test_collect_image_fields_supports_component_tree(self):
+        body = {
+            "type": "column",
+            "children": [
+                {
+                    "type": "repeat",
+                    "field": "cards",
+                    "item": {
+                        "type": "box",
+                        "children": [
+                            {"type": "image", "field": "cover_url"}
+                        ],
+                    },
+                }
+            ],
+        }
+        fields = set()
+        _collect_image_fields(body, fields)
+        assert fields == {"cover_url"}
 
 
 class TestGenerateContent:
@@ -261,99 +277,76 @@ class TestFetchHNStories:
             product = await fetch_ph_top_product()
             assert product == {}
 
-
-class TestGenerateBriefingContent:
-    """Test full briefing pipeline with mocked dependencies."""
-
     @pytest.mark.asyncio
-    async def test_all_sources_fail_returns_fallback(self):
-        with (
-            patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
-            patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
-            patch("core.content.fetch_v2ex_hot", new_callable=AsyncMock) as mock_v2ex,
-        ):
-            mock_hn.return_value = []
-            mock_ph.return_value = {}
-            mock_v2ex.return_value = []
+    async def test_product_hunt_discussion_tail_is_removed(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"""
+        <rss>
+          <channel>
+          <item>
+            <title>Timeliner.io</title>
+            <description><![CDATA[
+              <p>The all-in-one workspace for content agencies &amp; editors</p>
+              <p><a href="https://example.com">Discussion</a> | <a href="https://example.com">Link</a></p>
+            ]]></description>
+          </item>
+          </channel>
+        </rss>
+        """
 
-            result = await generate_briefing_content()
-            assert "hn_items" in result
-            assert "insight" in result
+        with patch("core.content.httpx.AsyncClient") as MockClient:
+            instance = AsyncMock()
+            instance.get = AsyncMock(return_value=mock_response)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
 
+            product = await fetch_ph_top_product()
+            assert product == {
+                "name": "Timeliner.io",
+                "tagline": "The all-in-one workspace for content agencies & editors",
+            }
+
+
+class TestFetchDevToTop:
     @pytest.mark.asyncio
-    async def test_all_sources_fail_returns_english_fallback(self):
-        ctx = MagicMock()
-        ctx.llm_provider = "deepseek"
-        ctx.llm_model = "deepseek-chat"
-        ctx.api_key = None
-        ctx.language = "en"
-        with (
-            patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
-            patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
-            patch("core.content.fetch_v2ex_hot", new_callable=AsyncMock) as mock_v2ex,
-        ):
-            mock_hn.return_value = []
-            mock_ph.return_value = {}
-            mock_v2ex.return_value = []
-
-            result = await generate_briefing_content(ctx=ctx)
-            assert result["hn_items"][0]["title"] == "Hacker News API unavailable"
-            assert "Unable to fetch" in result["insight"]
-
-    @pytest.mark.asyncio
-    async def test_success_path(self):
-        mock_stories = [
-            {"title": "Story A", "score": 100, "url": ""},
-            {"title": "Story B is a very long title that needs summarizing", "score": 50, "url": ""},
+    async def test_success(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {"title": "DevTo Story", "public_reactions_count": 321, "url": "https://dev.to/test-story"},
         ]
-        mock_ph = {"name": "CoolApp", "tagline": "Short"}
 
-        with (
-            patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as m_hn,
-            patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as m_ph,
-            patch("core.content.summarize_briefing_content", new_callable=AsyncMock) as m_sum,
-            patch("core.content.generate_briefing_insight", new_callable=AsyncMock) as m_ins,
-        ):
-            m_hn.return_value = mock_stories
-            m_ph.return_value = mock_ph
-            m_sum.return_value = (mock_stories, mock_ph)
-            m_ins.return_value = "AI 行业持续创新。"
+        with patch("core.content.httpx.AsyncClient") as MockClient:
+            instance = AsyncMock()
+            instance.get = AsyncMock(return_value=mock_response)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
 
-            result = await generate_briefing_content()
-            assert len(result["hn_items"]) == 2
-            assert result["insight"] == "AI 行业持续创新。"
-
-
-class TestBriefingSummaries:
-    @pytest.mark.asyncio
-    async def test_summarize_briefing_content_invalid_json_returns_originals(self):
-        stories = [{"title": "A very long story title that should be summarized", "score": 10}]
-        ph = {"name": "CoolApp", "tagline": "A long English tagline that should also be summarized"}
-
-        with patch("core.content._call_llm", new_callable=AsyncMock, return_value="not-json"):
-            summarized_stories, summarized_ph = await summarize_briefing_content(stories, ph)
-
-        # 当 JSON 解析失败时，应该返回 None, None 表示失败
-        assert summarized_stories is None
-        assert summarized_ph is None
+            topics = await fetch_devto_top(limit=1)
+            instance.get.assert_awaited_once_with(
+                "https://dev.to/api/articles",
+                params={"per_page": 1, "top": 7},
+            )
+            assert topics == [{
+                "title": "DevTo Story",
+                "score": 321,
+                "url": "https://dev.to/test-story",
+            }]
 
     @pytest.mark.asyncio
-    async def test_summarize_briefing_content_english_prompt(self):
-        stories = [{"title": "A very long story title that should be summarized", "score": 10}]
-        ph = {"name": "CoolApp", "tagline": "A long English tagline that should also be summarized"}
+    async def test_failure_returns_empty(self):
+        with patch("core.content.httpx.AsyncClient") as MockClient:
+            instance = AsyncMock()
+            instance.get = AsyncMock(side_effect=httpx.ReadTimeout("Network error"))
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
 
-        with patch(
-            "core.content._call_llm",
-            new_callable=AsyncMock,
-            return_value='{"hn_summaries":["Short summary"],"ph_summary":"English intro"}',
-        ) as mock_call:
-            summarized_stories, summarized_ph = await summarize_briefing_content(stories, ph, language="en")
-
-        prompt = mock_call.await_args.args[2]
-        assert "concise English" in prompt
-        assert "中文" not in prompt
-        assert summarized_stories[0]["summary"] == "Short summary"
-        assert summarized_ph["tagline"] == "English intro"
+            topics = await fetch_devto_top()
+            assert topics == []
 
 
 class TestRecipeAndArtwallFallbacks:

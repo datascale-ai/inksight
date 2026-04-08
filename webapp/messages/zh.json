@@ -99,8 +99,9 @@
   "footer.hardwareGuide": "硬件指南",
   "footer.apiDocs": "API 文档",
   "footer.techStack": "技术栈",
-  "footer.tech.item1": "ESP32-C3 + 4.2\" E-Paper",
+  "footer.tech.item1": "ESP32 + 4.2\" E-Paper",
   "footer.tech.item2": "Python FastAPI 后端",
-  "footer.tech.item3": "DeepSeek / 通义千问 / Kimi",
+  "footer.tech.item3": "Next.js Web 端",
+  "footer.tech.item4": "DeepSeek / 通义千问 / Kimi",
   "footer.tagline": "为慢信息而生，用心打造。"
 }

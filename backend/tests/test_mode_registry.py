@@ -8,7 +8,8 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from core.mode_registry import ModeRegistry, _validate_mode_def, JsonMode
+from core.layout_presets import get_public_layout_dsl_catalog
+from core.mode_registry import ModeRegistry, _validate_mode_def, _validate_mode_def_with_error, JsonMode
 
 
 SAMPLE_MODE_DEF = {
@@ -86,6 +87,261 @@ def test_validate_static_mode():
         "layout": {"body": [{"type": "centered_text", "field": "msg"}]},
     }
     assert _validate_mode_def(static_def) is True
+
+
+def test_validate_component_tree_mode():
+    component_tree_def = {
+        "mode_id": "TREE_TEST",
+        "display_name": "Tree Test",
+        "content": {"type": "static", "static_data": {"msg": "hello"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body": {
+                "type": "column",
+                "children": [
+                    {"type": "text", "field": "msg"}
+                ],
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def) is True
+
+
+def test_validate_component_tree_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_PRESET",
+        "display_name": "Tree Preset",
+        "content": {"type": "static", "static_data": {"title": "hello", "opening": "a", "twist": "b", "ending": "c"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "story_card",
+            "preset_props": {
+                "title_field": "title",
+                "sections": [
+                    {"field": "opening"},
+                    {"field": "twist"},
+                    {"field": "ending"},
+                ],
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def) is True
+
+
+def test_validate_component_tree_fragment_mode():
+    component_tree_def = {
+        "mode_id": "TREE_FRAGMENT",
+        "display_name": "Tree Fragment",
+        "content": {"type": "static", "static_data": {"title": "hello", "body": "world"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "fragment_stack": {"padding_x": 18, "gap": 6},
+            "fragments": [
+                {"fragment": "title_with_rule", "title_field": "title", "separator_width": 50},
+                {"fragment": "inset_body_text", "field": "body", "inset_x": 24},
+            ],
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_prompt_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_PROMPT",
+        "display_name": "Tree Prompt",
+        "content": {"type": "static", "static_data": {"question": "hello"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "prompt_card",
+            "preset_props": {
+                "hero_field": "question",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_letter_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_LETTER",
+        "display_name": "Tree Letter",
+        "content": {"type": "static", "static_data": {"body": "hello"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "letter_card",
+            "preset_props": {
+                "body_field": "body",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_bias_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_BIAS",
+        "display_name": "Tree Bias",
+        "content": {"type": "static", "static_data": {"name": "bias", "definition": "desc"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "bias_card",
+            "preset_props": {
+                "title_field": "name",
+                "definition_field": "definition",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_riddle_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_RIDDLE",
+        "display_name": "Tree Riddle",
+        "content": {"type": "static", "static_data": {"question": "hello"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "riddle_card",
+            "preset_props": {
+                "question_field": "question",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_recipe_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_RECIPE",
+        "display_name": "Tree Recipe",
+        "content": {"type": "static", "static_data": {"season": "spring"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "recipe_card",
+            "preset_props": {
+                "season_field": "season",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_poetry_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_POETRY",
+        "display_name": "Tree Poetry",
+        "content": {"type": "static", "static_data": {"title": "hello"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "poetry_card",
+            "preset_props": {
+                "title_field": "title",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_lifebar_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_LIFEBAR",
+        "display_name": "Tree Lifebar",
+        "content": {"type": "static", "static_data": {"year_label": "2026"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "lifebar_card",
+            "preset_props": {
+                "primary_metric": {
+                    "label_field": "year_label",
+                    "value_template": "{year_pct}%",
+                    "bar_field": "day_of_year",
+                    "bar_max_field": "days_in_year",
+                },
+                "bottom_metric": {
+                    "label_field": "life_label",
+                    "value_template": "{life_pct}%",
+                    "bar_field": "age",
+                    "bar_max_field": "life_expect",
+                },
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_countdown_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_COUNTDOWN",
+        "display_name": "Tree Countdown",
+        "content": {"type": "static", "static_data": {"message": "Soon", "events": []}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "countdown_card",
+            "preset_props": {
+                "days_label_template": "days left",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_component_tree_fitness_preset_mode():
+    component_tree_def = {
+        "mode_id": "TREE_FITNESS",
+        "display_name": "Tree Fitness",
+        "content": {"type": "static", "static_data": {"workout_name": "Stretch"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body_preset": "fitness_card",
+            "preset_props": {
+                "exercise_title": "Exercises",
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is True
+
+
+def test_validate_custom_mode_rejects_raw_component_tree():
+    component_tree_def = {
+        "mode_id": "TREE_RAW",
+        "display_name": "Tree Raw",
+        "content": {"type": "static", "static_data": {"msg": "hello"}},
+        "layout": {
+            "layout_engine": "component_tree",
+            "body": {
+                "type": "column",
+                "children": [
+                    {"type": "text", "field": "msg"}
+                ],
+            },
+        },
+    }
+    assert _validate_mode_def(component_tree_def, allow_raw_component_tree=False) is False
+
+
+def test_validate_mode_def_with_error_message():
+    bad = {
+        **SAMPLE_MODE_DEF,
+        "layout": {
+            "layout_engine": "component_tree",
+            "body": {
+                "type": "column",
+                "children": [{"type": "text", "field": "text"}],
+            },
+        },
+    }
+    ok, error = _validate_mode_def_with_error(bad, allow_raw_component_tree=False)
+    assert ok is False
+    assert error == "raw component_tree body is not allowed here"
+
+
+def test_public_layout_dsl_catalog_is_curated():
+    catalog = get_public_layout_dsl_catalog()
+    fragment_names = [item["name"] for item in catalog["fragments"]]
+    preset_names = [item["name"] for item in catalog["presets"]]
+    assert "plain_text" in fragment_names
+    assert "quote_focus_card" in preset_names
+    assert "fitness_card" not in preset_names
 
 
 def test_registry_register_and_query():
@@ -259,22 +515,3 @@ def test_registry_mode_icon_map():
     icon_map = reg.get_mode_icon_map()
     assert icon_map["ICON_TEST"] == "book"
 
-
-if __name__ == "__main__":
-    test_validate_valid_mode()
-    test_validate_missing_mode_id()
-    test_validate_missing_content()
-    test_validate_invalid_content_type()
-    test_validate_llm_without_prompt()
-    test_validate_missing_layout()
-    test_validate_empty_body()
-    test_validate_static_mode()
-    test_registry_register_and_query()
-    test_registry_load_json_mode()
-    test_registry_load_directory()
-    test_registry_unregister_custom()
-    test_registry_builtin_shadows_json()
-    test_registry_list_modes()
-    test_registry_cacheable()
-    test_registry_mode_icon_map()
-    print("✓ All ModeRegistry tests passed")

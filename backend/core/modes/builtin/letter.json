@@ -29,6 +29,7 @@
         "default": "P.S. 记得喝杯热的"
       }
     },
+    "max_tokens": 512,
     "temperature": 0.92,
     "fallback": {
       "sender": "一个冬日午后的旅人",
@@ -43,59 +44,24 @@
       "line_width": 1,
       "dashed": true
     },
-    "body": [
-      {
-        "type": "spacer",
-        "height": 10
-      },
-      {
-        "type": "text",
-        "field": "greeting",
-        "font": "noto_serif_light",
-        "font_size": 12,
-        "align": "left",
-        "margin_x": 32
-      },
-      {
-        "type": "spacer",
-        "height": 8
-      },
-      {
-        "type": "text",
-        "field": "body",
-        "font": "noto_serif_regular",
-        "font_size": 13,
-        "align": "left",
-        "margin_x": 32,
-        "max_lines": 6
-      },
-      {
-        "type": "spacer",
-        "height": 10
-      },
-      {
-        "type": "text",
-        "field": "closing",
-        "font": "noto_serif_light",
-        "font_size": 12,
-        "align": "right",
-        "margin_x": 32
-      },
-      {
-        "type": "separator",
-        "style": "short",
-        "width": 40
-      },
-      {
-        "type": "text",
-        "field": "postscript",
-        "font": "noto_serif_light",
-        "font_size": 10,
-        "align": "left",
-        "margin_x": 32,
-        "max_lines": 1
-      }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "letter_card",
+    "preset_props": {
+      "padding_x": 32,
+      "padding_y": 10,
+      "justify": "center",
+      "gap": 8,
+      "greeting_font": "noto_serif_light",
+      "greeting_font_size": 12,
+      "body_font": "noto_serif_regular",
+      "body_font_size": 13,
+      "body_max_lines": 6,
+      "closing_font": "noto_serif_light",
+      "closing_font_size": 12,
+      "postscript_font": "noto_serif_light",
+      "postscript_font_size": 10,
+      "postscript_max_lines": 1
+    },
     "footer": {
       "label": "??",
       "attribution_template": "— {sender}",
@@ -104,33 +70,16 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "text",
-          "field": "greeting",
-          "font": "noto_serif_light",
-          "font_size": 10,
-          "align": "left",
-          "margin_x": 8
-        },
-        {
-          "type": "text",
-          "field": "body",
-          "font": "noto_serif_regular",
-          "font_size": 10,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 3
-        },
-        {
-          "type": "text",
-          "field": "closing",
-          "font": "noto_serif_light",
-          "font_size": 10,
-          "align": "right",
-          "margin_x": 8
-        }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "padding_y": 4,
+        "gap": 6,
+        "greeting_font_size": 10,
+        "body_font_size": 10,
+        "body_max_lines": 3,
+        "closing_font_size": 10,
+        "postscript_field": null
+      },
       "footer": {
         "label": "??",
         "attribution_template": "— {sender}",
@@ -139,59 +88,18 @@
       }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "spacer",
-          "height": 18
-        },
-        {
-          "type": "text",
-          "field": "greeting",
-          "font": "noto_serif_light",
-          "font_size": 18,
-          "align": "left",
-          "margin_x": 56
-        },
-        {
-          "type": "spacer",
-          "height": 14
-        },
-        {
-          "type": "text",
-          "field": "body",
-          "font": "noto_serif_regular",
-          "font_size": 19,
-          "align": "left",
-          "margin_x": 56,
-          "max_lines": 8
-        },
-        {
-          "type": "spacer",
-          "height": 16
-        },
-        {
-          "type": "text",
-          "field": "closing",
-          "font": "noto_serif_light",
-          "font_size": 18,
-          "align": "right",
-          "margin_x": 56
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 60
-        },
-        {
-          "type": "text",
-          "field": "postscript",
-          "font": "noto_serif_light",
-          "font_size": 14,
-          "align": "left",
-          "margin_x": 56,
-          "max_lines": 2
-        }
-      ]
+      "preset_props": {
+        "padding_x": 56,
+        "padding_y": 18,
+        "gap": 14,
+        "greeting_font_size": 18,
+        "body_font_size": 19,
+        "body_max_lines": 8,
+        "closing_font_size": 18,
+        "separator_width": 60,
+        "postscript_font_size": 14,
+        "postscript_max_lines": 2
+      }
     }
   }
 }

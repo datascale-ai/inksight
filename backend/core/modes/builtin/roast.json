@@ -25,16 +25,33 @@
 
   "layout": {
     "status_bar": { "line_width": 2, "dashed": false },
-    "body": [
-      {
-        "type": "centered_text",
-        "field": "quote",
-        "font_name": "NotoSerifSC-Bold.ttf",
-        "font_size": 18,
-        "max_width_ratio": 0.88,
-        "vertical_center": true
-      }
-    ],
+    "layout_engine": "component_tree",
+    "component_theme": {
+      "body_font": "noto_serif_bold",
+      "body_font_size": 18,
+      "body_line_gap": 8
+    },
+    "body": {
+      "type": "column",
+      "padding_x": 18,
+      "justify": "center",
+      "children": [
+        {
+          "type": "box",
+          "padding_x": 6,
+          "children": [
+            {
+              "type": "text",
+              "field": "quote",
+              "font": "noto_serif_bold",
+              "font_size": 18,
+              "align": "center",
+              "max_lines": 4
+            }
+          ]
+        }
+      ]
+    },
     "footer": {
       "label": "ROAST",
       "attribution_template": "— InkSight AI",
@@ -43,29 +60,57 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "quote",
-          "font_name": "NotoSerifSC-Bold.ttf",
-          "font_size": 13,
-          "max_width_ratio": 0.92,
-          "vertical_center": true
-        }
-      ],
+      "component_theme": {
+        "body_font_size": 13
+      },
+      "body": {
+        "type": "column",
+        "padding_x": 8,
+        "justify": "center",
+        "children": [
+          {
+            "type": "box",
+            "padding_x": 4,
+            "children": [
+              {
+                "type": "text",
+                "field": "quote",
+                "font": "noto_serif_bold",
+                "font_size": 13,
+                "align": "center",
+                "max_lines": 4
+              }
+            ]
+          }
+        ]
+      },
       "footer": { "label": "ROAST", "attribution_template": "— InkSight AI", "height": 18, "line_width": 2 }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "quote",
-          "font_name": "NotoSerifSC-Bold.ttf",
-          "font_size": 26,
-          "max_width_ratio": 0.82,
-          "vertical_center": true
-        }
-      ]
+      "component_theme": {
+        "body_font_size": 26
+      },
+      "body": {
+        "type": "column",
+        "padding_x": 28,
+        "justify": "center",
+        "children": [
+          {
+            "type": "box",
+            "padding_x": 44,
+            "children": [
+              {
+                "type": "text",
+                "field": "quote",
+                "font": "noto_serif_bold",
+                "font_size": 26,
+                "align": "center",
+                "max_lines": 4
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

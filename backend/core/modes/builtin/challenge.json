@@ -23,26 +23,30 @@
   },
   "layout": {
     "status_bar": { "line_width": 1, "dashed": false },
-    "body": [
-      { "type": "spacer", "height": 8 },
-      { "type": "text", "template": "今日微挑战", "font": "noto_serif_bold", "font_size": 14, "align": "center" },
-      { "type": "text", "template": "{difficulty}  ·  {time}", "font_size": 11, "align": "center" },
-      { "type": "spacer", "height": 8 },
-      { "type": "separator", "style": "short", "width": 60 },
-      {
-        "type": "centered_text",
-        "field": "challenge",
-        "font": "noto_serif_bold",
-        "font_size": 18,
-        "max_width_ratio": 0.8,
-        "vertical_center": false,
-        "line_spacing": 10
-      },
-      { "type": "spacer", "height": 16 },
-      { "type": "separator", "style": "dashed", "margin_x": 50 },
-      { "type": "spacer", "height": 6 },
-      { "type": "text", "field": "why", "font": "noto_serif_light", "font_size": 11, "align": "center", "max_lines": 2 }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "prompt_card",
+    "preset_props": {
+      "padding_x": 18,
+      "padding_y": 8,
+      "justify": "center",
+      "gap": 8,
+      "title_template": "今日微挑战",
+      "title_font": "noto_serif_bold",
+      "title_font_size": 14,
+      "meta_template": "{difficulty}  ·  {time}",
+      "meta_font_size": 11,
+      "separator_width": 60,
+      "hero_inset_x": 40,
+      "hero_field": "challenge",
+      "hero_font": "noto_serif_bold",
+      "hero_font_size": 18,
+      "hero_max_lines": 3,
+      "note_field": "why",
+      "note_font": "noto_serif_light",
+      "note_font_size": 11,
+      "note_max_lines": 2,
+      "note_divider_margin_x": 50
+    },
     "footer": {
       "label": "CHALLENGE",
       "attribution_template": "— Just Do It"
@@ -50,42 +54,36 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        { "type": "text", "template": "{difficulty}  ·  {time}", "font_size": 9, "align": "center" },
-        { "type": "separator", "style": "short", "width": 40 },
-        {
-          "type": "centered_text",
-          "field": "challenge",
-          "font": "noto_serif_bold",
-          "font_size": 13,
-          "max_width_ratio": 0.92,
-          "vertical_center": true,
-          "line_spacing": 6
-        }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "padding_y": 4,
+        "gap": 6,
+        "title_template": null,
+        "meta_font_size": 9,
+        "separator_width": 40,
+        "hero_inset_x": 8,
+        "hero_font_size": 13,
+        "hero_max_lines": 3,
+        "note_field": null,
+        "show_note_divider": false
+      },
       "footer": { "label": "CHALLENGE", "attribution_template": "— Just Do It", "height": 18 }
     },
     "800x480": {
-      "body": [
-        { "type": "spacer", "height": 14 },
-        { "type": "text", "template": "今日微挑战", "font": "noto_serif_bold", "font_size": 20, "align": "center" },
-        { "type": "text", "template": "{difficulty}  ·  {time}", "font_size": 15, "align": "center" },
-        { "type": "spacer", "height": 12 },
-        { "type": "separator", "style": "short", "width": 90 },
-        {
-          "type": "centered_text",
-          "field": "challenge",
-          "font": "noto_serif_bold",
-          "font_size": 26,
-          "max_width_ratio": 0.72,
-          "vertical_center": false,
-          "line_spacing": 14
-        },
-        { "type": "spacer", "height": 24 },
-        { "type": "separator", "style": "dashed", "margin_x": 80 },
-        { "type": "spacer", "height": 10 },
-        { "type": "text", "field": "why", "font": "noto_serif_light", "font_size": 16, "align": "center", "max_lines": 3 }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "padding_y": 14,
+        "gap": 12,
+        "title_font_size": 20,
+        "meta_font_size": 15,
+        "separator_width": 90,
+        "hero_inset_x": 112,
+        "hero_font_size": 26,
+        "hero_max_lines": 3,
+        "note_font_size": 16,
+        "note_max_lines": 3,
+        "note_divider_margin_x": 80
+      }
     }
   }
 }

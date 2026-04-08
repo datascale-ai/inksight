@@ -18,10 +18,7 @@ type ModeSelectorProps = {
   handleModePreview: (mode: string) => void;
   handleModeApply: (mode: string) => void;
   handleCustomModeDelete: (mode: string) => void;
-  setEditingCustomMode: (value: boolean) => void;
-  setCustomDesc: (value: string) => void;
-  setCustomModeName: (value: string) => void;
-  setCustomJson: (value: string) => void;
+  onCreateCustomMode: () => void;
   previewColors?: number;
   onColorsChange?: (v: number) => void;
 };
@@ -37,10 +34,7 @@ export function ModeSelector({
   handleModePreview,
   handleModeApply,
   handleCustomModeDelete,
-  setEditingCustomMode,
-  setCustomDesc,
-  setCustomModeName,
-  setCustomJson,
+  onCreateCustomMode,
   previewColors,
   onColorsChange,
 }: ModeSelectorProps) {
@@ -86,12 +80,7 @@ export function ModeSelector({
           modeMeta={{ ...modeMeta, ...customModeMeta }}
           tailItem={
             <button
-              onClick={() => {
-                setEditingCustomMode(true);
-                setCustomJson("");
-                setCustomDesc("");
-                setCustomModeName("");
-              }}
+              onClick={onCreateCustomMode}
               className="rounded-sm border border-dashed border-ink/20 bg-white px-3 py-2 min-h-[64px] flex flex-col items-center justify-center text-ink-light hover:border-ink/40 hover:bg-paper-dark transition-colors"
               title={tr("新建自定义模式", "Create custom mode")}
             >

@@ -111,7 +111,9 @@ async def lifespan(app):
     from core.db import close_all
 
     await init_cache_db()
+
     yield
+
     await close_all()
 
 
@@ -484,7 +486,6 @@ async def build_image(
     # - llm: 直接调用 LLM
     # - llm_json: 调用 LLM 并解析 JSON
     # - image_gen: 调用 LLM 生成标题（在 generate_artwall_content 中）
-    # - external_data: 如果 provider 是 "briefing" 且配置了 summarize 或 include_insight，会调用 LLM
     # - composite: 递归检查 steps 中是否包含上述类型
     llm_mode_requires_quota = False
     json_mode = registry.get_json_mode(persona, mac)
@@ -500,15 +501,6 @@ async def build_image(
         if ctype in ("llm", "llm_json", "image_gen"):
             llm_mode_requires_quota = True
             logger.debug("[QUOTA DEBUG] Mode %s requires quota (direct type: %s)", persona, ctype)
-        elif ctype == "external_data":
-            # external_data 类型中，briefing provider 会调用 LLM（如果配置了 summarize 或 include_insight）
-            provider = content_def.get("provider", "")
-            if provider == "briefing":
-                summarize = content_def.get("summarize", True)
-                include_insight = content_def.get("include_insight", True)
-                if summarize or include_insight:
-                    llm_mode_requires_quota = True
-                    logger.debug("[QUOTA DEBUG] Mode %s requires quota (external_data briefing)", persona)
         elif ctype == "composite":
             # 递归检查 composite 模式中的 steps 是否包含需要 LLM 的类型
             steps = content_def.get("steps", [])
@@ -522,16 +514,6 @@ async def build_image(
                             llm_mode_requires_quota = True
                             logger.debug("[QUOTA DEBUG] Mode %s requires quota (composite step: %s)", persona, step_type)
                             break
-                        elif step_type == "external_data":
-                            # 检查 external_data step 是否调用 LLM
-                            step_provider = step.get("provider", "")
-                            if step_provider == "briefing":
-                                step_summarize = step.get("summarize", True)
-                                step_include_insight = step.get("include_insight", True)
-                                if step_summarize or step_include_insight:
-                                    llm_mode_requires_quota = True
-                                    logger.debug("[QUOTA DEBUG] Mode %s requires quota (composite external_data briefing)", persona)
-                                    break
                         # 如果 step 本身也是 composite，需要递归检查（虽然当前没有这种嵌套，但为了完整性）
                         elif step_type == "composite":
                             nested_steps = step.get("steps", [])
@@ -543,15 +525,6 @@ async def build_image(
                                             llm_mode_requires_quota = True
                                             logger.debug("[QUOTA DEBUG] Mode %s requires quota (nested composite step: %s)", persona, nested_type)
                                             break
-                                        elif nested_type == "external_data":
-                                            nested_provider = nested_step.get("provider", "")
-                                            if nested_provider == "briefing":
-                                                nested_summarize = nested_step.get("summarize", True)
-                                                nested_include_insight = nested_step.get("include_insight", True)
-                                                if nested_summarize or nested_include_insight:
-                                                    llm_mode_requires_quota = True
-                                                    logger.debug("[QUOTA DEBUG] Mode %s requires quota (nested composite external_data briefing)", persona)
-                                                    break
                                 if llm_mode_requires_quota:
                                     break
     if not llm_mode_requires_quota:

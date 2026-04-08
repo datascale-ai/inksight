@@ -152,8 +152,11 @@
     },
     "layout_def": {
       "type": "object",
-      "required": ["body"],
       "properties": {
+        "layout_engine": {
+          "type": "string",
+          "enum": ["component_tree"]
+        },
         "status_bar": {
           "type": "object",
           "properties": {
@@ -163,10 +166,36 @@
           }
         },
         "body": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/definitions/block" },
+              "minItems": 1,
+              "description": "Ordered list of layout blocks rendered top to bottom"
+            },
+            {
+              "type": "object",
+              "description": "Component tree root node for layout_engine=component_tree"
+            }
+          ]
+        },
+        "body_preset": {
+          "type": "string",
+          "description": "Author-friendly component_tree preset name"
+        },
+        "preset_props": {
+          "type": "object",
+          "description": "Properties used to expand body_preset into a component tree"
+        },
+        "fragments": {
           "type": "array",
-          "items": { "$ref": "#/definitions/block" },
           "minItems": 1,
-          "description": "Ordered list of layout blocks rendered top to bottom"
+          "description": "Curated fragment composition for component_tree layouts",
+          "items": { "$ref": "#/definitions/fragment_ref" }
+        },
+        "fragment_stack": {
+          "type": "object",
+          "description": "Layout props for stacking curated fragments into a root column"
         },
         "footer": {
           "type": "object",
@@ -179,7 +208,37 @@
             "font_size": { "type": "integer" }
           }
         }
-      }
+      },
+      "anyOf": [
+        { "required": ["body"] },
+        {
+          "required": ["layout_engine", "body_preset"],
+          "properties": {
+            "layout_engine": { "const": "component_tree" }
+          }
+        },
+        {
+          "required": ["layout_engine", "fragments"],
+          "properties": {
+            "layout_engine": { "const": "component_tree" }
+          }
+        }
+      ]
+    },
+    "fragment_ref": {
+      "type": "object",
+      "required": ["fragment"],
+      "properties": {
+        "fragment": {
+          "type": "string",
+          "description": "Registered fragment name"
+        },
+        "props": {
+          "type": "object",
+          "description": "Fragment props"
+        }
+      },
+      "additionalProperties": true
     },
     "block": {
       "type": "object",

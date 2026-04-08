@@ -3,7 +3,7 @@
   "display_name": "Daily Almanac",
   "icon": "calendar",
   "cacheable": false,
-  "description": "Daily wisdom with zodiac sign, lucky number, and life tip",
+  "description": "Lunar date, do and avoid guidance, auspicious positions, and a daily health tip",
   "content": {
     "type": "composite",
     "steps": [
@@ -15,168 +15,185 @@
           "day": 1,
           "month_cn": "January",
           "weekday_cn": "Monday",
+          "lunar_date": "Lunar First Month Day One",
           "day_of_year": 1,
           "days_in_year": 365
         }
       },
       {
-        "type": "llm_json",
-        "prompt_template": "You are a daily almanac writer. Based on the date info, generate today's almanac.\nOutput JSON:\n{{\"zodiac\": \"Today's zodiac sign (e.g. Aries)\", \"element\": \"Element (Fire/Water/Earth/Air)\", \"lucky_number\": \"Lucky number (1-99)\", \"do\": \"Best thing to do today (3 items, comma-separated)\", \"avoid\": \"Things to avoid today (2 items, comma-separated)\", \"tip\": \"Life tip for today (under 30 chars)\"}}\nOutput JSON only.\nContext: {context}",
-        "output_schema": {
-          "zodiac": {
-            "type": "string",
-            "default": "Aries"
-          },
-          "element": {
-            "type": "string",
-            "default": "Fire"
-          },
-          "lucky_number": {
-            "type": "string",
-            "default": "7"
-          },
-          "do": {
-            "type": "string",
-            "default": "Start new projects, Exercise, Connect with friends"
-          },
-          "avoid": {
-            "type": "string",
-            "default": "Overthinking, Skipping meals"
-          },
-          "tip": {
-            "type": "string",
-            "default": "Small steps lead to big changes."
-          }
-        },
-        "temperature": 0.6,
+        "type": "computed",
+        "provider": "almanac_api",
         "fallback": {
-          "zodiac": "Aries",
-          "element": "Fire",
-          "lucky_number": "7",
-          "do": "Start new projects, Exercise, Connect with friends",
-          "avoid": "Overthinking, Skipping meals",
-          "tip": "Small steps lead to big changes."
+          "solar_term": "",
+          "lunar_date_display": "Second Lunar Month Twenty-Second Day",
+          "yi": "Read, travel, meet friends",
+          "ji": "Groundbreaking, lawsuits",
+          "shenwei": "Joy God: Southeast Fortune God: Southwest Wealth God: South",
+          "xingsu": "Southern Star Horse",
+          "suisha": "Sha in the North",
+          "chongsha": "Dog day clashes with Dragon",
+          "health_tip": "Keep a steady routine and dress for the season."
         }
       }
     ],
     "fallback": {}
   },
   "layout": {
+    "layout_engine": "component_tree",
     "status_bar": {
       "line_width": 2,
       "dashed": false
     },
-    "body": [
-      {
-        "type": "two_column",
-        "left_width": 120,
-        "gap": 10,
-        "left": [
-          {
-            "type": "big_number",
-            "field": "day",
-            "font_size": 48,
-            "align": "center"
-          },
-          {
-            "type": "text",
-            "field": "weekday_cn",
-            "font_size": 14,
-            "align": "center",
-            "margin_x": 8
-          },
-          {
-            "type": "separator",
-            "style": "short",
-            "width": 50
-          },
-          {
-            "type": "text",
-            "field": "zodiac",
-            "font_name": "Lora-Bold.ttf",
-            "font_size": 14,
-            "align": "center",
-            "margin_x": 8
-          },
-          {
-            "type": "text",
-            "template": "Lucky #{lucky_number}",
-            "font_size": 11,
-            "align": "center",
-            "margin_x": 8
-          }
-        ],
-        "right": [
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "group",
-            "title": "Do",
-            "title_font_size": 14,
-            "margin_x": 8,
-            "children": [
-              {
-                "type": "text",
-                "field": "do",
-                "font_name": "Lora-Regular.ttf",
-                "font_size": 13,
-                "align": "left",
-                "margin_x": 8,
-                "max_lines": 2
-              }
-            ]
-          },
-          {
-            "type": "spacer",
-            "height": 6
-          },
-          {
-            "type": "group",
-            "title": "Avoid",
-            "title_font_size": 14,
-            "margin_x": 8,
-            "children": [
-              {
-                "type": "text",
-                "field": "avoid",
-                "font_name": "Lora-Regular.ttf",
-                "font_size": 13,
-                "align": "left",
-                "margin_x": 8,
-                "max_lines": 2
-              }
-            ]
-          },
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "separator",
-            "style": "dashed",
-            "margin_x": 8
-          },
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "text",
-            "field": "tip",
-            "font_name": "Lora-Italic.ttf",
-            "font_size": 11,
-            "align": "left",
-            "margin_x": 8,
-            "max_lines": 2
-          }
-        ]
-      }
-    ],
+    "component_theme": {
+      "body_font": "lora_regular",
+      "body_font_size": 11,
+      "body_line_gap": 4,
+      "section_title_font": "lora_bold",
+      "section_title_font_size": 13,
+      "section_title_gap": 2,
+      "section_content_indent": 28,
+      "section_content_gap": 3
+    },
+    "body": {
+      "type": "column",
+      "padding_x": 10,
+      "padding_y": 12,
+      "gap": 6,
+      "children": [
+        {
+          "type": "row",
+          "gap": 12,
+          "align": "center",
+          "children": [
+            {
+              "type": "box",
+              "width": 112,
+              "children": [
+                {
+                  "type": "column",
+                  "gap": 5,
+                  "children": [
+                    {
+                      "type": "big_number",
+                      "field": "day",
+                      "font_size": 48,
+                      "align": "center"
+                    },
+                    {
+                      "type": "text",
+                      "field": "month_cn",
+                      "font_size": 14,
+                      "align": "center",
+                      "max_lines": 1
+                    },
+                    {
+                      "type": "text",
+                      "field": "weekday_cn",
+                      "font_size": 12,
+                      "align": "center",
+                      "max_lines": 1
+                    },
+                    {
+                      "type": "text",
+                      "field": "solar_term",
+                      "font": "lora_bold",
+                      "font_size": 16,
+                      "align": "center",
+                      "max_lines": 1
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "box",
+              "grow": 1,
+              "padding_x": 8,
+              "children": [
+                {
+                  "type": "column",
+                  "gap": 5,
+                  "children": [
+                    {
+                      "type": "text",
+                      "template": "Lunar {lunar_date_display}",
+                      "font_size": 12,
+                      "font": "lora_bold",
+                      "max_lines": 1
+                    },
+                    {
+                      "type": "section_box",
+                      "title": "Do",
+                      "children": [
+                        {
+                          "type": "text",
+                          "field": "yi",
+                          "font": "lora_regular",
+                          "font_size": 12,
+                          "max_lines": 2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "section_box",
+                      "title": "Avoid",
+                      "children": [
+                        {
+                          "type": "text",
+                          "field": "ji",
+                          "font": "lora_regular",
+                          "font_size": 12,
+                          "max_lines": 2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "separator",
+                      "style": "dashed"
+                    },
+                    {
+                      "type": "section_box",
+                      "title": "Positions",
+                      "children": [
+                        {
+                          "type": "text",
+                          "field": "shenwei",
+                          "font": "lora_regular",
+                          "font_size": 11,
+                          "max_lines": 2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "template": "Star Lodge {xingsu}",
+                      "font": "lora_regular",
+                      "font_size": 10,
+                      "max_lines": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "spacer",
+          "height": 4
+        },
+        {
+          "type": "text",
+          "field": "health_tip",
+          "font": "lora_regular",
+          "align": "center",
+          "font_size": 12,
+          "max_lines": 2
+        }
+      ]
+    },
     "footer": {
       "label": "Almanac",
-      "attribution_template": "— {element}",
+      "attribution_template": "{solar_term}",
       "line_width": 2
     }
   },
@@ -186,166 +203,204 @@
         "line_width": 1,
         "dashed": false
       },
-      "body": [
-        {
-          "type": "text",
-          "field": "zodiac",
-          "font_size": 11,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 1
-        },
-        {
-          "type": "text",
-          "template": "{element} · Lucky #{lucky_number}",
-          "font_size": 10,
-          "align": "left",
-          "margin_x": 8
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 40
-        },
-        {
-          "type": "text",
-          "template": "Do: {do}",
-          "font_size": 11,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 1
-        },
-        {
-          "type": "text",
-          "template": "Avoid: {avoid}",
-          "font_size": 11,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 1
-        }
-      ],
+      "component_theme": {
+        "body_font": "lora_regular",
+        "body_font_size": 11,
+        "body_line_gap": 3
+      },
+      "body": {
+        "type": "column",
+        "padding_x": 8,
+        "padding_y": 6,
+        "gap": 4,
+        "children": [
+          {
+            "type": "text",
+            "template": "Lunar {lunar_date_display}",
+            "font_size": 11,
+            "max_lines": 1
+          },
+          {
+            "type": "text",
+            "template": "Positions: {shenwei}",
+            "font_size": 10,
+            "max_lines": 2
+          },
+          {
+            "type": "text",
+            "template": "Star: {xingsu}",
+            "font_size": 10,
+            "max_lines": 1
+          },
+          {
+            "type": "text",
+            "field": "health_tip",
+            "font_size": 12,
+            "max_lines": 1
+          },
+          {
+            "type": "separator",
+            "style": "short",
+            "width": 40
+          },
+          {
+            "type": "text",
+            "template": "Do: {yi}",
+            "font_size": 11,
+            "max_lines": 1
+          },
+          {
+            "type": "text",
+            "template": "Avoid: {ji}",
+            "font_size": 11,
+            "max_lines": 1
+          }
+        ]
+      },
       "footer": {
         "label": "Almanac",
+        "attribution_template": "{solar_term}",
         "height": 20,
         "line_width": 1
       }
     },
     "648x480": {
-      "body": [
-        {
-          "type": "two_column",
-          "left_width": 195,
-          "gap": 14,
-          "left": [
-            {
-              "type": "big_number",
-              "field": "day",
-              "font_size": 76,
-              "align": "center"
-            },
-            {
-              "type": "text",
-              "field": "month_cn",
-              "font_size": 20,
-              "align": "center",
-              "margin_x": 12
-            },
-            {
-              "type": "text",
-              "field": "weekday_cn",
-              "font_size": 16,
-              "align": "center",
-              "margin_x": 12
-            },
-            {
-              "type": "separator",
-              "style": "short",
-              "width": 80
-            },
-            {
-              "type": "text",
-              "field": "zodiac",
-              "font_name": "Lora-Bold.ttf",
-              "font_size": 22,
-              "align": "center",
-              "margin_x": 12
-            },
-            {
-              "type": "text",
-              "template": "Lucky #{lucky_number}",
-              "font_size": 14,
-              "align": "center",
-              "margin_x": 12
-            }
-          ],
-          "right": [
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "group",
-              "title": "Do",
-              "title_font_size": 18,
-              "margin_x": 12,
-              "children": [
-                {
-                  "type": "text",
-                  "field": "do",
-                  "font_name": "Lora-Regular.ttf",
-                  "font_size": 16,
-                  "align": "left",
-                  "margin_x": 12,
-                  "max_lines": 2
-                }
-              ]
-            },
-            {
-              "type": "spacer",
-              "height": 10
-            },
-            {
-              "type": "group",
-              "title": "Avoid",
-              "title_font_size": 18,
-              "margin_x": 12,
-              "children": [
-                {
-                  "type": "text",
-                  "field": "avoid",
-                  "font_name": "Lora-Regular.ttf",
-                  "font_size": 16,
-                  "align": "left",
-                  "margin_x": 12,
-                  "max_lines": 2
-                }
-              ]
-            },
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "separator",
-              "style": "dashed",
-              "margin_x": 12
-            },
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "text",
-              "field": "tip",
-              "font_name": "Lora-Italic.ttf",
-              "font_size": 15,
-              "align": "left",
-              "margin_x": 12,
-              "max_lines": 2
-            }
-          ]
-        }
-      ]
+      "component_theme": {
+        "body_font": "lora_regular",
+        "body_font_size": 16,
+        "body_line_gap": 6,
+        "section_title_font": "lora_bold",
+        "section_title_font_size": 18,
+        "section_title_gap": 4,
+        "section_content_indent": 40,
+        "section_content_gap": 5
+      },
+      "body": {
+        "type": "row",
+        "padding_x": 16,
+        "padding_y": 18,
+        "gap": 16,
+        "align": "center",
+        "children": [
+          {
+            "type": "box",
+            "width": 180,
+            "children": [
+              {
+                "type": "column",
+                "gap": 8,
+                "children": [
+                  {
+                    "type": "big_number",
+                    "field": "day",
+                    "font_size": 76,
+                    "align": "center"
+                  },
+                  {
+                    "type": "text",
+                    "field": "month_cn",
+                    "font_size": 20,
+                    "align": "center",
+                    "max_lines": 1
+                  },
+                  {
+                    "type": "text",
+                    "field": "weekday_cn",
+                    "font_size": 16,
+                    "align": "center",
+                    "max_lines": 1
+                  },
+                  {
+                    "type": "text",
+                    "field": "solar_term",
+                    "font": "lora_bold",
+                    "font_size": 22,
+                    "align": "center",
+                    "max_lines": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "grow": 1,
+            "padding_x": 12,
+            "children": [
+              {
+                "type": "column",
+                "gap": 8,
+                "children": [
+                  {
+                    "type": "text",
+                    "template": "Lunar {lunar_date_display}",
+                    "font_size": 16,
+                    "font": "lora_bold",
+                    "max_lines": 1
+                  },
+                  {
+                    "type": "section_box",
+                    "title": "Do",
+                    "children": [
+                      {
+                        "type": "text",
+                        "field": "yi",
+                        "font": "lora_regular",
+                        "font_size": 16,
+                        "max_lines": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "section_box",
+                    "title": "Avoid",
+                    "children": [
+                      {
+                        "type": "text",
+                        "field": "ji",
+                        "font": "lora_regular",
+                        "font_size": 16,
+                        "max_lines": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "separator",
+                    "style": "dashed"
+                  },
+                  {
+                    "type": "section_box",
+                    "title": "Positions",
+                    "children": [
+                      {
+                        "type": "text",
+                        "field": "shenwei",
+                        "font": "lora_regular",
+                        "font_size": 15,
+                        "max_lines": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "template": "Star Lodge {xingsu}",
+                    "font": "lora_regular",
+                    "font_size": 14,
+                    "max_lines": 1
+                  },
+                  {
+                    "type": "text",
+                    "field": "health_tip",
+                    "font": "lora_regular",
+                    "font_size": 17,
+                    "max_lines": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

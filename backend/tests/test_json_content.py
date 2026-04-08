@@ -230,6 +230,71 @@ async def test_llm_key_missing_returns_fallback():
 
 
 @pytest.mark.asyncio
+async def test_daily_first_attempt_includes_recent_history_dedup_hint():
+    mode_def = {
+        "mode_id": "DAILY",
+        "content": {
+            "type": "llm_json",
+            "prompt_template": "test {context}",
+            "output_schema": {
+                "quote": {"default": "fallback quote"},
+                "author": {"default": "fallback author"},
+                "book_title": {"default": "fallback book"},
+                "book_author": {"default": "fallback book author"},
+                "book_desc": {"default": "fallback desc"},
+                "tip": {"default": "fallback tip"},
+                "season_text": {"default": "fallback season"},
+            },
+            "fallback": {
+                "quote": "fallback quote",
+                "author": "fallback author",
+                "book_title": "fallback book",
+                "book_author": "fallback book author",
+                "book_desc": "fallback desc",
+                "tip": "fallback tip",
+                "season_text": "fallback season",
+            },
+        },
+        "layout": {"body": []},
+    }
+    with (
+        patch("core.json_content._call_llm", new_callable=AsyncMock) as mock_llm,
+        patch("core.stats_store.get_recent_content_hashes", new_callable=AsyncMock) as mock_hashes,
+        patch("core.stats_store.get_recent_content_summaries", new_callable=AsyncMock) as mock_summaries,
+        patch("core.stats_store.get_content_history", new_callable=AsyncMock) as mock_history,
+    ):
+        mock_hashes.return_value = []
+        mock_summaries.return_value = ["旧主题"]
+        mock_history.return_value = [
+            {
+                "content": {
+                    "quote": "知止而后有定",
+                    "book_title": "《人间值得》",
+                    "tip": "午睡20分钟最佳",
+                    "season_text": "春寒料峭",
+                }
+            }
+        ]
+        mock_llm.return_value = (
+            '{"quote":"新的语录","author":"作者","book_title":"《新书》","book_author":"某人 著",'
+            '"book_desc":"新的描述","tip":"新的提示","season_text":"新的时令"}'
+        )
+
+        await generate_json_mode_content(
+            mode_def,
+            date_str="2025-03-12",
+            weather_str="晴 15°C",
+            language="zh",
+            mac="AA:BB:CC:DD:EE:FF",
+        )
+
+    prompt = mock_llm.await_args.args[2]
+    assert "请避免与这些最近的 DAILY 内容重复" in prompt
+    assert "《人间值得》" in prompt
+    assert "午睡20分钟最佳" in prompt
+
+
+@pytest.mark.asyncio
 async def test_weather_external_data_does_not_mark_llm_used():
     mode_def = {
         "mode_id": "WEATHER",
@@ -273,6 +338,101 @@ async def test_weather_external_data_does_not_mark_llm_used():
     assert result["city"] == "上海"
     assert result["advice"] == "早晚微凉，带件薄外套"
     assert "_llm_used" not in result
+
+
+@pytest.mark.asyncio
+async def test_briefing_external_data_translates_with_deepl_for_zh():
+    mode_def = {
+        "mode_id": "BRIEFING",
+        "content": {
+            "type": "external_data",
+            "provider": "briefing",
+            "hn_limit": 2,
+            "devto_limit": 2,
+            "fallback": {
+                "hn_items": [],
+                "ph_item": {},
+                "devto_items": [],
+                "ph_name": "",
+                "ph_tagline": "",
+                "devto_title": "",
+            },
+        },
+        "layout": {"body": []},
+    }
+    with (
+        patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
+        patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
+        patch("core.content.fetch_devto_top", new_callable=AsyncMock) as mock_devto,
+        patch("core.json_content._translate_with_aliyun_mt", new_callable=AsyncMock) as mock_translate,
+    ):
+        mock_hn.return_value = [{"title": "Project Glasswing: Securing critical software for the AI era", "score": 100}]
+        mock_ph.return_value = {"name": "LookAway 2", "tagline": "Protect your eyes and improve your posture"}
+        mock_devto.return_value = [
+            {"title": "Component-based CSS", "score": 10},
+            {"title": "Forem is slow, so I optimized it.", "score": 28},
+        ]
+        mock_translate.return_value = [
+            "项目 Glasswing：保护 AI 时代关键软件",
+            "组件化 CSS",
+            "Forem 很慢，所以我把它优化了",
+            "保护你的眼睛并改善坐姿",
+        ]
+
+        result = await generate_json_mode_content(
+            mode_def,
+            date_str="2025-03-12",
+            weather_str="晴 15°C",
+            language="zh",
+        )
+
+    assert result["hn_items"][0]["title"] == "项目 Glasswing：保护 AI 时代关键软件"
+    assert result["devto_items"][0]["title"] == "组件化 CSS"
+    assert result["devto_items"][1]["title"] == "Forem 很慢，所以我把它优化了"
+    assert result["ph_name"] == "LookAway 2"
+    assert result["ph_tagline"] == "保护你的眼睛并改善坐姿"
+    assert result["devto_title"] == "组件化 CSS"
+
+
+@pytest.mark.asyncio
+async def test_briefing_external_data_keeps_original_without_deepl_key():
+    mode_def = {
+        "mode_id": "BRIEFING",
+        "content": {
+            "type": "external_data",
+            "provider": "briefing",
+            "fallback": {
+                "hn_items": [],
+                "ph_item": {},
+                "devto_items": [],
+                "ph_name": "",
+                "ph_tagline": "",
+                "devto_title": "",
+            },
+        },
+        "layout": {"body": []},
+    }
+    with (
+        patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
+        patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
+        patch("core.content.fetch_devto_top", new_callable=AsyncMock) as mock_devto,
+        patch("core.json_content._translate_with_aliyun_mt", new_callable=AsyncMock) as mock_translate,
+    ):
+        mock_hn.return_value = [{"title": "Project Glasswing", "score": 100}]
+        mock_ph.return_value = {"name": "LookAway 2", "tagline": "Protect your eyes"}
+        mock_devto.return_value = [{"title": "Component-based CSS", "score": 10}]
+        mock_translate.return_value = None
+
+        result = await generate_json_mode_content(
+            mode_def,
+            date_str="2025-03-12",
+            weather_str="晴 15°C",
+            language="zh",
+        )
+
+    assert result["hn_items"][0]["title"] == "Project Glasswing"
+    assert result["devto_title"] == "Component-based CSS"
+    assert result["ph_tagline"] == "Protect your eyes"
 
 
 @pytest.mark.asyncio
@@ -349,24 +509,3 @@ async def test_habit_computed_content_ignores_stale_derived_override_fields():
     assert result["week_progress"] == 1
     assert result["week_total"] == 2
 
-
-if __name__ == "__main__":
-    test_parse_text_split_basic()
-    test_parse_text_split_missing_fields()
-    test_parse_text_split_strips_quotes()
-    test_parse_json_output_basic()
-    test_parse_json_output_with_markdown_fence()
-    test_parse_json_output_missing_fields_use_fallback()
-    test_parse_json_output_invalid_json_returns_fallback()
-    test_parse_llm_json_output_with_schema()
-    test_parse_llm_json_output_uses_schema_defaults()
-    test_parse_llm_json_output_invalid_returns_fallback()
-    test_parse_llm_output_raw()
-    test_parse_llm_output_dispatches_text_split()
-    test_parse_llm_output_dispatches_json()
-    test_apply_post_process_first_char()
-    test_apply_post_process_first_char_empty()
-    test_apply_post_process_strip_quotes()
-    test_apply_post_process_no_rules()
-    test_apply_post_process_skips_non_string()
-    print("✓ All JSON content tests passed")

@@ -23,43 +23,30 @@
   },
   "layout": {
     "status_bar": { "line_width": 1 },
-    "body": [
-      {
-        "type": "centered_text",
-        "field": "word",
-        "font": "noto_serif_bold",
-        "font_size": 64,
-        "max_width_ratio": 0.9,
-        "vertical_center": true
-      },
-      { "type": "spacer", "height": 8 },
-      {
-        "type": "text",
-        "field": "phonetic",
-        "font": "noto_serif_light",
-        "font_size": 11,
-        "align": "center",
-        "max_lines": 1
-      },
-      { "type": "spacer", "height": 20 },
-      {
-        "type": "text",
-        "field": "definition",
-        "font": "noto_serif_regular",
-        "font_size": 16,
-        "align": "center",
-        "max_lines": 2
-      },
-      { "type": "spacer", "height": 15 },
-      {
-        "type": "text",
-        "field": "example",
-        "font": "lora_italic",
-        "font_size": 12,
-        "align": "center",
-        "max_lines": 2
-      }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "word_card",
+    "preset_props": {
+      "padding_x": 18,
+      "justify": "center",
+      "gap": 8,
+      "word_inset_x": 20,
+      "word_field": "word",
+      "word_font": "noto_serif_bold",
+      "word_font_size": 52,
+      "phonetic_field": "phonetic",
+      "phonetic_font": "noto_serif_light",
+      "phonetic_font_name": "GentiumPlus-Regular.ttf",
+      "phonetic_font_size": 13,
+      "separator_width": 40,
+      "definition_field": "definition",
+      "definition_font": "noto_serif_regular",
+      "definition_font_size": 16,
+      "definition_max_lines": 2,
+      "example_field": "example",
+      "example_font": "noto_serif_light",
+      "example_font_size": 12,
+      "example_max_lines": 2
+    },
     "footer": { "label": "WORD", "attribution_template": "— Daily Learning" }
   }
 }

@@ -71,69 +71,30 @@
       "line_width": 1,
       "dashed": false
     },
+    "layout_engine": "component_tree",
     "body_align": "top",
-    "body": [
-      {
-        "type": "spacer",
-        "height": 18
-      },
-      {
-        "type": "text",
-        "field": "message",
-        "font": "noto_serif_regular",
-        "font_size": 16,
-        "align": "center",
-        "margin_x": 28,
-        "max_lines": 2
-      },
-      {
-        "type": "spacer",
-        "height": 18
-      },
-      {
-        "type": "list",
-        "field": "events",
-        "max_items": 1,
-        "item_template": "{name}",
-        "font_size": 14,
-        "align": "center"
-      },
-      {
-        "type": "list",
-        "field": "events",
-        "max_items": 1,
-        "item_template": "{date}",
-        "font_size": 11,
-        "align": "center"
-      },
-      {
-        "type": "separator",
-        "style": "short",
-        "width": 70
-      },
-      {
-        "type": "spacer",
-        "height": 18
-      },
-      {
-        "type": "list",
-        "field": "events",
-        "max_items": 1,
-        "item_template": "{days}",
-        "font": "lora_bold",
-        "font_size": 52,
-        "item_spacing": 58,
-        "align": "center"
-      },
-      {
-        "type": "text",
-        "template": "days to go",
-        "font_name": "Lora-Regular.ttf",
-        "font_size": 13,
-        "align": "center",
-        "max_lines": 1
-      }
-    ],
+    "body_preset": "countdown_card",
+    "preset_props": {
+      "top_gap": 18,
+      "message_field": "message",
+      "message_font": "noto_serif_regular",
+      "message_font_size": 16,
+      "message_max_lines": 2,
+      "event_gap": 6,
+      "event_name_field": "name",
+      "event_name_font": "noto_serif_regular",
+      "event_name_font_size": 14,
+      "event_date_field": "date",
+      "event_date_font": "noto_serif_light",
+      "event_date_font_size": 11,
+      "divider_width": 70,
+      "days_field": "days",
+      "days_font": "noto_serif_bold",
+      "days_font_size": 52,
+      "days_label_template": "days to go",
+      "days_label_font": "noto_serif_regular",
+      "days_label_font_size": 13
+    },
     "footer": {
       "label": "Countdown",
       "attribution_template": "— Remember"
@@ -142,115 +103,33 @@
   "layout_overrides": {
     "296x128": {
       "body_align": "center",
-      "body": [
-        {
-          "type": "text",
-          "field": "message",
-          "font": "noto_serif_regular",
-          "font_size": 16,
-          "align": "center",
-          "margin_x": 42,
-          "max_lines": 2
-        },
-        {
-          "type": "list",
-          "field": "events",
-          "max_items": 1,
-          "item_template": "{name}",
-          "font_size": 12,
-          "align": "center"
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 40
-        },
-        {
-          "type": "list",
-          "field": "events",
-          "max_items": 1,
-          "item_template": "{days}",
-          "font": "lora_bold",
-          "font_size": 36,
-          "item_spacing": 40,
-          "align": "center"
-        },
-        {
-          "type": "text",
-          "template": "days to go",
-          "font_name": "Lora-Regular.ttf",
-          "font_size": 9,
-          "align": "center"
-        }
-      ],
+      "preset_props": {
+        "top_gap": 0,
+        "gap": 8,
+        "message_font_size": 16,
+        "event_gap": 4,
+        "event_name_font_size": 12,
+        "show_event_date": false,
+        "divider_width": 40,
+        "days_font_size": 36,
+        "days_label_font_size": 9
+      },
       "footer": {
         "label": "Countdown",
         "height": 18
       }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "spacer",
-          "height": 22
-        },
-        {
-          "type": "text",
-          "field": "message",
-          "font": "noto_serif_regular",
-          "font_size": 16,
-          "align": "center",
-          "margin_x": 42,
-          "max_lines": 2
-        },
-        {
-          "type": "spacer",
-          "height": 10
-        },
-        {
-          "type": "list",
-          "field": "events",
-          "max_items": 1,
-          "item_template": "{name}",
-          "font_size": 20,
-          "align": "center"
-        },
-        {
-          "type": "list",
-          "field": "events",
-          "max_items": 1,
-          "item_template": "{date}",
-          "font_size": 16,
-          "align": "center"
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 100
-        },
-        {
-          "type": "spacer",
-          "height": 28
-        },
-        {
-          "type": "list",
-          "field": "events",
-          "max_items": 1,
-          "item_template": "{days}",
-          "font": "lora_bold",
-          "font_size": 80,
-          "item_spacing": 88,
-          "align": "center"
-        },
-        {
-          "type": "text",
-          "template": "days to go",
-          "font_name": "Lora-Regular.ttf",
-          "font_size": 18,
-          "align": "center",
-          "max_lines": 1
-        }
-      ]
+      "preset_props": {
+        "top_gap": 22,
+        "gap": 10,
+        "event_gap": 8,
+        "event_name_font_size": 20,
+        "event_date_font_size": 16,
+        "divider_width": 100,
+        "days_font_size": 80,
+        "days_label_font_size": 18
+      }
     }
   }
 }

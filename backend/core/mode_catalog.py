@@ -43,8 +43,8 @@ BUILTIN_CATALOG: list[CatalogItem] = [
     CatalogItem(
         mode_id="BRIEFING",
         category="core",
-        zh=CatalogText(name="简报", tip="科技热榜 + AI 洞察简报"),
-        en=CatalogText(name="Briefing", tip="Tech trends + AI insights briefing"),
+        zh=CatalogText(name="简报", tip="科技热榜与产品动态聚合"),
+        en=CatalogText(name="Briefing", tip="A tech news and product roundup"),
     ),
     CatalogItem(
         mode_id="STOIC",

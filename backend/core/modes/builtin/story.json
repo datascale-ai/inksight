@@ -24,19 +24,32 @@
     }
   },
   "layout": {
+    "layout_engine": "component_tree",
     "status_bar": { "line_width": 1, "dashed": true },
-    "body": [
-      { "type": "spacer", "height": 6 },
-      { "type": "text", "field": "genre", "font_size": 9, "align": "center" },
-      { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 16, "align": "center" },
-      { "type": "separator", "style": "short", "width": 50 },
-      { "type": "spacer", "height": 6 },
-      { "type": "text", "field": "opening", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 3 },
-      { "type": "spacer", "height": 6 },
-      { "type": "text", "field": "twist", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 3 },
-      { "type": "spacer", "height": 6 },
-      { "type": "text", "field": "ending", "font": "noto_serif_light", "font_size": 13, "align": "left", "margin_x": 28, "max_lines": 3 }
-    ],
+    "component_theme": {
+      "body_font": "noto_serif_regular",
+      "body_font_size": 13,
+      "body_line_gap": 5
+    },
+    "body_preset": "story_card",
+    "preset_props": {
+      "padding_x": 18,
+      "padding_y": 6,
+      "justify": "center",
+      "gap": 6,
+      "meta_field": "genre",
+      "meta_font_size": 9,
+      "title_field": "title",
+      "title_font": "noto_serif_bold",
+      "title_font_size": 16,
+      "title_max_lines": 2,
+      "separator_width": 50,
+      "sections": [
+        { "field": "opening", "font_size": 13, "inset_x": 28, "max_lines": 3 },
+        { "field": "twist", "font_size": 13, "inset_x": 28, "max_lines": 3 },
+        { "field": "ending", "font": "noto_serif_light", "font_size": 13, "inset_x": 28, "max_lines": 3 }
+      ]
+    },
     "footer": {
       "label": "STORY",
       "attribution_template": "— Micro Fiction",
@@ -45,27 +58,43 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 12, "align": "center" },
-        { "type": "separator", "style": "short", "width": 30 },
-        { "type": "text", "field": "opening", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2 },
-        { "type": "text", "field": "twist", "font_size": 10, "align": "left", "margin_x": 8, "max_lines": 2 }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "padding_y": 4,
+        "justify": "center",
+        "gap": 4,
+        "meta_field": null,
+        "title_field": "title",
+        "title_font": "noto_serif_bold",
+        "title_font_size": 12,
+        "title_max_lines": 2,
+        "separator_width": 30,
+        "sections": [
+          { "field": "opening", "font_size": 10, "inset_x": 8, "max_lines": 2 },
+          { "field": "twist", "font_size": 10, "inset_x": 8, "max_lines": 2 }
+        ]
+      },
       "footer": { "label": "STORY", "dashed": true, "height": 18 }
     },
     "800x480": {
-      "body": [
-        { "type": "spacer", "height": 10 },
-        { "type": "text", "field": "genre", "font_size": 13, "align": "center" },
-        { "type": "text", "field": "title", "font": "noto_serif_bold", "font_size": 24, "align": "center" },
-        { "type": "separator", "style": "short", "width": 70 },
-        { "type": "spacer", "height": 10 },
-        { "type": "text", "field": "opening", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 4 },
-        { "type": "spacer", "height": 10 },
-        { "type": "text", "field": "twist", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 4 },
-        { "type": "spacer", "height": 10 },
-        { "type": "text", "field": "ending", "font": "noto_serif_light", "font_size": 19, "align": "left", "margin_x": 48, "max_lines": 4 }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "padding_y": 10,
+        "justify": "center",
+        "gap": 10,
+        "meta_field": "genre",
+        "meta_font_size": 13,
+        "title_field": "title",
+        "title_font": "noto_serif_bold",
+        "title_font_size": 24,
+        "title_max_lines": 2,
+        "separator_width": 70,
+        "sections": [
+          { "field": "opening", "font_size": 19, "inset_x": 48, "max_lines": 4 },
+          { "field": "twist", "font_size": 19, "inset_x": 48, "max_lines": 4 },
+          { "field": "ending", "font": "noto_serif_light", "font_size": 19, "inset_x": 48, "max_lines": 4 }
+        ]
+      }
     }
   }
 }

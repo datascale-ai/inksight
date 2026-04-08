@@ -45,28 +45,20 @@
       "line_width": 1,
       "dashed": true
     },
-    "body": [
-      {
-        "type": "centered_text",
-        "field": "word",
-        "font_name": "Lora-Regular.ttf",
-        "font_size": 48,
-        "max_width_ratio": 0.7,
-        "vertical_center": true
-      },
-      {
-        "type": "spacer",
-        "height": 10
-      },
-      {
-        "type": "text",
-        "field": "source",
-        "font_name": "Lora-Regular.ttf",
-        "font_size": 9,
-        "align": "center",
-        "max_lines": 1
-      }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "zen_focus_card",
+    "preset_props": {
+      "padding_x": 18,
+      "justify": "center",
+      "gap": 10,
+      "word_inset_x": 60,
+      "word_field": "word",
+      "word_font": "noto_serif_regular",
+      "word_font_size": 48,
+      "source_field": "source",
+      "source_font": "noto_serif_light",
+      "source_font_size": 9
+    },
     "footer": {
       "label": "Zen",
       "attribution_template": "— ...",
@@ -75,16 +67,12 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "word",
-          "font_name": "Lora-Regular.ttf",
-          "font_size": 32,
-          "max_width_ratio": 0.7,
-          "vertical_center": true
-        }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "word_inset_x": 44,
+        "word_font_size": 32,
+        "source_field": null
+      },
       "footer": {
         "label": "Zen",
         "attribution_template": "— ...",
@@ -93,28 +81,13 @@
       }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "word",
-          "font_name": "Lora-Regular.ttf",
-          "font_size": 72,
-          "max_width_ratio": 0.7,
-          "vertical_center": true
-        },
-        {
-          "type": "spacer",
-          "height": 14
-        },
-        {
-          "type": "text",
-          "field": "source",
-          "font_name": "Lora-Regular.ttf",
-          "font_size": 14,
-          "align": "center",
-          "max_lines": 1
-        }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "gap": 14,
+        "word_inset_x": 120,
+        "word_font_size": 72,
+        "source_font_size": 14
+      }
     }
   }
 }

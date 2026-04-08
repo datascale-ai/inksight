@@ -90,174 +90,71 @@
     ]
   },
   "layout": {
+    "layout_engine": "component_tree",
     "status_bar": {
       "line_width": 1,
       "dashed": true
     },
-    "body": [
-      {
-        "type": "spacer",
-        "height": 14
-      },
-      {
-        "type": "text",
-        "field": "title",
-        "font": "noto_serif_bold",
-        "font_size": 14,
-        "align": "center"
-      },
-      {
-        "type": "spacer",
-        "height": 4
-      },
-      {
-        "type": "text",
-        "field": "author",
-        "font": "noto_serif_light",
-        "font_size": 11,
-        "align": "center"
-      },
-      {
-        "type": "spacer",
-        "height": 6
-      },
-      {
-        "type": "separator",
-        "style": "short",
-        "width": 60,
-        "line_width": 1
-      },
-      {
-        "type": "spacer",
-        "height": 8
-      },
-      {
-        "type": "list",
-        "field": "lines",
-        "max_items": 8,
-        "item_template": "{_value}",
-        "font": "noto_serif_regular",
-        "font_size": 16,
-        "item_spacing": 24,
-        "margin_x": 30,
-        "align": "center"
-      },
-      {
-        "type": "spacer",
-        "height": 8
-      },
-      {
-        "type": "text",
-        "field": "note",
-        "font": "noto_serif_light",
-        "font_size": 10,
-        "align": "center",
-        "max_lines": 2
-      }
-    ],
+    "body_preset": "poetry_card",
+    "preset_props": {
+      "top_gap": 14,
+      "title_field": "title",
+      "title_font": "noto_serif_bold",
+      "title_font_size": 14,
+      "author_field": "author",
+      "author_font": "noto_serif_light",
+      "author_font_size": 11,
+      "separator_width": 60,
+      "lines_field": "lines",
+      "lines_limit": 8,
+      "lines_inset_x": 30,
+      "lines_font": "noto_serif_regular",
+      "lines_font_size": 16,
+      "lines_gap": 8,
+      "note_field": "note",
+      "note_font": "noto_serif_light",
+      "note_font_size": 10,
+      "note_max_lines": 2
+    },
     "footer": {
-      "label": "??",
+      "label": "POETRY",
       "attribution_template": "— {author}",
       "dashed": true
     }
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "text",
-          "field": "title",
-          "font": "noto_serif_bold",
-          "font_size": 11,
-          "align": "center"
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 40,
-          "line_width": 1
-        },
-        {
-          "type": "list",
-          "field": "lines",
-          "max_items": 4,
-          "item_template": "{_value}",
-          "font": "noto_serif_regular",
-          "font_size": 11,
-          "item_spacing": 14,
-          "margin_x": 8,
-          "align": "center"
-        }
-      ],
+      "preset_props": {
+        "top_gap": 0,
+        "gap": 5,
+        "title_font_size": 11,
+        "author_field": null,
+        "separator_width": 40,
+        "lines_limit": 4,
+        "lines_inset_x": 8,
+        "lines_font_size": 11,
+        "lines_gap": 3,
+        "note_field": null
+      },
       "footer": {
-        "label": "??",
+        "label": "POETRY",
         "attribution_template": "— {author}",
         "dashed": true,
         "height": 18
       }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "spacer",
-          "height": 22
-        },
-        {
-          "type": "text",
-          "field": "title",
-          "font": "noto_serif_bold",
-          "font_size": 22,
-          "align": "center"
-        },
-        {
-          "type": "spacer",
-          "height": 8
-        },
-        {
-          "type": "text",
-          "field": "author",
-          "font": "noto_serif_light",
-          "font_size": 16,
-          "align": "center"
-        },
-        {
-          "type": "spacer",
-          "height": 10
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 90,
-          "line_width": 1
-        },
-        {
-          "type": "spacer",
-          "height": 14
-        },
-        {
-          "type": "list",
-          "field": "lines",
-          "max_items": 8,
-          "item_template": "{_value}",
-          "font": "noto_serif_regular",
-          "font_size": 24,
-          "item_spacing": 32,
-          "margin_x": 50,
-          "align": "center"
-        },
-        {
-          "type": "spacer",
-          "height": 12
-        },
-        {
-          "type": "text",
-          "field": "note",
-          "font": "noto_serif_light",
-          "font_size": 14,
-          "align": "center",
-          "max_lines": 2
-        }
-      ]
+      "preset_props": {
+        "top_gap": 22,
+        "gap": 10,
+        "title_font_size": 22,
+        "author_font_size": 16,
+        "separator_width": 90,
+        "lines_inset_x": 50,
+        "lines_font_size": 24,
+        "lines_gap": 12,
+        "note_font_size": 14
+      }
     }
   }
 }

@@ -179,6 +179,3 @@ class TestApiKeyFlow:
             client, max_tokens = _get_client("deepseek", "deepseek-chat", api_key=device_api_key)
             assert client is not None
 
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

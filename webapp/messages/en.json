@@ -100,8 +100,9 @@
   "footer.hardwareGuide": "Hardware Guide",
   "footer.apiDocs": "API Docs",
   "footer.techStack": "Tech Stack",
-  "footer.tech.item1": "ESP32-C3 + 4.2\" E-Paper",
+  "footer.tech.item1": "ESP32 + 4.2\" E-Paper",
   "footer.tech.item2": "Python FastAPI Backend",
-  "footer.tech.item3": "DeepSeek / Qwen / Kimi",
+  "footer.tech.item3": "Next.js Web App",
+  "footer.tech.item4": "DeepSeek / Qwen / Kimi",
   "footer.tagline": "Made with care for slow information."
 }

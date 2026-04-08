@@ -3,14 +3,12 @@
   "display_name": "Tech Brief",
   "icon": "global",
   "cacheable": false,
-  "description": "Top tech stories from HN and Product Hunt",
+  "description": "Top tech stories from HN, Product Hunt, and Dev.to",
   "content": {
     "type": "external_data",
     "provider": "briefing",
     "hn_limit": 2,
-    "v2ex_limit": 1,
-    "summarize": true,
-    "include_insight": true,
+    "devto_limit": 2,
     "fallback": {
       "hn_items": [
         {
@@ -22,10 +20,14 @@
         "name": "N/A",
         "tagline": ""
       },
-      "v2ex_items": [],
-      "insight": "Unable to fetch today's tech news. Please try again later.",
+      "devto_items": [
+        {
+          "title": "Dev.to unavailable"
+        }
+      ],
       "ph_name": "N/A",
-      "ph_tagline": ""
+      "ph_tagline": "",
+      "devto_title": "Dev.to unavailable"
     },
     "fallback_pool": [
       {
@@ -39,10 +41,14 @@
           "name": "N/A",
           "tagline": ""
         },
-        "v2ex_items": [],
-        "insight": "Unable to fetch today's tech news. Please try again later.",
+        "devto_items": [
+          {
+            "title": "Dev.to unavailable"
+          }
+        ],
         "ph_name": "N/A",
-        "ph_tagline": ""
+        "ph_tagline": "",
+        "devto_title": "Dev.to unavailable"
       },
       {
         "hn_items": [
@@ -55,14 +61,14 @@
           "name": "AI Toolkit",
           "tagline": "Essential for developers"
         },
-        "v2ex_items": [
+        "devto_items": [
           {
-            "title": "What did you learn today?"
+            "title": "Open-source AI tools keep shipping faster every week"
           }
         ],
-        "insight": "AI tools are evolving fast. Watch open-source models and local deployment.",
         "ph_name": "AI Toolkit",
-        "ph_tagline": "Essential for developers"
+        "ph_tagline": "Essential for developers",
+        "devto_title": "Open-source AI tools keep shipping faster every week"
       },
       {
         "hn_items": [
@@ -75,199 +81,126 @@
           "name": "DevTools",
           "tagline": "Boost productivity"
         },
-        "v2ex_items": [],
-        "insight": "The open-source ecosystem is thriving. Explore new projects.",
+        "devto_items": [
+          {
+            "title": "Developers discuss the most useful tools released this week"
+          }
+        ],
         "ph_name": "DevTools",
-        "ph_tagline": "Boost productivity"
+        "ph_tagline": "Boost productivity",
+        "devto_title": "Developers discuss the most useful tools released this week"
       }
     ]
   },
   "layout": {
+    "layout_engine": "component_tree",
     "status_bar": {
       "line_width": 1,
       "dashed": false
     },
-    "body": [
-      {
-        "type": "section",
-        "title": "HN Top",
-        "icon": "global",
-        "title_font_size": 13,
-        "children": [
-          {
-            "type": "list",
-            "field": "hn_items",
-            "max_items": 2,
-            "item_template": "{title}",
-            "right_field": "score",
-            "font_size": 12,
-            "item_spacing": 18,
-            "margin_x": 36
-          }
-        ]
-      },
-      {
-        "type": "spacer",
-        "height": 4
-      },
-      {
-        "type": "separator",
-        "style": "dashed",
-        "margin_x": 24
-      },
-      {
-        "type": "section",
-        "title": "PH #1",
-        "icon": "star",
-        "title_font_size": 13,
-        "children": [
-          {
-            "type": "text",
-            "template": "{ph_name}",
-            "font_size": 13,
-            "align": "left",
-            "margin_x": 36,
-            "max_lines": 1
-          },
-          {
-            "type": "text",
-            "template": "{ph_tagline}",
-            "font_size": 11,
-            "align": "left",
-            "margin_x": 36,
-            "max_lines": 2
-          }
-        ]
-      },
-      {
-        "type": "separator",
-        "style": "dashed",
-        "margin_x": 30
-      },
-      {
-        "type": "spacer",
-        "height": 4
-      },
-      {
-        "type": "text",
-        "field": "insight",
-        "font_size": 12,
-        "align": "left",
-        "margin_x": 24,
-        "max_lines": 3
-      }
-    ],
+    "component_theme": {
+      "body_font": "noto_serif_regular",
+      "body_font_size": 13,
+      "body_line_gap": 5,
+      "section_title_font": "noto_serif_regular",
+      "section_title_font_size": 13,
+      "section_icon_size": 13,
+      "section_icon_gap": 16,
+      "section_title_gap": 6,
+      "section_content_indent": 36,
+      "section_content_gap": 4
+    },
+    "body_preset": "briefing_sections",
+    "preset_props": {
+      "padding_x": 18,
+      "padding_y": 6,
+      "gap": 4,
+      "justify": "space_between",
+      "sections": [
+        {
+          "title": "HN Top",
+          "icon": "global",
+          "kind": "repeat_row",
+          "field": "hn_items",
+          "limit": 2,
+          "gap": 6,
+          "left_field": "title",
+          "left_align": "left",
+          "left_max_lines": 2,
+          "left_grow": 1,
+          "right_field": "score",
+          "right_font": "noto_serif_regular",
+          "right_font_size": 13,
+          "right_align": "right",
+          "right_max_lines": 1
+        },
+        {
+          "title": "Dev.to",
+          "icon": "app",
+          "kind": "repeat_text",
+          "field": "devto_items",
+          "limit": 2,
+          "gap": 6,
+          "text_field": "title",
+          "text_align": "left",
+          "text_max_lines": 2,
+          "text_line_height": 18
+        },
+        {
+          "title": "ProductHunt",
+          "icon": "star",
+          "kind": "stack_text",
+          "gap": 4,
+          "items": [
+            { "field": "ph_name", "align": "left", "max_lines": 1 },
+            { "field": "ph_tagline", "align": "left", "max_lines": 2, "ellipsis": false, "line_height": 18 }
+          ]
+        }
+      ]
+    },
     "footer": {
       "label": "Briefing",
-      "attribution_template": "— AI Brief"
+      "attribution_template": "— Tech Brief"
     }
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "list",
-          "field": "hn_items",
-          "max_items": 2,
-          "item_template": "{title}",
-          "font_size": 10,
-          "item_spacing": 14,
-          "margin_x": 8
-        },
-        {
-          "type": "spacer",
-          "height": 2
-        },
-        {
-          "type": "separator",
-          "style": "dashed",
-          "margin_x": 8
-        },
-        {
-          "type": "text",
-          "field": "insight",
-          "font_size": 10,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 2
-        }
-      ],
+      "component_theme": {
+        "body_font_size": 10,
+        "body_line_gap": 4,
+        "section_title_font_size": 10,
+        "section_icon_size": 10,
+        "section_icon_gap": 12,
+        "section_title_gap": 4,
+        "section_content_indent": 18,
+        "section_content_gap": 2
+      },
+      "preset_props": {
+        "padding_x": 8,
+        "padding_y": 4,
+        "gap": 4
+      },
       "footer": {
         "label": "Briefing",
         "height": 18
       }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "section",
-          "title": "HN Top",
-          "icon": "global",
-          "title_font_size": 18,
-          "children": [
-            {
-              "type": "list",
-              "field": "hn_items",
-              "max_items": 2,
-              "item_template": "{title}",
-              "right_field": "score",
-              "font_size": 16,
-              "item_spacing": 24,
-              "margin_x": 56
-            }
-          ]
-        },
-        {
-          "type": "spacer",
-          "height": 6
-        },
-        {
-          "type": "separator",
-          "style": "dashed",
-          "margin_x": 40
-        },
-        {
-          "type": "section",
-          "title": "PH #1",
-          "icon": "star",
-          "title_font_size": 18,
-          "children": [
-            {
-              "type": "text",
-              "template": "{ph_name}",
-              "font_size": 18,
-              "align": "left",
-              "margin_x": 56,
-              "max_lines": 1
-            },
-            {
-              "type": "text",
-              "template": "{ph_tagline}",
-              "font_size": 15,
-              "align": "left",
-              "margin_x": 56,
-              "max_lines": 2
-            }
-          ]
-        },
-        {
-          "type": "separator",
-          "style": "dashed",
-          "margin_x": 48
-        },
-        {
-          "type": "spacer",
-          "height": 8
-        },
-        {
-          "type": "text",
-          "field": "insight",
-          "font_size": 16,
-          "align": "left",
-          "margin_x": 40,
-          "max_lines": 4
-        }
-      ]
+      "component_theme": {
+        "body_font_size": 16,
+        "body_line_gap": 8,
+        "section_title_font_size": 18,
+        "section_icon_size": 18,
+        "section_icon_gap": 24,
+        "section_title_gap": 10,
+        "section_content_indent": 56,
+        "section_content_gap": 6
+      },
+      "preset_props": {
+        "padding_x": 28,
+        "padding_y": 10,
+        "gap": 14
+      }
     }
   }
 }

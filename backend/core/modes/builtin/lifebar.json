@@ -20,34 +20,61 @@
   },
   "layout": {
     "status_bar": { "line_width": 1, "dashed": false },
-    "body": [
-      { "type": "spacer", "height": 12 },
-      { "type": "text", "field": "year_label", "font_size": 12, "align": "left", "margin_x": 32 },
-      { "type": "text", "template": "{year_pct}%", "font": "lora_bold", "font_size": 28, "align": "left", "margin_x": 32 },
-      { "type": "progress_bar", "field": "day_of_year", "max_field": "days_in_year", "width": 336, "height": 8, "margin_x": 32 },
-      { "type": "spacer", "height": 14 },
-      {
-        "type": "two_column",
-        "left_width": 180,
-        "gap": 10,
-        "left": [
-          { "type": "text", "field": "month_label", "font_size": 11, "align": "left", "margin_x": 32 },
-          { "type": "text", "template": "{month_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 32 },
-          { "type": "progress_bar", "field": "day", "max_field": "days_in_month", "width": 140, "height": 6, "margin_x": 32 }
-        ],
-        "right": [
-          { "type": "text", "field": "week_label", "font_size": 11, "align": "left", "margin_x": 8 },
-          { "type": "text", "template": "{week_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 8 },
-          { "type": "progress_bar", "field": "weekday_num", "max_field": "week_total", "width": 140, "height": 6, "margin_x": 8 }
-        ]
+    "layout_engine": "component_tree",
+    "body_preset": "lifebar_card",
+    "preset_props": {
+      "top_gap": 12,
+      "padding_x": 32,
+      "gap": 14,
+      "row_gap": 10,
+      "left_panel_width": 163,
+      "right_panel_width": 163,
+      "divider_margin_x": 32,
+      "primary_metric": {
+        "label_field": "year_label",
+        "label_font_size": 12,
+        "value_template": "{year_pct}%",
+        "value_font": "noto_serif_bold",
+        "value_font_size": 28,
+        "bar_field": "day_of_year",
+        "bar_max_field": "days_in_year",
+        "bar_width": 336,
+        "bar_height": 8
       },
-      { "type": "spacer", "height": 14 },
-      { "type": "separator", "style": "dashed", "margin_x": 32 },
-      { "type": "spacer", "height": 6 },
-      { "type": "text", "field": "life_label", "font_size": 11, "align": "left", "margin_x": 32 },
-      { "type": "text", "template": "{life_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 32 },
-      { "type": "progress_bar", "field": "age", "max_field": "life_expect", "width": 336, "height": 8, "margin_x": 32 }
-    ],
+      "left_metric": {
+        "label_field": "month_label",
+        "label_font_size": 11,
+        "value_template": "{month_pct}%",
+        "value_font": "noto_serif_bold",
+        "value_font_size": 20,
+        "bar_field": "day",
+        "bar_max_field": "days_in_month",
+        "bar_width": 140,
+        "bar_height": 6
+      },
+      "right_metric": {
+        "label_field": "week_label",
+        "label_font_size": 11,
+        "value_template": "{week_pct}%",
+        "value_font": "noto_serif_bold",
+        "value_font_size": 20,
+        "bar_field": "weekday_num",
+        "bar_max_field": "week_total",
+        "bar_width": 140,
+        "bar_height": 6
+      },
+      "bottom_metric": {
+        "label_field": "life_label",
+        "label_font_size": 11,
+        "value_template": "{life_pct}%",
+        "value_font": "noto_serif_bold",
+        "value_font_size": 20,
+        "bar_field": "age",
+        "bar_max_field": "life_expect",
+        "bar_width": 336,
+        "bar_height": 8
+      }
+    },
     "footer": {
       "label": "LIFEBAR",
       "attribution_template": "— Time Flies"
@@ -55,47 +82,91 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        { "type": "spacer", "height": 4 },
-        { "type": "text", "field": "year_label", "font_size": 10, "align": "left", "margin_x": 8 },
-        { "type": "text", "template": "{year_pct}%", "font": "lora_bold", "font_size": 20, "align": "left", "margin_x": 8 },
-        { "type": "progress_bar", "field": "day_of_year", "max_field": "days_in_year", "width": 200, "height": 6, "margin_x": 8 },
-        { "type": "spacer", "height": 6 },
-        { "type": "text", "field": "life_label", "font_size": 10, "align": "left", "margin_x": 8 },
-        { "type": "text", "template": "{life_pct}%", "font": "lora_bold", "font_size": 16, "align": "left", "margin_x": 8 },
-        { "type": "progress_bar", "field": "age", "max_field": "life_expect", "width": 200, "height": 6, "margin_x": 8 }
-      ],
+      "preset_props": {
+        "top_gap": 4,
+        "padding_x": 8,
+        "gap": 6,
+        "show_middle": false,
+        "show_divider": false,
+        "primary_metric": {
+          "label_field": "year_label",
+          "label_font_size": 10,
+          "value_template": "{year_pct}%",
+          "value_font": "noto_serif_bold",
+          "value_font_size": 20,
+          "bar_field": "day_of_year",
+          "bar_max_field": "days_in_year",
+          "bar_width": 200,
+          "bar_height": 6
+        },
+        "bottom_metric": {
+          "label_field": "life_label",
+          "label_font_size": 10,
+          "value_template": "{life_pct}%",
+          "value_font": "noto_serif_bold",
+          "value_font_size": 16,
+          "bar_field": "age",
+          "bar_max_field": "life_expect",
+          "bar_width": 200,
+          "bar_height": 6
+        }
+      },
       "footer": { "label": "LIFEBAR", "height": 20 }
     },
     "648x480": {
-      "body": [
-        { "type": "spacer", "height": 20 },
-        { "type": "text", "field": "year_label", "font_size": 16, "align": "left", "margin_x": 50 },
-        { "type": "text", "template": "{year_pct}%", "font": "lora_bold", "font_size": 42, "align": "left", "margin_x": 50 },
-        { "type": "progress_bar", "field": "day_of_year", "max_field": "days_in_year", "width": 548, "height": 10, "margin_x": 50 },
-        { "type": "spacer", "height": 20 },
-        {
-          "type": "two_column",
-          "left_width": 290,
-          "gap": 14,
-          "left": [
-            { "type": "text", "field": "month_label", "font_size": 14, "align": "left", "margin_x": 50 },
-            { "type": "text", "template": "{month_pct}%", "font": "lora_bold", "font_size": 28, "align": "left", "margin_x": 50 },
-            { "type": "progress_bar", "field": "day", "max_field": "days_in_month", "width": 220, "height": 8, "margin_x": 50 }
-          ],
-          "right": [
-            { "type": "text", "field": "week_label", "font_size": 14, "align": "left", "margin_x": 12 },
-            { "type": "text", "template": "{week_pct}%", "font": "lora_bold", "font_size": 28, "align": "left", "margin_x": 12 },
-            { "type": "progress_bar", "field": "weekday_num", "max_field": "week_total", "width": 220, "height": 8, "margin_x": 12 }
-          ]
+      "preset_props": {
+        "top_gap": 20,
+        "padding_x": 50,
+        "gap": 20,
+        "row_gap": 14,
+        "left_panel_width": 267,
+        "right_panel_width": 267,
+        "divider_margin_x": 50,
+        "primary_metric": {
+          "label_field": "year_label",
+          "label_font_size": 16,
+          "value_template": "{year_pct}%",
+          "value_font": "noto_serif_bold",
+          "value_font_size": 42,
+          "bar_field": "day_of_year",
+          "bar_max_field": "days_in_year",
+          "bar_width": 548,
+          "bar_height": 10
         },
-        { "type": "spacer", "height": 20 },
-        { "type": "separator", "style": "dashed", "margin_x": 50 },
-        { "type": "spacer", "height": 10 },
-        { "type": "text", "field": "life_label", "font_size": 14, "align": "left", "margin_x": 50 },
-        { "type": "text", "template": "{life_pct}%", "font": "lora_bold", "font_size": 28, "align": "left", "margin_x": 50 },
-        { "type": "progress_bar", "field": "age", "max_field": "life_expect", "width": 548, "height": 10, "margin_x": 50 }
-      ]
+        "left_metric": {
+          "label_field": "month_label",
+          "label_font_size": 14,
+          "value_template": "{month_pct}%",
+          "value_font": "noto_serif_bold",
+          "value_font_size": 28,
+          "bar_field": "day",
+          "bar_max_field": "days_in_month",
+          "bar_width": 220,
+          "bar_height": 8
+        },
+        "right_metric": {
+          "label_field": "week_label",
+          "label_font_size": 14,
+          "value_template": "{week_pct}%",
+          "value_font": "noto_serif_bold",
+          "value_font_size": 28,
+          "bar_field": "weekday_num",
+          "bar_max_field": "week_total",
+          "bar_width": 220,
+          "bar_height": 8
+        },
+        "bottom_metric": {
+          "label_field": "life_label",
+          "label_font_size": 14,
+          "value_template": "{life_pct}%",
+          "value_font": "noto_serif_bold",
+          "value_font_size": 28,
+          "bar_field": "age",
+          "bar_max_field": "life_expect",
+          "bar_width": 548,
+          "bar_height": 10
+        }
+      }
     }
   }
 }

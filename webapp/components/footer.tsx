@@ -71,6 +71,7 @@ export function Footer() {
               <li>{t(locale, "footer.tech.item1")}</li>
               <li>{t(locale, "footer.tech.item2")}</li>
               <li>{t(locale, "footer.tech.item3")}</li>
+              <li>{t(locale, "footer.tech.item4")}</li>
             </ul>
           </div>
         </div>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import html
 import json
 import os
 import re
@@ -486,17 +487,6 @@ def _fallback_content(persona: str) -> dict:
             "tip": "冬季干燥，记得多喝水，保持室内适当湿度。",
             "season_text": "立春已过，万物生长。",
         }
-    if persona == "BRIEFING":
-        return {
-            "hn_items": [
-                {"title": "Hacker News API 暂时不可用", "score": 0},
-                {"title": "请稍后重试", "score": 0},
-                {"title": "或检查网络连接", "score": 0},
-            ],
-            "ph_item": {"name": "Product Hunt", "tagline": "数据获取失败"},
-            "v2ex_items": [],
-            "insight": "今日科技动态暂时无法获取，请稍后刷新。",
-        }
     if persona == "COUNTDOWN":
         return {"events": []}
     return {"quote": "...", "author": ""}
@@ -546,6 +536,24 @@ async def fetch_hn_top_stories(limit: int = 3) -> list[dict]:
 
 async def fetch_ph_top_product() -> dict:
     """获取 Product Hunt 今日 #1 产品（通过 RSS）"""
+    def _first_present(*elements):
+        for element in elements:
+            if element is not None:
+                return element
+        return None
+
+    def _clean_ph_description(html_text: str) -> str:
+        paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", html_text or "", flags=re.IGNORECASE | re.DOTALL)
+        for paragraph in paragraphs:
+            text = html.unescape(re.sub(r"<[^>]+>", "", paragraph)).strip()
+            if text:
+                return text[:100]
+        text = html.unescape(re.sub(r"<[^>]+>", "", html_text or "")).strip()
+        text = re.sub(r"\b(Discussion|Link)\b", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*\|\s*", " ", text)
+        text = re.sub(r"\s+", " ", text).strip(" |")
+        return text[:100]
+
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             resp = await client.get("https://www.producthunt.com/feed")
@@ -572,21 +580,21 @@ async def fetch_ph_top_product() -> dict:
 
             first_item = items[0]
 
-            title = first_item.find("title") or first_item.find(
-                "{http://www.w3.org/2005/Atom}title"
+            title = _first_present(
+                first_item.find("title"),
+                first_item.find("{http://www.w3.org/2005/Atom}title"),
             )
-            description = (
-                first_item.find("description")
-                or first_item.find("summary")
-                or first_item.find("{http://www.w3.org/2005/Atom}summary")
-                or first_item.find("content")
-                or first_item.find("{http://www.w3.org/2005/Atom}content")
+            description = _first_present(
+                first_item.find("description"),
+                first_item.find("summary"),
+                first_item.find("{http://www.w3.org/2005/Atom}summary"),
+                first_item.find("content"),
+                first_item.find("{http://www.w3.org/2005/Atom}content"),
             )
 
             tagline_text = ""
             if description is not None and description.text:
-                tagline_text = re.sub(r"<[^>]+>", "", description.text).strip()
-                tagline_text = tagline_text[:100]
+                tagline_text = _clean_ph_description(description.text)
 
             product = {
                 "name": title.text if title is not None else "Unknown Product",
@@ -601,265 +609,37 @@ async def fetch_ph_top_product() -> dict:
         return {}
 
 
-# ── V2EX ─────────────────────────────────────────────────────
-
-
-async def fetch_v2ex_hot(limit: int = 3) -> list[dict]:
-    """获取 V2EX 热门话题"""
+async def fetch_devto_top(limit: int = 1) -> list[dict]:
+    """获取 Dev.to 热门文章。"""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get("https://www.v2ex.com/api/topics/hot.json")
-            if resp.status_code == 200:
-                topics = resp.json()[:limit]
-                return [
-                    {
-                        "title": t.get("title", ""),
-                        "node": t.get("node", {}).get("title", ""),
-                    }
-                    for t in topics
-                ]
-            logger.error(f"[V2EX] Failed to fetch hot topics: {resp.status_code}")
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(
+                "https://dev.to/api/articles",
+                params={"per_page": limit, "top": 7},
+            )
+            if resp.status_code != 200:
+                logger.error(f"[DevTo] Failed to fetch top articles: {resp.status_code}")
+                return []
+            data = resp.json()
+            topics = []
+            for item in data[:limit]:
+                if not isinstance(item, dict):
+                    continue
+                title = str(item.get("title", "")).strip()
+                if not title:
+                    continue
+                topics.append({
+                    "title": title,
+                    "score": int(item.get("public_reactions_count", 0) or 0),
+                    "url": str(item.get("url", "")),
+                })
+            logger.info(f"[DevTo] Fetched {len(topics)} top articles")
+            if topics:
+                logger.info(f"[DevTo] Top article title: {topics[0]['title']}")
+            return topics
     except (httpx.HTTPError, ValueError, TypeError) as e:
-        logger.error(f"[V2EX] Error: {e}")
+        logger.error(f"[DevTo] Error: {e}")
     return []
-
-
-# ── Briefing mode ────────────────────────────────────────────
-
-
-async def generate_briefing_insight(
-    hn_stories: list[dict],
-    ph_product: dict,
-    llm_provider: str = "deepseek",
-    llm_model: str = "deepseek-chat",
-    api_key: str | None = None,
-    llm_base_url: str | None = None,
-    language: str = "zh",
-) -> str:
-    """使用 LLM 生成行业洞察"""
-    hn_summary = "\n".join(
-        [f"- {s['title']} ({s['score']} points)" for s in hn_stories[:3]]
-    )
-    ph_summary = f"Product Hunt #1: {ph_product.get('name', 'N/A')}"
-
-    if language == "en":
-        prompt = f"""You are a technology industry analyst. Based on today's Hacker News top stories and the top Product Hunt launch, write one short industry insight in English (under 20 words).
-
-Hacker News Top 3:
-{hn_summary}
-
-{ph_summary}
-
-Requirements:
-1. Output the insight only, with no prefix or quotes
-2. Focus on technology trends or industry movement
-3. Keep it concise, sharp, and suitable for a morning briefing
-4. All output must be in English"""
-    else:
-        prompt = f"""你是一位科技行业分析师。根据今日 Hacker News 热榜和 Product Hunt 新品，生成一句简短的行业洞察（30字以内）。
-
-Hacker News Top 3:
-{hn_summary}
-
-{ph_summary}
-
-要求：
-1. 只输出洞察本身，不要前缀或引号
-2. 聚焦技术趋势或行业动态
-3. 语言简洁有力，适合晨间阅读"""
-
-    try:
-        insight = await _call_llm(llm_provider, llm_model, prompt, temperature=0.7, api_key=api_key, base_url=llm_base_url)
-        logger.info(f"[BRIEFING] Generated insight: {insight[:50]}...")
-        return insight
-    except _LLM_RECOVERABLE_ERRORS as e:
-        logger.error(f"[BRIEFING] Failed to generate insight: {e}")
-        return None  # 返回 None 表示失败
-
-
-async def summarize_briefing_content(
-    stories: list[dict],
-    ph_product: dict,
-    llm_provider: str = "deepseek",
-    llm_model: str = "deepseek-chat",
-    api_key: str | None = None,
-    llm_base_url: str | None = None,
-    language: str = "zh",
-) -> tuple[list[dict], dict]:
-    """使用单次 LLM 调用批量总结 HN stories 和 PH tagline（原先需 3-4 次调用）"""
-    try:
-        titles_to_summarize = []
-        for i, story in enumerate(stories):
-            title = story.get("title", "")
-            if title and len(title) >= 20:
-                titles_to_summarize.append((i, title))
-
-        ph_tagline = ""
-        ph_name = ""
-        if ph_product and ph_product.get("tagline") and len(ph_product["tagline"]) > 30:
-            ph_name = ph_product.get("name", "")
-            ph_tagline = ph_product["tagline"]
-
-        # Build a single batch prompt for all summaries
-        if not titles_to_summarize and not ph_tagline:
-            return stories, ph_product
-
-        if language == "en":
-            prompt_parts = [
-                "# Role",
-                "You are a tech editor skilled at summarizing technology news in concise English.",
-                "",
-                "# Tasks",
-                "Complete the following summarization tasks in order and return the result in JSON.",
-                "",
-            ]
-        else:
-            prompt_parts = [
-                "# Role",
-                "你是一个科技内容编辑，擅长用精练中文总结技术新闻。",
-                "",
-                "# Tasks",
-                "请按顺序完成以下总结任务，用 JSON 格式输出结果。",
-                "",
-            ]
-
-        if titles_to_summarize:
-            prompt_parts.append("## HN Stories Summary" if language == "en" else "## HN Stories 总结")
-            prompt_parts.append(
-                "Write an English summary under 20 words for each title:"
-                if language == "en"
-                else "为每条标题生成 30 字以内的中文简介："
-            )
-            for idx, (_, title) in enumerate(titles_to_summarize):
-                prompt_parts.append(f"  {idx + 1}. {title}")
-            prompt_parts.append("")
-
-        if ph_tagline:
-            prompt_parts.append("## Product Hunt Summary" if language == "en" else "## Product Hunt 产品总结")
-            prompt_parts.append(f"Product name: {ph_name}" if language == "en" else f"产品名称：{ph_name}")
-            prompt_parts.append(f"Original tagline: {ph_tagline}" if language == "en" else f"英文Slogan：{ph_tagline}")
-            prompt_parts.append(
-                "Rewrite it as an English introduction under 20 words."
-                if language == "en"
-                else "重写为 30 字以内的中文介绍。"
-            )
-            prompt_parts.append("")
-
-        prompt_parts.append("# Output (JSON only)" if language == "en" else "# Output (仅输出 JSON)")
-        prompt_parts.append('{')
-        if titles_to_summarize:
-            prompt_parts.append(
-                '  "hn_summaries": ["summary 1", "summary 2", ...],'
-                if language == "en"
-                else '  "hn_summaries": ["简介1", "简介2", ...],'
-            )
-        if ph_tagline:
-            prompt_parts.append(
-                '  "ph_summary": "English introduction"'
-                if language == "en"
-                else '  "ph_summary": "中文介绍"'
-            )
-        prompt_parts.append('}')
-
-        batch_prompt = "\n".join(prompt_parts)
-
-        text = await _call_llm(
-            llm_provider, llm_model, batch_prompt,
-            max_tokens=300, temperature=0.5, api_key=api_key, base_url=llm_base_url,
-        )
-        cleaned = _clean_json_response(text)
-        data = json.loads(cleaned)
-
-        # Apply HN summaries
-        hn_summaries = data.get("hn_summaries", [])
-        summarized_stories = list(stories)
-        for summary_idx, (story_idx, _) in enumerate(titles_to_summarize):
-            if summary_idx < len(hn_summaries):
-                summary = str(hn_summaries[summary_idx]).strip('"').strip("「」")
-                summarized_stories[story_idx] = {**stories[story_idx], "summary": summary}
-
-        logger.info(f"[BRIEFING] Batch-summarized {len(titles_to_summarize)} HN stories in 1 LLM call")
-
-        # Apply PH summary
-        summarized_ph = ph_product.copy() if ph_product else {}
-        if ph_tagline and data.get("ph_summary"):
-            summary = str(data["ph_summary"]).strip('"').strip("「」")
-            summarized_ph["tagline_original"] = ph_tagline
-            summarized_ph["tagline"] = summary
-            logger.info("[BRIEFING] Batch-summarized PH tagline")
-
-        return summarized_stories, summarized_ph
-
-    except _LLM_RECOVERABLE_ERRORS + (json.JSONDecodeError, TypeError) as e:
-        logger.error(f"[BRIEFING] Batch summarize failed, returning originals: {e}")
-        return None, None  
-
-
-async def generate_briefing_content(
-    ctx=None,
-    llm_provider: str = "deepseek",
-    llm_model: str = "deepseek-chat",
-    summarize: bool = True,
-    api_key: str | None = None,
-) -> dict:
-    """生成 BRIEFING 模式的完整内容"""
-    if ctx is not None:
-        llm_provider = ctx.llm_provider
-        llm_model = ctx.llm_model
-        api_key = ctx.api_key
-    language = getattr(ctx, "language", "zh") if ctx is not None else "zh"
-    import asyncio as _asyncio
-
-    logger.info("[BRIEFING] Starting content generation...")
-
-    # Fetch HN, PH, and V2EX concurrently
-    hn_stories, ph_product, v2ex_topics = await _asyncio.gather(
-        fetch_hn_top_stories(limit=2),
-        fetch_ph_top_product(),
-        fetch_v2ex_hot(limit=1),
-    )
-
-    if not hn_stories and not ph_product and not v2ex_topics:
-        logger.error("[BRIEFING] All data sources failed, using fallback")
-        if language == "en":
-            return {
-                "hn_items": [
-                    {"title": "Hacker News API unavailable", "score": 0},
-                    {"title": "Please try again later", "score": 0},
-                    {"title": "Or check your network connection", "score": 0},
-                ],
-                "ph_item": {"name": "Product Hunt", "tagline": "Failed to fetch data"},
-                "v2ex_items": [],
-                "insight": "Unable to fetch today's tech briefing. Please refresh later.",
-            }
-        return _fallback_content("BRIEFING")
-
-    if summarize:
-        llm_base_url = _extract_llm_base_url(ctx)
-        (hn_stories, ph_product), insight = await _asyncio.gather(
-            summarize_briefing_content(
-                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
-            ),
-            generate_briefing_insight(
-                hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
-            ),
-        )
-    else:
-        llm_base_url = _extract_llm_base_url(ctx)
-        insight = await generate_briefing_insight(
-            hn_stories, ph_product, llm_provider, llm_model, api_key=api_key, llm_base_url=llm_base_url, language=language
-        )
-
-    result = {
-        "hn_items": hn_stories if hn_stories else [{"title": "Failed to fetch data", "score": 0}] if language == "en" else [{"title": "数据获取失败", "score": 0}],
-        "ph_item": ph_product if ph_product else {"name": "N/A", "tagline": ""},
-        "v2ex_items": v2ex_topics if v2ex_topics else [],
-        "insight": insight or ("Unable to fetch today's tech briefing. Please refresh later." if language == "en" else "今日科技动态暂时无法获取，请稍后刷新。"),
-    }
-
-    logger.info("[BRIEFING] Content generation complete")
-    return result
-
 
 # ── Countdown mode ───────────────────────────────────────────
 

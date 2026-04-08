@@ -163,79 +163,39 @@
       "line_width": 1,
       "dashed": false
     },
-    "body": [
-      {
-        "type": "spacer",
-        "height": 14
-      },
-      {
-        "type": "text",
-        "field": "workout_name",
-        "font_name": "Lora-Bold.ttf",
-        "font_size": 16,
-        "align": "center"
-      },
-      {
-        "type": "text",
-        "field": "duration",
-        "font_size": 14,
-        "align": "center"
-      },
-      {
-        "type": "spacer",
-        "height": 2
-      },
-      {
-        "type": "separator",
-        "style": "solid",
-        "margin_x": 24,
-        "line_width": 1
-      },
-      {
-        "type": "icon_text",
-        "icon": "exercise",
-        "text": "Exercises",
-        "font_size": 14,
-        "margin_x": 24
-      },
-      {
-        "type": "list",
-        "field": "exercises",
-        "max_items": 8,
-        "item_template": "{name}",
-        "right_field": "reps",
-        "font_size": 13,
-        "item_spacing": 16,
-        "margin_x": 32,
-        "numbered": true
-      },
-      {
-        "type": "spacer",
-        "height": 4
-      },
-      {
-        "type": "separator",
-        "style": "solid",
-        "margin_x": 24,
-        "line_width": 1
-      },
-      {
-        "type": "section",
-        "title": "",
-        "icon": "tips",
-        "children": [
-          {
-            "type": "text",
-            "field": "tip",
-            "font_name": "Lora-Regular.ttf",
-            "font_size": 14,
-            "align": "left",
-            "margin_x": 40,
-            "max_lines": 3
-          }
-        ]
-      }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "fitness_card",
+    "preset_props": {
+      "top_gap": 14,
+      "title_field": "workout_name",
+      "title_font": "noto_serif_bold",
+      "title_font_size": 16,
+      "duration_field": "duration",
+      "duration_font": "noto_serif_regular",
+      "duration_font_size": 14,
+      "header_divider_margin_x": 24,
+      "exercise_title": "Exercises",
+      "exercise_icon": "exercise",
+      "section_title_font": "noto_serif_regular",
+      "section_title_font_size": 14,
+      "section_content_indent": 32,
+      "exercise_limit": 8,
+      "exercise_gap": 6,
+      "exercise_row_gap": 8,
+      "exercise_template": "{index}. {name}",
+      "exercise_font": "noto_serif_regular",
+      "exercise_font_size": 13,
+      "exercise_reps_field": "reps",
+      "exercise_reps_font": "noto_serif_regular",
+      "exercise_reps_font_size": 13,
+      "tip_divider_margin_x": 24,
+      "tip_title": "Tip",
+      "tip_icon": "tips",
+      "tip_field": "tip",
+      "tip_font": "noto_serif_light",
+      "tip_font_size": 14,
+      "tip_max_lines": 3
+    },
     "footer": {
       "label": "Fitness",
       "attribution_template": "— Stay Healthy"
@@ -243,118 +203,44 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "text",
-          "field": "workout_name",
-          "font_name": "Lora-Bold.ttf",
-          "font_size": 13,
-          "align": "left",
-          "margin_x": 8
-        },
-        {
-          "type": "text",
-          "field": "duration",
-          "font_size": 10,
-          "align": "left",
-          "margin_x": 8
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 40
-        },
-        {
-          "type": "list",
-          "field": "exercises",
-          "max_items": 3,
-          "item_template": "{name}",
-          "right_field": "reps",
-          "font_size": 11,
-          "item_spacing": 14,
-          "margin_x": 8,
-          "numbered": true
-        }
-      ],
+      "preset_props": {
+        "top_gap": 0,
+        "padding_x": 8,
+        "gap": 4,
+        "title_font_size": 13,
+        "title_align": "left",
+        "duration_font_size": 10,
+        "duration_align": "left",
+        "header_divider_style": "short",
+        "header_divider_margin_x": null,
+        "header_divider_width": 40,
+        "exercise_title": "",
+        "exercise_limit": 3,
+        "exercise_gap": 4,
+        "exercise_font_size": 11,
+        "exercise_reps_font_size": 11,
+        "show_tip_divider": false,
+        "tip_field": null
+      },
       "footer": {
         "label": "Fitness",
         "height": 20
       }
     },
     "648x480": {
-      "body": [
-        {
-          "type": "spacer",
-          "height": 20
-        },
-        {
-          "type": "text",
-          "field": "workout_name",
-          "font_name": "Lora-Bold.ttf",
-          "font_size": 22,
-          "align": "center"
-        },
-        {
-          "type": "text",
-          "field": "duration",
-          "font_size": 18,
-          "align": "center"
-        },
-        {
-          "type": "spacer",
-          "height": 4
-        },
-        {
-          "type": "separator",
-          "style": "solid",
-          "margin_x": 40,
-          "line_width": 1
-        },
-        {
-          "type": "icon_text",
-          "icon": "exercise",
-          "text": "Exercises",
-          "font_size": 18,
-          "margin_x": 40
-        },
-        {
-          "type": "list",
-          "field": "exercises",
-          "max_items": 8,
-          "item_template": "{name}",
-          "right_field": "reps",
-          "font_size": 17,
-          "item_spacing": 22,
-          "margin_x": 50,
-          "numbered": true
-        },
-        {
-          "type": "spacer",
-          "height": 6
-        },
-        {
-          "type": "separator",
-          "style": "solid",
-          "margin_x": 40,
-          "line_width": 1
-        },
-        {
-          "type": "section",
-          "title": "",
-          "icon": "tips",
-          "children": [
-            {
-              "type": "text",
-              "field": "tip",
-              "font_name": "Lora-Regular.ttf",
-              "font_size": 16,
-              "align": "left",
-              "margin_x": 60,
-              "max_lines": 3
-            }
-          ]
-        }
-      ]
+      "preset_props": {
+        "top_gap": 20,
+        "title_font_size": 22,
+        "duration_font_size": 18,
+        "header_divider_margin_x": 40,
+        "section_title_font_size": 18,
+        "section_content_indent": 40,
+        "exercise_gap": 8,
+        "exercise_font_size": 17,
+        "exercise_reps_font_size": 17,
+        "tip_divider_margin_x": 40,
+        "tip_font_size": 16
+      }
     }
   }
 }

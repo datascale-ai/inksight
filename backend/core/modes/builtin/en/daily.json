@@ -21,7 +21,7 @@
       },
       {
         "type": "llm_json",
-        "prompt_template": "You are a well-read daily recommendation assistant. Based on the environment info, generate daily content in JSON:\n1. quote: An inspiring quote (under 40 chars)\n2. author: Quote author\n3. book_title: Recommend a book\n4. book_author: Book author\n5. book_desc: One-line book description (under 50 chars)\n6. tip: A fun fact or practical tip (under 50 chars)\n7. season_text: A sentence about the current season (under 40 chars)\nOutput JSON only.\nContext: {context}",
+        "prompt_template": "You are a well-read daily recommendation assistant. Based on the environment info, generate daily content in JSON:\n1. quote: An inspiring quote (under 40 chars), focused on reflection or motivation\n2. author: Quote author\n3. book_title: Recommend a book\n4. book_author: Book author\n5. book_desc: One-line description of the book's theme or why it is worth reading (under 42 chars); do not repeat the quote or tip\n6. tip: A concrete, practical tip or fun fact (under 32 chars); avoid inspirational phrasing and do not repeat season_text\n7. season_text: A short sentence about the current season (under 28 chars); seasonal observation only, no advice\nMake the three content sections clearly different in meaning and avoid semantic repetition. Output JSON only.\nContext: {context}",
         "output_schema": {
           "quote": {
             "type": "string",
@@ -99,135 +99,41 @@
       "line_width": 1,
       "dashed": false
     },
-    "body": [
-      {
-        "type": "two_column",
-        "left_width": 116,
-        "gap": 10,
-        "left": [
-          {
-            "type": "text",
-            "field": "year",
-            "font_size": 12,
-            "align": "center",
-            "margin_x": 8
-          },
-          {
-            "type": "big_number",
-            "field": "day",
-            "font_size": 46,
-            "align": "center"
-          },
-          {
-            "type": "text",
-            "field": "month_cn",
-            "font_size": 14,
-            "align": "center",
-            "margin_x": 8
-          },
-          {
-            "type": "text",
-            "field": "weekday_cn",
-            "font_size": 12,
-            "align": "center",
-            "margin_x": 8
-          },
-          {
-            "type": "progress_bar",
-            "field": "day_of_year",
-            "max_field": "days_in_year",
-            "width": 80,
-            "margin_x": 8
-          },
-          {
-            "type": "text",
-            "field": "season_text",
-            "font_name": "Lora-Regular.ttf",
-            "font_size": 10,
-            "align": "center",
-            "margin_x": 8,
-            "max_lines": 2
-          }
-        ],
-        "right": [
-          {
-            "type": "text",
-            "field": "quote",
-            "font_name": "Lora-Regular.ttf",
-            "font_size": 14,
-            "align": "left",
-            "margin_x": 6,
-            "max_lines": 4
-          },
-          {
-            "type": "text",
-            "template": "— {author}",
-            "font_size": 11,
-            "align": "right",
-            "margin_x": 6,
-            "max_lines": 1
-          },
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "separator",
-            "style": "dashed",
-            "margin_x": 12
-          },
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "text",
-            "field": "book_title",
-            "font_size": 13,
-            "align": "left",
-            "margin_x": 6,
-            "max_lines": 2
-          },
-          {
-            "type": "text",
-            "template": "by {book_author}",
-            "font_size": 11,
-            "align": "left",
-            "margin_x": 6,
-            "max_lines": 1
-          },
-          {
-            "type": "text",
-            "field": "book_desc",
-            "font_size": 11,
-            "align": "left",
-            "margin_x": 6,
-            "max_lines": 2
-          },
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "separator",
-            "style": "dashed",
-            "margin_x": 12
-          },
-          {
-            "type": "spacer",
-            "height": 4
-          },
-          {
-            "type": "text",
-            "field": "tip",
-            "font_size": 11,
-            "align": "left",
-            "margin_x": 6,
-            "max_lines": 2
-          }
-        ]
-      }
-    ],
+    "layout_engine": "component_tree",
+    "component_theme": {
+      "body_font": "noto_serif_regular",
+      "body_font_size": 12
+    },
+    "body_preset": "daily_card",
+    "preset_props": {
+      "padding_x": 18,
+      "justify": "center",
+      "min_height": 170,
+      "row_gap": 10,
+      "panel_width": 116,
+      "panel_padding_x": 8,
+      "panel_gap": 4,
+      "year_font_size": 12,
+      "day_font_size": 52,
+      "month_font_size": 14,
+      "weekday_font_size": 12,
+      "progress_width": 80,
+      "season_font": "noto_serif_light",
+      "season_font_size": 10,
+      "season_inset_x": 10,
+      "content_padding_x": 6,
+      "content_justify": "space_between",
+      "quote_font": "noto_serif_regular",
+      "quote_font_size": 15,
+      "author_template": "— {author}",
+      "author_font_size": 12,
+      "book_title_font_size": 14,
+      "book_author_template": "by {book_author}",
+      "book_author_font_size": 12,
+      "book_desc_font_size": 12,
+      "tip_font_size": 12,
+      "divider_margin_x": 6
+    },
     "footer": {
       "label": "Daily",
       "attribution_template": "— Carpe Diem"
@@ -235,180 +141,56 @@
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "big_number",
-          "field": "day",
-          "font_size": 36,
-          "align": "left",
-          "margin_x": 8
-        },
-        {
-          "type": "text",
-          "template": "{month_cn} {weekday_cn}",
-          "font_size": 10,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 1
-        },
-        {
-          "type": "separator",
-          "style": "short",
-          "width": 40
-        },
-        {
-          "type": "text",
-          "field": "quote",
-          "font_name": "Lora-Regular.ttf",
-          "font_size": 11,
-          "align": "left",
-          "margin_x": 8,
-          "max_lines": 2
-        },
-        {
-          "type": "text",
-          "template": "— {author}",
-          "font_size": 9,
-          "align": "right",
-          "margin_x": 8,
-          "max_lines": 1
-        }
-      ],
+      "preset_props": {
+        "variant": "compact",
+        "padding_x": 8,
+        "justify": "center",
+        "gap": 5,
+        "day_font_size": 40,
+        "meta_template": "{month_cn} {weekday_cn}",
+        "meta_font_size": 10,
+        "meta_align": "left",
+        "separator_width": 40,
+        "quote_font": "noto_serif_regular",
+        "quote_font_size": 11,
+        "author_template": "— {author}",
+        "author_font_size": 9
+      },
       "footer": {
         "label": "Daily",
         "height": 20
       }
     },
     "648x480": {
-      "body": [
-        {
-          "type": "two_column",
-          "left_width": 185,
-          "gap": 14,
-          "left": [
-            {
-              "type": "text",
-              "field": "year",
-              "font_size": 14,
-              "align": "center",
-              "margin_x": 12
-            },
-            {
-              "type": "big_number",
-              "field": "day",
-              "font_size": 72,
-              "align": "center"
-            },
-            {
-              "type": "text",
-              "field": "month_cn",
-              "font_size": 18,
-              "align": "center",
-              "margin_x": 12
-            },
-            {
-              "type": "text",
-              "field": "weekday_cn",
-              "font_size": 16,
-              "align": "center",
-              "margin_x": 12
-            },
-            {
-              "type": "progress_bar",
-              "field": "day_of_year",
-              "max_field": "days_in_year",
-              "width": 130,
-              "margin_x": 12
-            },
-            {
-              "type": "text",
-              "field": "season_text",
-              "font_name": "Lora-Regular.ttf",
-              "font_size": 13,
-              "align": "center",
-              "margin_x": 12,
-              "max_lines": 2
-            }
-          ],
-          "right": [
-            {
-              "type": "text",
-              "field": "quote",
-              "font_name": "Lora-Regular.ttf",
-              "font_size": 20,
-              "align": "left",
-              "margin_x": 8,
-              "max_lines": 4
-            },
-            {
-              "type": "text",
-              "template": "— {author}",
-              "font_size": 14,
-              "align": "right",
-              "margin_x": 8,
-              "max_lines": 1
-            },
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "separator",
-              "style": "dashed",
-              "margin_x": 16
-            },
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "text",
-              "field": "book_title",
-              "font_size": 18,
-              "align": "left",
-              "margin_x": 8,
-              "max_lines": 2
-            },
-            {
-              "type": "text",
-              "template": "by {book_author}",
-              "font_size": 14,
-              "align": "left",
-              "margin_x": 8,
-              "max_lines": 1
-            },
-            {
-              "type": "text",
-              "field": "book_desc",
-              "font_size": 14,
-              "align": "left",
-              "margin_x": 8,
-              "max_lines": 2
-            },
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "separator",
-              "style": "dashed",
-              "margin_x": 16
-            },
-            {
-              "type": "spacer",
-              "height": 8
-            },
-            {
-              "type": "text",
-              "field": "tip",
-              "font_size": 14,
-              "align": "left",
-              "margin_x": 8,
-              "max_lines": 3
-            }
-          ]
-        }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "justify": "center",
+        "min_height": 280,
+        "row_gap": 14,
+        "panel_width": 185,
+        "panel_padding_x": 12,
+        "panel_gap": 6,
+        "year_font_size": 14,
+        "day_font_size": 80,
+        "month_font_size": 18,
+        "weekday_font_size": 16,
+        "progress_width": 130,
+        "season_font": "noto_serif_light",
+        "season_font_size": 13,
+        "season_inset_x": 16,
+        "content_padding_x": 8,
+        "quote_font": "noto_serif_regular",
+        "quote_font_size": 21,
+        "author_template": "— {author}",
+        "author_font_size": 15,
+        "book_title_font_size": 19,
+        "book_author_template": "by {book_author}",
+        "book_author_font_size": 15,
+        "book_desc_font_size": 15,
+        "tip_font_size": 15,
+        "tip_max_lines": 3,
+        "divider_margin_x": 8
+      }
     }
   }
 }

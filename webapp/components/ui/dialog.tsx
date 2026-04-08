@@ -37,7 +37,7 @@ export function Dialog({ open, onClose, children }: DialogProps) {
       }}
     >
       <div className="fixed inset-0 bg-black/20" />
-      <div className="relative z-10 w-full max-w-lg mx-4 animate-fade-in">
+      <div className="relative z-10 w-full max-w-lg mx-4 max-h-[90vh] flex flex-col animate-fade-in">
         {children}
       </div>
     </div>
@@ -53,7 +53,7 @@ export function DialogContent({
 }) {
   return (
     <div
-      className={`rounded-sm border border-gray-300 bg-white p-6 shadow-[4px_4px_0_0_#000000] ${className}`}
+      className={`rounded-sm border border-gray-300 bg-white p-6 shadow-[4px_4px_0_0_#000000] overflow-y-auto max-h-[90vh] ${className}`}
     >
       {children}
     </div>

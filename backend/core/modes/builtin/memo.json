@@ -26,43 +26,36 @@
   },
   "layout": {
     "status_bar": {"line_width": 1, "dashed": false},
-    "body": [
-      {
-        "type": "centered_text",
-        "field": "memo_text",
-        "font_name": "NotoSerifSC-Light.ttf",
-        "font_size": 16,
-        "vertical_center": true,
-        "max_width_ratio": 0.85
-      }
-    ],
+    "layout_engine": "component_tree",
+    "body_preset": "quote_focus_card",
+    "preset_props": {
+      "padding_x": 18,
+      "justify": "center",
+      "quote_inset_x": 30,
+      "quote_field": "memo_text",
+      "quote_font": "noto_serif_light",
+      "quote_font_size": 16,
+      "quote_max_lines": 4
+    },
     "footer": {"label": "MEMO"}
   },
   "layout_overrides": {
     "296x128": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "memo_text",
-          "font_name": "NotoSerifSC-Light.ttf",
-          "font_size": 13,
-          "vertical_center": true,
-          "max_width_ratio": 0.92
-        }
-      ],
+      "preset_props": {
+        "padding_x": 8,
+        "quote_inset_x": 8,
+        "quote_font_size": 13,
+        "quote_max_lines": 3
+      },
       "footer": { "label": "MEMO", "height": 18 }
     },
     "800x480": {
-      "body": [
-        {
-          "type": "centered_text",
-          "field": "memo_text",
-          "font_name": "NotoSerifSC-Light.ttf",
-          "font_size": 26,
-          "vertical_center": true,
-          "max_width_ratio": 0.82
-        }
-      ]
+      "preset_props": {
+        "padding_x": 28,
+        "quote_inset_x": 72,
+        "quote_font_size": 26,
+        "quote_max_lines": 4
+      }
     }
   }
 }

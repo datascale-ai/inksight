@@ -6,6 +6,7 @@ import Link from "next/link";
 import { DeviceInfo } from "@/components/config/device-info";
 import { LocationPicker } from "@/components/config/location-picker";
 import { ModeSelector } from "@/components/config/mode-selector";
+import { ModeComposer, type ComposerPropMeta, type ComposerCatalogItem, type ComposerCatalog, type ComposerFragmentState, type ComposerLayoutKind, type ComposerState, propDefaultValue, withPropDefaults, findCatalogItem, randomComposerId } from "@/components/config/mode-composer";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { CalendarReminders } from "@/components/config/calendar-reminders";
 import { TimetableEditor, type TimetableData } from "@/components/config/timetable-editor";
@@ -106,6 +107,296 @@ function normalizeTone(v: unknown): string {
   if (v === "positive" || v === "neutral" || v === "deep" || v === "humor") return v;
   const found = TONE_OPTIONS.find((x) => x.label === v);
   return found?.value || "neutral";
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeModeIdFromName(name: string) {
+  let modeId = name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  if (!modeId) modeId = `CUSTOM_${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+  if (!/^[A-Z]/.test(modeId)) modeId = `CUSTOM_${modeId}`;
+  return modeId;
+}
+
+function fallbackValueForField(fieldName: string) {
+  const cleaned = fieldName.trim();
+  if (!cleaned) return "Sample";
+  return cleaned
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function defaultComposerState(catalog: ComposerCatalog | null): ComposerState {
+  const defaultPreset = catalog?.presets?.[0]?.name || "";
+  const defaultPresetMeta = catalog?.presets?.[0];
+  const defaultFragment = catalog?.fragments?.[0];
+  const defaultFragmentStack = Object.fromEntries(
+    (catalog?.fragment_stack?.props || []).flatMap((prop) => (prop.default !== undefined ? [[prop.name, prop.default]] : [])),
+  );
+  return {
+    layoutKind: "preset",
+    bodyPreset: defaultPreset,
+    presetProps: withPropDefaults({}, defaultPresetMeta?.props),
+    fragments: defaultFragment
+      ? [
+          {
+            id: randomComposerId(),
+            fragment: defaultFragment.name,
+            props: withPropDefaults({}, defaultFragment.props),
+          },
+        ]
+      : [],
+    fragmentStack: defaultFragmentStack,
+    prompt: "",
+    cacheable: true,
+  };
+}
+
+function collectComposerFieldNames(
+  composer: ComposerState,
+  catalog: ComposerCatalog | null,
+) {
+  const names = new Set<string>();
+  const collect = (metas: ComposerPropMeta[] | undefined, props: Record<string, unknown>) => {
+    for (const meta of metas || []) {
+      if (meta.value_kind !== "field") continue;
+      const value = props[meta.name];
+      if (typeof value === "string" && value.trim()) names.add(value.trim());
+    }
+  };
+  if (composer.layoutKind === "preset") {
+    const preset = findCatalogItem(catalog?.presets, composer.bodyPreset);
+    collect(preset?.props, composer.presetProps);
+  } else {
+    for (const fragment of composer.fragments) {
+      const item = findCatalogItem(catalog?.fragments, fragment.fragment);
+      collect(item?.props, fragment.props);
+    }
+  }
+  if (names.size === 0) names.add("text");
+  return Array.from(names);
+}
+
+const FIELD_HINT_ZH: Record<string, string> = {
+  title: "标题（简短有力）",
+  subtitle: "副标题",
+  meta: "元信息（如分类、来源等简短标注）",
+  body: "正文内容",
+  text: "正文内容",
+  quote: "一句引言或语录",
+  author: "作者或来源署名",
+  source: "来源出处",
+  question: "一个引人思考的问题",
+  answer: "问题的答案",
+  hint: "提示或线索",
+  note: "补充说明（简短）",
+  word: "一个词语或短语",
+  phonetic: "注音或音标",
+  definition: "释义或解释",
+  example: "一个例句或案例",
+  greeting: "称呼语（如「亲爱的朋友：」）",
+  closing: "落款（如「此致敬意」）",
+  postscript: "附言（P.S.）",
+  tip: "一条实用小建议",
+  category: "分类标签",
+  name: "名称",
+  description: "简要描述",
+  summary: "摘要",
+  antidote: "应对建议或解决方法",
+  message: "一段寄语",
+};
+const FIELD_HINT_EN: Record<string, string> = {
+  title: "a short, punchy title",
+  subtitle: "subtitle",
+  meta: "brief meta info (category, source, etc.)",
+  body: "main body text",
+  text: "main body text",
+  quote: "a quote or saying",
+  author: "author or attribution",
+  source: "source or origin",
+  question: "a thought-provoking question",
+  answer: "the answer",
+  hint: "a hint or clue",
+  note: "a brief supplementary note",
+  word: "a word or short phrase",
+  phonetic: "phonetic transcription",
+  definition: "definition or explanation",
+  example: "an example sentence or case",
+  greeting: "greeting (e.g. 'Dear friend,')",
+  closing: "closing (e.g. 'Best regards')",
+  postscript: "postscript (P.S.)",
+  tip: "a practical tip",
+  category: "category label",
+  name: "name",
+  description: "brief description",
+  summary: "summary",
+  antidote: "advice or remedy",
+  message: "a short message",
+};
+
+function buildComposerPrompt(prompt: string, fieldNames: string[], isEn: boolean) {
+  const hints = isEn ? FIELD_HINT_EN : FIELD_HINT_ZH;
+  const userPrompt = prompt.trim();
+  const fieldDescs = fieldNames.map((f) => {
+    const hint = hints[f];
+    return hint ? `"${f}": ${hint}` : `"${f}": ...`;
+  });
+  const schema = `{ ${fieldNames.map((f) => `"${f}": "..."`).join(", ")} }`;
+
+  if (isEn) {
+    return [
+      `You are a content creator for a small e-ink screen.`,
+      userPrompt ? `Theme: ${userPrompt}` : `Generate concise, interesting content.`,
+      `Return ONLY valid JSON with these fields:`,
+      ...fieldDescs.map((d) => `  - ${d}`),
+      `All values must be strings. Keep each field concise (suitable for a small screen).`,
+      `Example format: ${schema}`,
+      `You may use the following context for inspiration, but do NOT just describe it:`,
+      `{context}`,
+    ].join("\n");
+  }
+  return [
+    `你是一个墨水屏内容创作者。`,
+    userPrompt ? `主题：${userPrompt}` : `请生成简洁有趣的内容。`,
+    `请只返回合法 JSON，包含以下字段：`,
+    ...fieldDescs.map((d) => `  - ${d}`),
+    `所有值必须是字符串。每个字段内容要简洁（适合小屏幕显示）。`,
+    `格式示例：${schema}`,
+    `以下环境信息仅供参考灵感，不要直接复述：`,
+    `{context}`,
+  ].join("\n");
+}
+
+function buildComposerModeDefinition(args: {
+  composer: ComposerState;
+  catalog: ComposerCatalog | null;
+  modeName: string;
+  modeDescription: string;
+  isEn: boolean;
+}) {
+  const { composer, catalog, modeName, modeDescription, isEn } = args;
+  const modeId = normalizeModeIdFromName(modeName || "Custom Mode");
+  const displayName = modeName.trim() || modeId;
+  const fieldNames = collectComposerFieldNames(composer, catalog);
+  const outputSchema = Object.fromEntries(
+    fieldNames.map((field) => [field, fallbackValueForField(field)]),
+  );
+  const fallback = Object.fromEntries(fieldNames.map((field) => [field, fallbackValueForField(field)]));
+  const layout: Record<string, unknown> = {
+    layout_engine: "component_tree",
+    status_bar: { line_width: 1, dashed: false },
+    footer: { label: modeId, attribution_template: "— InkSight" },
+  };
+  if (composer.layoutKind === "preset") {
+    layout.body_preset = composer.bodyPreset;
+    layout.preset_props = composer.presetProps;
+  } else {
+    layout.fragments = composer.fragments.map((fragment) => ({
+      fragment: fragment.fragment,
+      props: fragment.props,
+    }));
+    layout.fragment_stack = composer.fragmentStack;
+  }
+  return {
+    mode_id: modeId,
+    display_name: displayName,
+    icon: "star",
+    cacheable: composer.cacheable,
+    description: modeDescription.trim() || composer.prompt.trim() || displayName,
+    content: {
+      type: "llm_json",
+      prompt_template: buildComposerPrompt(composer.prompt, fieldNames, isEn),
+      output_schema: outputSchema,
+      temperature: 0.7,
+      fallback,
+    },
+    layout,
+  };
+}
+
+function parseComposerModeDefinition(
+  raw: unknown,
+  catalog: ComposerCatalog | null,
+): { composer: ComposerState | null; error: string | null } {
+  if (!raw || typeof raw !== "object") {
+    return { composer: null, error: "Invalid mode definition" };
+  }
+  const modeDef = raw as Record<string, unknown>;
+  const layout = (modeDef.layout && typeof modeDef.layout === "object") ? (modeDef.layout as Record<string, unknown>) : null;
+  if (!layout || layout.layout_engine !== "component_tree") {
+    return { composer: null, error: "Only component_tree preset/fragment layouts are supported in Composer." };
+  }
+  const content = (modeDef.content && typeof modeDef.content === "object") ? (modeDef.content as Record<string, unknown>) : null;
+  const prompt = typeof content?.prompt_template === "string" ? content.prompt_template : "";
+  const cacheable = modeDef.cacheable !== false;
+  if (typeof layout.body_preset === "string" && layout.body_preset.trim()) {
+    const presetName = layout.body_preset.trim();
+    if (!findCatalogItem(catalog?.presets, presetName)) {
+      return { composer: null, error: `Unsupported preset: ${presetName}` };
+    }
+    return {
+      composer: {
+        layoutKind: "preset",
+        bodyPreset: presetName,
+        presetProps: withPropDefaults(
+          (layout.preset_props && typeof layout.preset_props === "object") ? (layout.preset_props as Record<string, unknown>) : {},
+          findCatalogItem(catalog?.presets, presetName)?.props,
+        ),
+        fragments: [],
+        fragmentStack: {},
+        prompt,
+        cacheable,
+      },
+      error: null,
+    };
+  }
+  if (Array.isArray(layout.fragments)) {
+    const fragments: ComposerFragmentState[] = [];
+    for (const entry of layout.fragments) {
+      if (!entry || typeof entry !== "object") {
+        return { composer: null, error: "Unsupported fragment entry." };
+      }
+      const fragmentName = typeof (entry as Record<string, unknown>).fragment === "string"
+        ? ((entry as Record<string, unknown>).fragment as string).trim()
+        : "";
+      const fragmentMeta = findCatalogItem(catalog?.fragments, fragmentName);
+      if (!fragmentName || !fragmentMeta) {
+        return { composer: null, error: `Unsupported fragment: ${fragmentName || "unknown"}` };
+      }
+      const props = "props" in (entry as Record<string, unknown>)
+        ? (((entry as Record<string, unknown>).props && typeof (entry as Record<string, unknown>).props === "object")
+            ? ((entry as Record<string, unknown>).props as Record<string, unknown>)
+            : {})
+        : Object.fromEntries(
+            Object.entries(entry as Record<string, unknown>).filter(([key]) => key !== "fragment"),
+          );
+      fragments.push({
+        id: randomComposerId(),
+        fragment: fragmentName,
+        props: withPropDefaults(props, fragmentMeta.props),
+      });
+    }
+    return {
+      composer: {
+        layoutKind: "fragments",
+        bodyPreset: catalog?.presets?.[0]?.name || "",
+        presetProps: {},
+        fragments,
+        fragmentStack: withPropDefaults(
+          (layout.fragment_stack && typeof layout.fragment_stack === "object") ? (layout.fragment_stack as Record<string, unknown>) : {},
+          catalog?.fragment_stack?.props,
+        ),
+        prompt,
+        cacheable,
+      },
+      error: null,
+    };
+  }
+  return { composer: null, error: "Only body_preset or fragments layouts are supported in Composer." };
 }
 
 // Custom mode templates removed (AI-only creation)
@@ -554,12 +845,20 @@ function ConfigPageInner() {
 
   const [customDesc, setCustomDesc] = useState("");
   const [customModeName, setCustomModeName] = useState("");
+  const [customModeDescription, setCustomModeDescription] = useState("");
   const [customJson, setCustomJson] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
   const [customPreviewImg, setCustomPreviewImg] = useState<string | null>(null);
   const [, setCustomPreviewLoading] = useState(false);
   const [editingCustomMode, setEditingCustomMode] = useState(false);
-  const [customEditorSource, setCustomEditorSource] = useState<"ai" | "manual" | null>(null);
+  const [customEditorSource, setCustomEditorSource] = useState<"ai" | "composer" | "json" | null>(null);
+  const [customEditorTab, setCustomEditorTab] = useState<"ai" | "composer">("ai");
+  const [composerCatalog, setComposerCatalog] = useState<ComposerCatalog | null>(null);
+  const [composerState, setComposerState] = useState<ComposerState>({ layoutKind: "preset", bodyPreset: "", presetProps: {}, fragments: [], fragmentStack: {}, prompt: "", cacheable: true });
+  const [composerSyncError, setComposerSyncError] = useState<string | null>(null);
+  const [customJsonError, setCustomJsonError] = useState<string | null>(null);
+  const [composerPreviewUrl, setComposerPreviewUrl] = useState<string | null>(null);
+  const [composerPreviewLoading, setComposerPreviewLoading] = useState(false);
   const [previewModeLabelOverride, setPreviewModeLabelOverride] = useState<string | null>(null);
   const previewPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -643,6 +942,9 @@ function ConfigPageInner() {
       });
       if (data.items && Array.isArray(data.items)) {
         setCatalogItems(data.items);
+        setComposerCatalog((data.custom_mode_composer && typeof data.custom_mode_composer === "object")
+          ? (data.custom_mode_composer as ComposerCatalog)
+          : null);
       } else {
         console.error("[CONFIG] Invalid catalog response:", data);
       }
@@ -654,6 +956,89 @@ function ConfigPageInner() {
   useEffect(() => {
     refreshCatalog();
   }, [refreshCatalog]);
+
+  useEffect(() => {
+    if (!composerCatalog) return;
+    setComposerState((prev) => {
+      if (prev.bodyPreset || prev.fragments.length > 0) return prev;
+      return defaultComposerState(composerCatalog);
+    });
+  }, [composerCatalog]);
+
+  const syncComposerFromModeDef = useCallback((modeDef: unknown) => {
+    const parsed = parseComposerModeDefinition(modeDef, composerCatalog);
+    if (parsed.composer) {
+      setComposerState(parsed.composer);
+      setComposerSyncError(null);
+      return true;
+    }
+    setComposerSyncError(parsed.error);
+    return false;
+  }, [composerCatalog]);
+
+  const openCreateCustomMode = useCallback(() => {
+    setCustomDesc("");
+    setCustomModeName("");
+    setCustomModeDescription("");
+    setCustomJson("");
+    setCustomJsonError(null);
+    setCustomEditorSource(null);
+    setComposerSyncError(null);
+    setComposerState(defaultComposerState(composerCatalog));
+    setCustomEditorTab("ai");
+    setEditingCustomMode(true);
+  }, [composerCatalog]);
+
+  const handleComposerChange = useCallback((updater: (prev: ComposerState) => ComposerState) => {
+    setCustomEditorSource("composer");
+    setComposerState(updater);
+    setComposerSyncError(null);
+  }, []);
+
+  const fetchComposerPreview = useCallback(async () => {
+    if (!composerCatalog) return;
+    const modeDef = buildComposerModeDefinition({
+      composer: composerState,
+      catalog: composerCatalog,
+      modeName: customModeName || "Preview",
+      modeDescription: customModeDescription,
+      isEn,
+    });
+    setComposerPreviewLoading(true);
+    try {
+      const res = await fetch("/api/modes/custom/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode_def: modeDef, mac: mac || undefined, colors: previewColors, layout_only: true }),
+      });
+      if (!res.ok) {
+        setComposerPreviewUrl(null);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setComposerPreviewUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+    } catch {
+      setComposerPreviewUrl(null);
+    } finally {
+      setComposerPreviewLoading(false);
+    }
+  }, [composerCatalog, composerState, customModeName, customModeDescription, isEn, mac, previewColors]);
+
+  useEffect(() => {
+    if (!composerCatalog) return;
+    if (customEditorSource !== "composer") return;
+    const modeDef = buildComposerModeDefinition({
+      composer: composerState,
+      catalog: composerCatalog,
+      modeName: customModeName,
+      modeDescription: customModeDescription,
+      isEn,
+    });
+    setCustomJson(JSON.stringify(modeDef, null, 2));
+    setCustomEditorSource("composer");
+    setCustomJsonError(null);
+  }, [composerCatalog, composerState, customEditorSource, customModeDescription, customModeName, isEn]);
 
   useEffect(() => {
     if (mac && currentUser) {
@@ -1437,8 +1822,12 @@ function ConfigPageInner() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || tr("生成失败", "Generation failed"));
       setCustomJson(JSON.stringify(data.mode_def, null, 2));
+      setCustomJsonError(null);
       setCustomModeName((data.mode_def?.display_name || "").toString());
+      setCustomModeDescription((data.mode_def?.description || "").toString());
       setCustomEditorSource("ai");
+      setCustomEditorTab("composer");
+      syncComposerFromModeDef(data.mode_def);
       showToast(tr("模式生成成功", "Mode generated successfully"), "success");
 
       // Close modal right after generation, then start preview on the right panel
@@ -1470,6 +1859,13 @@ function ConfigPageInner() {
       const def = defOverride ? (defOverride as Record<string, unknown>) : (JSON.parse(customJson) as Record<string, unknown>);
       if (customModeName.trim()) {
         (def as Record<string, unknown>).display_name = customModeName.trim();
+      }
+      if (customModeDescription.trim()) {
+        (def as Record<string, unknown>).description = customModeDescription.trim();
+      }
+      const modeIdRaw = (def as Record<string, unknown>).mode_id;
+      if (typeof modeIdRaw !== "string" || !modeIdRaw.trim()) {
+        (def as Record<string, unknown>).mode_id = normalizeModeIdFromName(customModeName || "Custom Preview");
       }
       let modeHint = "CUSTOM_PREVIEW";
       try {
@@ -1527,6 +1923,9 @@ function ConfigPageInner() {
       }
       replacePreviewImg(objectUrl);
     } catch (e) {
+      if (e instanceof SyntaxError) {
+        setCustomJsonError(e.message);
+      }
       showToast(`${tr("预览失败", "Preview failed")}: ${e instanceof Error ? e.message : ""}`, "error");
     } finally {
       setCustomPreviewLoading(false);
@@ -1565,6 +1964,9 @@ function ConfigPageInner() {
       if (customModeName.trim()) {
         def.display_name = customModeName.trim();
       }
+      if (customModeDescription.trim()) {
+        def.description = customModeDescription.trim();
+      }
       
       // Add mac to the request body
       def.mac = mac;
@@ -1592,6 +1994,7 @@ function ConfigPageInner() {
         setCustomJson("");
         setCustomDesc("");
         setCustomModeName("");
+        setCustomModeDescription("");
         if (customPreviewImg) {
           try { URL.revokeObjectURL(customPreviewImg); } catch {}
         }
@@ -1601,6 +2004,9 @@ function ConfigPageInner() {
         throw new Error(data.error || tr("保存失败", "Save failed"));
       }
     } catch (e) {
+      if (e instanceof SyntaxError) {
+        setCustomJsonError(e.message);
+      }
       showToast(`${tr("保存失败", "Save failed")}: ${e instanceof Error ? e.message : ""}`, "error");
     }
   };
@@ -2179,10 +2585,7 @@ function ConfigPageInner() {
                     handleModePreview={handleModePreview}
                     handleModeApply={handleModeApply}
                     handleCustomModeDelete={handleCustomModeDelete}
-                    setEditingCustomMode={setEditingCustomMode}
-                    setCustomDesc={setCustomDesc}
-                    setCustomModeName={setCustomModeName}
-                    setCustomJson={setCustomJson}
+                    onCreateCustomMode={openCreateCustomMode}
                     previewColors={previewColors}
                     onColorsChange={setPreviewColors}
                   />
@@ -2210,7 +2613,7 @@ function ConfigPageInner() {
                         variant="outline"
                         size="sm"
                         onClick={handleSaveCustomMode}
-                        disabled={!(customEditorSource === "ai" && Boolean(customJson.trim()))}
+                        disabled={!Boolean(customJson.trim())}
                         className="bg-white text-ink border-ink/20 hover:bg-ink hover:text-white active:bg-ink active:text-white disabled:bg-white disabled:text-ink/50"
                       >
                         {tr("保存模式", "Save Mode")}
@@ -2226,7 +2629,7 @@ function ConfigPageInner() {
                     setEditingCustomMode(false);
                   }}
                 >
-                  <DialogContent className="max-w-2xl">
+                  <DialogContent className="max-w-5xl">
                     <DialogHeader
                       onClose={() => {
                         setEditingCustomMode(false);
@@ -2236,63 +2639,129 @@ function ConfigPageInner() {
                         <DialogTitle>{tr("创建自定义模式", "Create Custom Mode")}</DialogTitle>
                         <DialogDescription>
                           {tr(
-                            "用一句话描述你想要的模式，点击 AI 生成预览，右侧水墨屏会显示效果。",
-                            "Describe the mode you want, click AI Generate Preview, and the right E-Ink panel will show the result.",
+                            "用文字描述让 AI 帮你生成，或手动选择布局模板自由搭配。",
+                            "Describe what you want and let AI generate it, or pick a layout template and customize it yourself.",
                           )}
                         </DialogDescription>
                       </div>
                     </DialogHeader>
 
-                    <div className="space-y-3">
-                      {customGenerating ? (
-                        <div className="rounded-sm border border-ink/10 bg-paper px-3 py-3 text-sm text-ink-light flex items-center gap-2">
-                          <Loader2 size={16} className="animate-spin" />
-                          {tr("模式生成中...", "Generating mode...")}
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-xs text-ink-light mb-1">{tr("模式名称", "Mode name")}</div>
+                          <input
+                            value={customModeName}
+                            onChange={(e) => setCustomModeName(e.target.value)}
+                            placeholder={tr("模式名称（例如：今日英语）", "Mode name (e.g. Daily English)")}
+                            className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                            disabled={customGenerating}
+                          />
+                        </div>
+                        <div>
+                          <div className="text-xs text-ink-light mb-1">{tr("模式简介", "Mode description")}</div>
+                          <input
+                            value={customModeDescription}
+                            onChange={(e) => setCustomModeDescription(e.target.value)}
+                            placeholder={tr("用于模式列表展示", "Shown in the mode list")}
+                            className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                            disabled={customGenerating}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 border-b border-ink/10">
+                        <button
+                          type="button"
+                          onClick={() => setCustomEditorTab("ai")}
+                          className={`px-3 py-2 text-sm border-b-2 ${customEditorTab === "ai" ? "border-ink text-ink font-medium" : "border-transparent text-ink-light"}`}
+                        >
+                          {tr("描述生成", "Describe")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomEditorTab("composer");
+                            if (!customJson.trim()) {
+                              setCustomEditorSource("composer");
+                            }
+                          }}
+                          className={`px-3 py-2 text-sm border-b-2 ${customEditorTab === "composer" ? "border-ink text-ink font-medium" : "border-transparent text-ink-light"}`}
+                        >
+                          {tr("模板搭建", "Template")}
+                        </button>
+                      </div>
+
+                      {customEditorTab === "ai" ? (
+                        <div className="space-y-3">
+                          {customGenerating ? (
+                            <div className="rounded-sm border border-ink/10 bg-paper px-3 py-3 text-sm text-ink-light flex items-center gap-2">
+                              <Loader2 size={16} className="animate-spin" />
+                              {tr("模式生成中...", "Generating mode...")}
+                            </div>
+                          ) : null}
+                          <textarea
+                            value={customDesc}
+                            onChange={(e) => setCustomDesc(e.target.value)}
+                            rows={4}
+                            maxLength={2000}
+                            placeholder={tr(
+                              "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中",
+                              "Describe your mode, e.g. show one English word and definition daily with a large centered font",
+                            )}
+                            className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y bg-white"
+                            disabled={customGenerating}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                void handleGenerateMode();
+                              }}
+                              disabled={customGenerating || !customDesc.trim()}
+                            >
+                              {tr("AI 生成预览", "AI Generate Preview")}
+                            </Button>
+                          </div>
                         </div>
                       ) : null}
-                      <textarea
-                        value={customDesc}
-                        onChange={(e) => {
-                          setCustomDesc(e.target.value);
-                          setCustomEditorSource("manual");
-                        }}
-                        rows={3}
-                        maxLength={2000}
-                        placeholder={tr(
-                          "描述你想要的模式，如：每天显示一个英语单词和释义，单词要大号字体居中",
-                          "Describe your mode, e.g. show one English word and definition daily with a large centered font",
-                        )}
-                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm resize-y bg-white"
-                        disabled={customGenerating}
-                      />
 
-                      <input
-                        value={customModeName}
-                        onChange={(e) => {
-                          setCustomModeName(e.target.value);
-                          setCustomEditorSource((v) => v || "manual");
-                        }}
-                        placeholder={tr("模式名称（例如：今日英语）", "Mode name (e.g. Daily English)")}
-                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
-                        disabled={customGenerating}
-                      />
-
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          // Keep the dialog open while generating; it will auto-close after generation finishes.
-                          void handleGenerateMode();
-                        }}
-                        disabled={customGenerating || !customDesc.trim()}
-                      >
-                        {tr("AI 生成预览", "AI Generate Preview")}
-                      </Button>
-
-                      {customEditorSource === "ai" ? (
-                        <div className="text-[11px] text-ink-light">
-                          {tr("AI 生成的模式可在右侧预览后直接保存。", "AI-generated modes can be saved from the right preview panel.")}
-                        </div>
+                      {customEditorTab === "composer" ? (
+                        composerCatalog ? (
+                          <ModeComposer
+                            tr={tr}
+                            isEn={isEn}
+                            catalog={composerCatalog}
+                            state={composerState}
+                            onChange={handleComposerChange}
+                            syncError={composerSyncError}
+                            onPreview={async () => {
+                              const modeDef = buildComposerModeDefinition({
+                                composer: composerState,
+                                catalog: composerCatalog,
+                                modeName: customModeName,
+                                modeDescription: customModeDescription,
+                                isEn,
+                              });
+                              const json = JSON.stringify(modeDef, null, 2);
+                              setCustomJson(json);
+                              setCustomEditorSource("composer");
+                              await handleCustomPreview(modeDef);
+                              setEditingCustomMode(false);
+                              requestAnimationFrame(() => {
+                                previewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                              });
+                            }}
+                            previewDisabled={!customJson.trim()}
+                            previewImgUrl={composerPreviewUrl}
+                            previewLoading={composerPreviewLoading}
+                            onRequestPreview={fetchComposerPreview}
+                          />
+                        ) : (
+                          <div className="text-sm text-ink-light">{tr("正在加载拼装器配置...", "Loading composer catalog...")}</div>
+                        )
                       ) : null}
+
                     </div>
                   </DialogContent>
                 </Dialog>

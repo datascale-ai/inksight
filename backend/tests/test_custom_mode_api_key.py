@@ -267,8 +267,8 @@ class TestJsonContentApiKey:
             assert result.get("_api_key_invalid") is True
 
     @pytest.mark.asyncio
-    async def test_json_content_passes_api_key_to_nested_calls(self, custom_mode_def):
-        """测试 json_content 在嵌套调用中传递 api_key"""
+    async def test_json_content_briefing_skips_llm_calls(self, custom_mode_def):
+        """测试 BRIEFING provider 不再触发 LLM 嵌套调用"""
         user_api_key = "sk-user-key-12345"
         
         # 测试 external_data 类型（briefing provider）
@@ -277,8 +277,6 @@ class TestJsonContentApiKey:
             "content": {
                 "type": "external_data",
                 "provider": "briefing",
-                "summarize": True,
-                "include_insight": True,
             },
             "layout": {"body": []},
         }
@@ -286,17 +284,13 @@ class TestJsonContentApiKey:
         with (
             patch("core.content.fetch_hn_top_stories", new_callable=AsyncMock) as mock_hn,
             patch("core.content.fetch_ph_top_product", new_callable=AsyncMock) as mock_ph,
-            patch("core.content.fetch_v2ex_hot", new_callable=AsyncMock) as mock_v2ex,
-            patch("core.content.summarize_briefing_content", new_callable=AsyncMock) as mock_summarize,
-            patch("core.content.generate_briefing_insight", new_callable=AsyncMock) as mock_insight,
+            patch("core.content.fetch_devto_top", new_callable=AsyncMock) as mock_devto,
         ):
             mock_hn.return_value = [{"title": "test", "score": 10}]
             mock_ph.return_value = {"name": "test", "tagline": "test"}
-            mock_v2ex.return_value = []
-            mock_summarize.return_value = ([{"title": "test"}], {"name": "test"})
-            mock_insight.return_value = "test insight"
+            mock_devto.return_value = [{"title": "devto", "score": 5}]
             
-            await generate_json_mode_content(
+            result = await generate_json_mode_content(
                 mode_def_briefing,
                 date_str="2025-03-12",
                 weather_str="晴 15°C",
@@ -304,13 +298,8 @@ class TestJsonContentApiKey:
                 api_key=user_api_key,
             )
             
-            # 验证嵌套调用都传递了 api_key
-            mock_summarize.assert_called_once()
-            assert mock_summarize.call_args.kwargs.get("api_key") == user_api_key
-            assert mock_summarize.call_args.kwargs.get("language") == "en"
-            mock_insight.assert_called_once()
-            assert mock_insight.call_args.kwargs.get("api_key") == user_api_key
-            assert mock_insight.call_args.kwargs.get("language") == "en"
+            assert result["_llm_used"] is False
+            assert result["devto_title"] == "devto"
 
 
 class TestModeGeneratorApiKey:
@@ -421,6 +410,3 @@ class TestGetClientApiKey:
             # 验证错误消息不包含"您配置的"（因为用户没有配置）
             assert "您配置的" not in str(exc_info.value)
 
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

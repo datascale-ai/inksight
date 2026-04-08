@@ -57,7 +57,10 @@
         "type": "image",
         "field": "image_url",
         "width": 248,
-        "height": 166
+        "height": 166,
+        "fit": "cover",
+        "align_x": "center",
+        "align_y": "center"
       }
     ],
     "footer": {
@@ -72,7 +75,10 @@
           "type": "image",
           "field": "image_url",
           "width": 272,
-          "height": 86
+          "height": 86,
+          "fit": "cover",
+          "align_x": "center",
+          "align_y": "center"
         }
       ],
       "footer": { "label": "ARTWALL", "height": 20 }
@@ -90,7 +96,10 @@
           "type": "image",
           "field": "image_url",
           "width": 428,
-          "height": 300
+          "height": 300,
+          "fit": "cover",
+          "align_x": "center",
+          "align_y": "center"
         }
       ]
     }

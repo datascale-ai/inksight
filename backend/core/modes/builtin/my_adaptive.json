@@ -22,14 +22,51 @@
         "type": "image",
         "field": "image_url",
         "width": 400,
-        "height": 270,
+        "height": 234,
         "x": 0,
-        "y": 0,
+        "y": 36,
+        "fit": "cover",
+        "align_x": "center",
+        "align_y": "center",
         "margin_bottom": 0
       }
     ],
     "footer": {
       "line_width": 0
+    }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "image",
+          "field": "image_url",
+          "width": 296,
+          "height": 104,
+          "x": 0,
+          "y": 12,
+          "fit": "cover",
+          "align_x": "center",
+          "align_y": "center",
+          "margin_bottom": 0
+        }
+      ]
+    },
+    "648x480": {
+      "body": [
+        {
+          "type": "image",
+          "field": "image_url",
+          "width": 648,
+          "height": 375,
+          "x": 0,
+          "y": 57,
+          "fit": "cover",
+          "align_x": "center",
+          "align_y": "center",
+          "margin_bottom": 0
+        }
+      ]
     }
   }
 }

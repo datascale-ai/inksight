@@ -90,15 +90,17 @@ class TestGenerateContentForPersona:
 
     @pytest.mark.asyncio
     async def test_briefing_dispatches_correctly(self, sample_date_ctx, sample_weather):
-        mock_reg = _mock_registry(builtin_modes=["BRIEFING"])
-        with patch("core.mode_registry.get_registry", return_value=mock_reg):
-            bm = mock_reg.get_builtin("BRIEFING")
-            bm.content_fn.return_value = {"hn_items": [], "ph_item": {}, "insight": "ok"}
+        mock_reg = _mock_registry(json_modes=["BRIEFING"])
+        with (
+            patch("core.mode_registry.get_registry", return_value=mock_reg),
+            patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_jc,
+        ):
+            mock_jc.return_value = {"hn_items": [], "ph_item": {}, "devto_items": [{"title": "ok"}], "devto_title": "ok"}
             result = await _generate_content_for_persona(
                 "BRIEFING", {}, sample_date_ctx, sample_weather["weather_str"]
             )
-            assert result["insight"] == "ok"
-            bm.content_fn.assert_called_once()
+            assert result["devto_title"] == "ok"
+            mock_jc.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_artwall_dispatches_correctly(self, sample_date_ctx, sample_weather):

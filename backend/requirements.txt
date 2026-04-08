@@ -18,6 +18,10 @@ qrcode~=7.4
 dashscope~=1.14.0
 cryptography~=41.0.0
 phonenumbers~=9.0.26
+Jinja2~=3.1.0
+playwright~=1.49.0
+alibabacloud_alimt20181012>=1.5.2
+alibabacloud_tea_openapi>=0.4.4
 
 # Dev / Test
 # Keep test toolchain stable across Python 3.9/3.10 in CI.
