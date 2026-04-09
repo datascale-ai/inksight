@@ -697,7 +697,7 @@ class TestLlmPrecheckBehavior:
         monkeypatch.setattr("api.routes.modes.get_user_api_quota", fake_get_quota)
         monkeypatch.setattr("api.routes.modes.get_user_role", fake_get_role)
 
-        resp = await generate_mode(body, user_id=user_id, admin_auth=None)
+        resp = await generate_mode(body, user_id=user_id)
 
         assert isinstance(resp, JSONResponse)
         assert resp.status_code == 402

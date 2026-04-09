@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from openai import OpenAIError
 
 from api.shared import logger
-from core.auth import require_admin, require_user, optional_user
+from core.auth import require_user, optional_user
 from core.config import SCREEN_HEIGHT, SCREEN_WIDTH, get_default_llm_model_for_provider
 from core.config_store import remove_mode_from_all_configs
 from core.context import get_date_context, get_weather
@@ -597,8 +597,7 @@ async def delete_custom_mode_endpoint(
 @router.post("/modes/generate")
 async def generate_mode(
     body: dict,
-    user_id: int = Depends(optional_user),
-    admin_auth: None = Depends(require_admin),
+    user_id: int = Depends(require_user),
 ):
     description = body.get("description", "").strip()
     if not description:
