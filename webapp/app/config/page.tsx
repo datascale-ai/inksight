@@ -9,7 +9,7 @@ import { ModeSelector } from "@/components/config/mode-selector";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { CalendarReminders } from "@/components/config/calendar-reminders";
 import { TimetableEditor, type TimetableData } from "@/components/config/timetable-editor";
-import { RefreshStrategyEditor } from "@/components/config/refresh-strategy-editor";
+import { RefreshStrategyEditor, TimeSlotRule } from "@/components/config/refresh-strategy-editor";
 import { Field, StatCard } from "@/components/config/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -465,6 +465,7 @@ function ConfigPageInner() {
   const [selectedModes, setSelectedModes] = useState<Set<string>>(new Set(["STOIC", "ZEN", "DAILY"]));
   const [strategy, setStrategy] = useState("random");
   const [refreshMin, setRefreshMin] = useState(60);
+  const [timeSlotRules, setTimeSlotRules] = useState<TimeSlotRule[]>([]);
   const [city, setCity] = useState("");
   const [locationMeta, setLocationMeta] = useState<LocationValue>({});
   const [modeLanguage, setModeLanguage] = useState("zh");
@@ -2324,6 +2325,10 @@ function ConfigPageInner() {
                   toneOptions={TONE_OPTIONS}
                   personaPresets={PERSONA_PRESETS}
                   strategies={STRATEGIES}
+                  timeSlotRules={timeSlotRules}
+                  setTimeSlotRules={setTimeSlotRules}
+                  availableModes={selectedModes ? Array.from(selectedModes) : []}
+                  modeMeta={modeMeta}
                 />
                 <Card>
                   <CardHeader>

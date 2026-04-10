@@ -172,6 +172,24 @@ async def _generate_content_for_persona(
     effective_language = cfg.get("mode_language", "") or DEFAULT_LANGUAGE
     date_str = _format_date_str(date_ctx, effective_language)
 
+    # ── 静态模式拦截层 ──────────────────────────────────────
+    # 对于 3 个静态模式（POETRY/RIDDLE/THISDAY），
+    # 从本地 SQLite 知识库查询，绕过 LLM 调用，实现零 API 消耗。
+    # 当静态库为空时返回带 _static_fallback 标记的内容，
+    # 此时继续走原有 LLM 路径作为降级策略。
+    if registry.is_json_mode(persona):
+        from .static_content import generate_static_content, should_use_static_fallback
+        static_content = await generate_static_content(
+            persona, mac, date_ctx=date_ctx
+        )
+        if not should_use_static_fallback(static_content):
+            # 静态库命中：直接返回
+            static_content["_from_static_db"] = True
+            static_content["_static_served"] = True
+            logger.info("[Pipeline] Static DB hit for mode=%s mac=%s", persona, mac)
+            return static_content
+        # 静态库未命中，降级走原有 LLM 路径
+
     device_api_key: str | None = None
     device_image_api_key: str | None = None
 

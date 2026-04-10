@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import json
 import logging
+import os
 import secrets
 import hashlib
 import hmac
@@ -14,8 +14,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 PAIR_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
+from .db import _MAIN_DB_PATH, get_main_db  # ← 复用 db.py 的路径，与 static_store 保持一致
 from migrations import run_main_db_migrations
-from .db import get_main_db
 from .config import (
     DEFAULT_CITY,
     DEFAULT_LLM_PROVIDER,
@@ -29,7 +29,8 @@ from .config import (
     DEFAULT_REFRESH_INTERVAL,
 )
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "inksight.db")
+# 历史兼容：保留 DB_PATH 别名供外部使用
+DB_PATH = _MAIN_DB_PATH
 
 
 async def init_db():

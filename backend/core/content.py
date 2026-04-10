@@ -350,6 +350,59 @@ async def _call_llm(
     return text
 
 
+async def call_llm(
+    prompt: str,
+    system_prompt: str | None = None,
+    output_format: str = "text",
+    temperature: float = 0.8,
+    max_tokens: int | None = None,
+    llm_provider: str = DEFAULT_LLM_PROVIDER,
+    llm_model: str = DEFAULT_LLM_MODEL,
+    api_key: str | None = None,
+    llm_base_url: str | None = None,
+) -> str:
+    """公共 LLM 调用接口，供其他模块使用。
+
+    Args:
+        prompt: 用户提示词
+        system_prompt: 系统提示词（可选）
+        output_format: 输出格式（text/json）
+        temperature: 温度参数
+        max_tokens: 最大 token 数
+        llm_provider: LLM 提供商
+        llm_model: LLM 模型
+        api_key: API 密钥
+        llm_base_url: 自定义 API 地址
+
+    Returns:
+        LLM 生成的文本内容
+    """
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    client, default_max_tokens = _get_client(llm_provider, llm_model, api_key=api_key, base_url=llm_base_url)
+    request_kwargs = {
+        "model": llm_model,
+        "messages": messages,
+        "max_tokens": max_tokens or default_max_tokens,
+        "temperature": temperature,
+    }
+
+    extra_body = _chat_completion_extra_body(llm_provider, llm_model)
+    if extra_body is not None:
+        request_kwargs["extra_body"] = extra_body
+
+    response = await client.chat.completions.create(**request_kwargs)
+    text = response.choices[0].message.content.strip()
+
+    usage = response.usage
+    logger.info(f"[LLM] {llm_provider}/{llm_model} tokens={usage.total_tokens}")
+
+    return text
+
+
 # ── Core content generation ──────────────────────────────────
 
 
