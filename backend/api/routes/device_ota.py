@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.shared import (
@@ -45,7 +45,7 @@ async def trigger_ota(
     mac: str,
     req: OTATriggerRequest,
     request: Request,
-    ink_session: Optional[str] = None,
+    ink_session: Optional[str] = Cookie(default=None),
 ):
     # 1. Owner authentication
     await require_membership_access(request, mac, ink_session, owner_only=True)
@@ -102,7 +102,7 @@ async def trigger_ota(
 async def get_ota_status(
     mac: str,
     request: Request,
-    ink_session: Optional[str] = None,
+    ink_session: Optional[str] = Cookie(default=None),
 ):
     await require_membership_access(request, mac, ink_session)
     state = await _get_device_state_row(mac)
@@ -123,7 +123,7 @@ async def get_ota_status(
 async def cancel_ota(
     mac: str,
     request: Request,
-    ink_session: Optional[str] = None,
+    ink_session: Optional[str] = Cookie(default=None),
 ):
     await require_membership_access(request, mac, ink_session, owner_only=True)
     state = await _get_device_state_row(mac)

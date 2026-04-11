@@ -28,9 +28,12 @@ function ensureApiSuffix(value: string) {
 function resolveApiBase() {
   for (const value of [EXPO_PUBLIC_INKSIGHT_API_BASE, EXPO_PUBLIC_INKSIGHT_BACKEND_API_BASE]) {
     if (typeof value === 'string' && value.trim()) {
-      return ensureApiSuffix(value);
+      const resolved = ensureApiSuffix(value);
+      console.log('[API] resolveApiBase =>', resolved);
+      return resolved;
     }
   }
+  console.log('[API] resolveApiBase => fallback', DEFAULT_API_BASE);
   return stripTrailingSlash(DEFAULT_API_BASE);
 }
 
@@ -108,14 +111,21 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
     ...headers,
   };
 
+  const url = buildApiUrl(path);
+  console.log(`[API] ${method} ${url}`);
   const { signal, clear } = withTimeoutSignal(DEFAULT_FETCH_TIMEOUT_MS);
   try {
-    return await fetch(buildApiUrl(path), {
+    const resp = await fetch(url, {
       method,
       headers: requestHeaders,
       body: normalizeBody(body, contentType),
       signal,
     });
+    console.log(`[API] ${method} ${url} => ${resp.status}`);
+    return resp;
+  } catch (err) {
+    console.error(`[API] ${method} ${url} => ERROR`, err);
+    throw err;
   } finally {
     clear();
   }
