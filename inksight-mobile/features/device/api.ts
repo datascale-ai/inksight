@@ -166,6 +166,12 @@ export async function getLatestFirmwareRelease() {
   );
 }
 
+export async function getAllFirmwareReleases() {
+  return apiRequest<{ source?: string; repo?: string; cached?: boolean; count?: number; releases?: FirmwareRelease[] }>(
+    '/firmware/releases',
+  );
+}
+
 // ── OTA (Over-The-Air Firmware Update) ─────────────────────
 
 export type OTAStatus = {

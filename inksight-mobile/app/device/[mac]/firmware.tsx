@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { Alert } from 'react-native';
@@ -7,7 +7,7 @@ import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
 import { InkButton } from '@/components/ui/InkButton';
-import { getLatestFirmwareRelease, getOTAStatus, triggerOTA, cancelOTA } from '@/features/device/api';
+import { getAllFirmwareReleases, getOTAStatus, triggerOTA, cancelOTA, type FirmwareRelease } from '@/features/device/api';
 import { useAuthStore } from '@/features/auth/store';
 import { useI18n } from '@/lib/i18n';
 import { theme } from '@/lib/theme';
@@ -22,22 +22,31 @@ export default function DeviceFirmwareScreen() {
   const { mac } = useLocalSearchParams<{ mac: string }>();
   const { token } = useAuthStore();
 
-  // ── Firmware release query ────────────────────────────────
+  // ── Firmware releases query ─────────────────────────────
   const releaseQuery = useQuery({
-    queryKey: ['firmware-latest'],
-    queryFn: getLatestFirmwareRelease,
+    queryKey: ['firmware-releases'],
+    queryFn: getAllFirmwareReleases,
     refetchInterval: false,
   });
-  const latest = releaseQuery.data?.latest;
+  const releases = releaseQuery.data?.releases ?? [];
 
-  // ── OTA state ─────────────────────────────────────────────
+  // ── Selected firmware variant ───────────────────────────
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const selected: FirmwareRelease | undefined = releases[selectedIdx];
+
+  // Reset selection when releases change
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [releases.length]);
+
+  // ── OTA state ───────────────────────────────────────────
   const [otaStage, setOtaStage] = useState<OTAStage>('idle');
   const [otaProgress, setOtaProgress] = useState(0);
   const [otaResult, setOtaResult] = useState('');
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStartRef = useRef<number>(0);
 
-  // ── Stage label ────────────────────────────────────────────
+  // ── Stage label ─────────────────────────────────────────
   const stageLabel = (() => {
     if (otaResult === 'downloading' || (otaStage === 'flashing' && otaProgress < 50)) {
       return t('firmware.ota.downloading');
@@ -58,7 +67,7 @@ export default function DeviceFirmwareScreen() {
     return '';
   })();
 
-  // ── Poll OTA status ────────────────────────────────────────
+  // ── Poll OTA status ─────────────────────────────────────
   const pollOTAStatus = useCallback(async () => {
     if (!mac || !token) return;
     const elapsed = Date.now() - pollStartRef.current;
@@ -99,7 +108,6 @@ export default function DeviceFirmwareScreen() {
         setOtaStage('flashing');
       }
 
-      // Timeout
       if (elapsed >= POLL_TIMEOUT_MS) {
         setOtaStage('error');
         setOtaResult('failed:timeout');
@@ -120,16 +128,14 @@ export default function DeviceFirmwareScreen() {
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => clearPollTimer();
   }, []);
 
-  // ── Start OTA ──────────────────────────────────────────────
+  // ── Start OTA ───────────────────────────────────────────
   const handleFlash = async () => {
-    if (!latest?.download_url || !latest?.version || !mac || !token) return;
+    if (!selected?.download_url || !selected?.version || !mac || !token) return;
 
-    // Fresh device status check before attempting flash
     let status;
     try {
       status = await getOTAStatus(mac!, token!);
@@ -139,24 +145,19 @@ export default function DeviceFirmwareScreen() {
     }
 
     if (!status.is_online) {
-      Alert.alert(
-        t('firmware.ota.notOnlineTitle'),
-        t('firmware.ota.notOnlineBody'),
-      );
+      Alert.alert(t('firmware.ota.notOnlineTitle'), t('firmware.ota.notOnlineBody'));
       return;
     }
 
     if (status.runtime_mode !== 'active') {
-      Alert.alert(
-        t('firmware.ota.notActiveTitle'),
-        t('firmware.ota.notActiveBody'),
-      );
+      Alert.alert(t('firmware.ota.notActiveTitle'), t('firmware.ota.notActiveBody'));
       return;
     }
 
+    const label = selected.asset_name || selected.version;
     Alert.alert(
       t('firmware.ota.confirmTitle'),
-      t('firmware.ota.confirmBody', { version: latest.version, mac: mac ?? '' }),
+      t('firmware.ota.confirmBody', { version: label, mac: mac ?? '' }),
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -167,7 +168,7 @@ export default function DeviceFirmwareScreen() {
             setOtaResult('');
 
             try {
-              const result = await triggerOTA(mac!, latest.download_url!, latest.version!, token!);
+              const result = await triggerOTA(mac!, selected.download_url!, selected.version!, token!);
 
               if (!result.ok) {
                 Alert.alert(t('firmware.ota.errorTitle'), result.message || t('firmware.ota.failed'));
@@ -189,7 +190,7 @@ export default function DeviceFirmwareScreen() {
     );
   };
 
-  // ── Cancel OTA ────────────────────────────────────────────
+  // ── Cancel OTA ──────────────────────────────────────────
   const handleCancel = async () => {
     if (!mac || !token) return;
     Alert.alert(t('firmware.ota.cancelTitle'), t('firmware.ota.cancelBody'), [
@@ -212,7 +213,7 @@ export default function DeviceFirmwareScreen() {
     ]);
   };
 
-  // ── Render ─────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────
 
   return (
     <AppScreen>
@@ -223,19 +224,50 @@ export default function DeviceFirmwareScreen() {
         {mac ? t('firmware.deviceSubtitle', { mac }) : t('firmware.subtitle')}
       </InkText>
 
-      {/* Firmware info card */}
+      {/* Firmware variant selector */}
+      {releases.length > 1 && otaStage === 'idle' && (
+        <InkCard>
+          <InkText style={{ fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
+            {t('firmware.selectVariant')}
+          </InkText>
+          {releases.map((rel, idx) => {
+            const isSelected = idx === selectedIdx;
+            return (
+              <Pressable
+                key={`${rel.version}-${rel.asset_name}`}
+                style={[styles.variantRow, isSelected && styles.variantRowSelected]}
+                onPress={() => setSelectedIdx(idx)}
+              >
+                <View style={styles.variantRadio}>
+                  {isSelected && <View style={styles.variantRadioDot} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <InkText style={{ fontSize: 14, fontWeight: isSelected ? '600' : '400' }}>
+                    {rel.asset_name || rel.version}
+                  </InkText>
+                  <InkText dimmed style={{ fontSize: 12 }}>
+                    {[rel.chip_family, rel.version, rel.size_bytes ? `${Math.round(rel.size_bytes / 1024)}KB` : ''].filter(Boolean).join(' · ')}
+                  </InkText>
+                </View>
+              </Pressable>
+            );
+          })}
+        </InkCard>
+      )}
+
+      {/* Selected firmware info card */}
       <InkCard>
         <InkText style={{ fontSize: 16, fontWeight: '600' }}>
-          {latest?.version
-            ? t('firmware.latest', { version: latest.version })
+          {selected?.version
+            ? t('firmware.latest', { version: selected.version })
             : t('firmware.loading')}
         </InkText>
         <InkText dimmed style={{ marginTop: 8, lineHeight: 24 }}>
-          {latest
+          {selected
             ? t('firmware.detail', {
-                publishedAt: latest.published_at || '-',
-                chip: latest.chip_family || '-',
-                asset: latest.asset_name || '-',
+                publishedAt: selected.published_at || '-',
+                chip: selected.chip_family || '-',
+                asset: selected.asset_name || '-',
               })
             : t('firmware.unavailable')}
         </InkText>
@@ -294,7 +326,7 @@ export default function DeviceFirmwareScreen() {
             label={t('firmware.ota.flash')}
             block
             variant="secondary"
-            disabled={otaStage !== 'idle' || !latest?.download_url || !latest?.version || !token}
+            disabled={otaStage !== 'idle' || !selected?.download_url || !selected?.version || !token}
             onPress={handleFlash}
           />
         </>
@@ -339,10 +371,36 @@ export default function DeviceFirmwareScreen() {
 }
 
 const styles = StyleSheet.create({
+  variantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 10,
+  },
+  variantRowSelected: {
+    backgroundColor: theme.colors.surface,
+  },
+  variantRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: theme.colors.brandInk,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  variantRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.brandInk,
+  },
   otaStatusCard: {
     marginTop: 16,
     paddingTop: 16,
-        borderTopWidth: 1,
+    borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
   otaRow: {

@@ -1,5 +1,5 @@
 import { ThemeProvider, DefaultTheme } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,6 +12,7 @@ import { I18nProvider, useI18n } from '@/lib/i18n';
 import { useAuthStore } from '@/features/auth/store';
 import { ensureLocalNotificationHandler } from '@/features/notifications/local';
 import { queryClient } from '@/lib/query-client';
+import { setOnUnauthorized } from '@/lib/api-client';
 import { theme } from '@/lib/theme';
 import { InkToastProvider } from '@/components/ui/InkToastProvider';
 import { ErrorBoundary as CustomErrorBoundary } from '@/components/ErrorBoundary';
@@ -40,6 +41,12 @@ export default function RootLayout() {
   useEffect(() => {
     bootstrap();
     ensureLocalNotificationHandler();
+    setOnUnauthorized(() => {
+      useAuthStore.getState().signOut().then(() => {
+        queryClient.clear();
+        router.replace('/login');
+      });
+    });
   }, [bootstrap]);
 
   if (!fontsLoaded) {

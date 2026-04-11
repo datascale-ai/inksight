@@ -69,9 +69,9 @@
     "status_bar": { "line_width": 1, "dashed": false },
     "body_align": "top",
     "body": [
-      { "type": "calendar_grid", "font_size": 16, "header_font_size": 11, "sub_font_size": 8, "margin_x": 10, "cell_height": 30 },
-      { "type": "spacer", "height": 1 },
-      { "type": "separator", "style": "dashed", "margin_x": 10 },
+      { "type": "calendar_grid", "font_size": 16, "header_font_size": 11, "sub_font_size": 7, "reminder_font": "noto_serif_light", "reminder_font_size": 9, "header_gap": 5, "date_line_gap": 2, "margin_x": 10, "cell_height": 34 },
+      { "type": "spacer", "height": 16 },
+      { "type": "separator", "style": "dashed", "margin_x": 5 },
       { "type": "text", "field": "text", "font_size": 13, "align": "center", "max_lines": 1 }
     ],
     "footer": { "label": "CALENDAR", "attribution_template": "— InkSight" }
