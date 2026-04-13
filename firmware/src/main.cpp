@@ -510,13 +510,9 @@ static void handleLiveMode() {
         // Check if it's an OTA action (g_pending_ota_url is set)
         if (g_pending_ota_url.length() > 0) {
             Serial.println("[LIVE] Pending OTA detected, initiating firmware update...");
-            bool otaOk = checkAndPerformOTA();
-            if (!otaOk) {
-                Serial.println("[OTA] Firmware update failed, continuing normal operation");
-            }
-            // checkAndPerformOTA() reboots on success; on failure clears g_pending_ota_url and returns
-            g_pending_ota_url = "";
-            g_pending_ota_version = "";
+            checkAndPerformOTA();
+            // On success the task reboots; on failure it clears g_pending_ota_url
+            // and deletes itself. Either way we must NOT touch the globals here.
             return;
         }
         Serial.println("[LIVE] Pending action detected, refreshing now");

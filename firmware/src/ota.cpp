@@ -9,10 +9,15 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <esp_ota_ops.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 // ── Global parameters set by network.cpp ───────────────────
 String g_pending_ota_url = "";
 String g_pending_ota_version = "";
+
+// ── Independent OTA task handle (prevents re-entrancy) ───────
+static TaskHandle_t s_otaTaskHandle = NULL;
 
 // ── Report OTA progress to backend ─────────────────────────
 
@@ -239,24 +244,70 @@ static bool performOTAUpdate(const char* ota_url, const char* ota_version) {
     return true;  // Never reached
 }
 
-// ── Check and execute OTA ───────────────────────────────────
+// ── Check and launch OTA in independent task ────────────────
+
+bool isOtaTaskRunning() {
+    return s_otaTaskHandle != NULL;
+}
+
+// Internal task entry — runs in its own 12KB stack
+static void otaTaskFunction(void* param) {
+    (void)param;
+    Serial.println("[OTA] OTA task started on independent stack");
+
+    bool ok = performOTAUpdate(
+        g_pending_ota_url.c_str(),
+        g_pending_ota_version.c_str()
+    );
+
+    // Clear pending globals
+    g_pending_ota_url = "";
+    g_pending_ota_version = "";
+
+    if (!ok) {
+        ledFeedback("fail");
+        Serial.println("[OTA] Firmware update FAILED — see logs above");
+    }
+
+    // Clean up and delete this task
+    s_otaTaskHandle = NULL;
+    vTaskDelete(NULL);
+}
 
 bool checkAndPerformOTA() {
     if (g_pending_ota_url.length() == 0) {
         return false;
     }
 
-    Serial.println("[OTA] === Pending firmware update detected ===");
-    bool ok = performOTAUpdate(g_pending_ota_url.c_str(), g_pending_ota_version.c_str());
-
-    // Clear pending OTA
-    g_pending_ota_url = "";
-    g_pending_ota_version = "";
-
-    if (!ok) {
-        ledFeedback("fail");
-        Serial.println("[OTA] Firmware update FAILED — check logs above for cause");
+    // Prevent re-entrancy: if a task is already running, skip
+    if (s_otaTaskHandle != NULL) {
+        Serial.println("[OTA] OTA task already running, skipping");
+        return true;
     }
 
+    Serial.println("[OTA] === Pending firmware update detected ===");
+
+    BaseType_t ret = xTaskCreatePinnedToCore(
+        otaTaskFunction,
+        "OTA",
+        12 * 1024,                       // 12KB stack — plenty for HTTPS+TLS
+        NULL,
+        configMAX_PRIORITIES - 2,        // slightly below loopTask priority
+        &s_otaTaskHandle,
+        0                                 // ESP32-C3 has only one core, pin to 0
+    );
+
+    if (ret != pdPASS) {
+        Serial.println("[OTA] Failed to create OTA task");
+        s_otaTaskHandle = NULL;
+        g_pending_ota_url = "";
+        g_pending_ota_version = "";
+        ledFeedback("fail");
+        return false;
+    }
+
+    Serial.println("[OTA] OTA task launched (independent stack, 12KB)");
+    // Caller should return immediately. On success the task reboots;
+    // on failure it clears globals and deletes itself.
     return true;
 }
