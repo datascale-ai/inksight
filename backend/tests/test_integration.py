@@ -1012,6 +1012,15 @@ async def test_user_can_preview_and_create_custom_mode(client):
     assert preview["ok"] is True
     assert preview["preview_text"] == "Write with calm intent."
 
+    legacy_preview_resp = await client.post(
+        "/api/modes/preview",
+        json={"mode_def": mode_def, "responseType": "json"},
+    )
+    assert legacy_preview_resp.status_code == 200
+    legacy_preview = legacy_preview_resp.json()
+    assert legacy_preview["ok"] is True
+    assert legacy_preview["preview_text"] == "Write with calm intent."
+
     create_resp = await client.post("/api/modes/custom", json=mode_def)
     assert create_resp.status_code == 200
     assert create_resp.json()["mode_id"] == "MOBILE_NOTE"

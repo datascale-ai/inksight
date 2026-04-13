@@ -293,6 +293,7 @@ def _preview_payload(content: dict) -> dict:
 
 
 @router.post("/modes/custom/preview")
+@router.post("/modes/preview")
 async def custom_mode_preview(
     body: dict,
     user_id: int = Depends(optional_user),

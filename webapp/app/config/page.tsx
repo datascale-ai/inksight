@@ -1482,7 +1482,7 @@ function ConfigPageInner() {
           }
         }
       } catch {}
-      const res = await fetch("/api/modes/preview", {
+      const res = await fetch("/api/modes/custom/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode_def: def, mac: mac || undefined, colors: previewColors }),

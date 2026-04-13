@@ -506,7 +506,7 @@ export default function ExperiencePage() {
       const displayName = nameFromInput || nameFromDef || (locale === "zh" ? "自定义模式" : "Custom Mode");
       setPreviewModeNameOverride(displayName);
       setPreviewMode(displayName.toUpperCase().replace(/[^A-Z0-9_]/g, "_"));
-      const res = await fetch("/api/modes/preview", {
+      const res = await fetch("/api/modes/custom/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode_def: def, colors: previewColors }),
