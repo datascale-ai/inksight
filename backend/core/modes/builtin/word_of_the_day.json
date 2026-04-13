@@ -36,7 +36,7 @@
       {
         "type": "text",
         "field": "phonetic",
-        "font": "noto_serif_light",
+        "font": "lora_regular",
         "font_size": 11,
         "align": "center",
         "max_lines": 1

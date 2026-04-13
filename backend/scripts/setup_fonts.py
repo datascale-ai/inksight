@@ -28,6 +28,7 @@ FONT_FAMILIES: dict[str, list[str]] = {
     "Lora": [
         "Lora-Regular.ttf",
         "Lora-Bold.ttf",
+        "Lora-Italic.ttf",
     ],
     "Inter": [
         "Inter_24pt-Medium.ttf",

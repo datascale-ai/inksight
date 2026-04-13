@@ -390,7 +390,11 @@ void showModePreview(const char *modeName) {
     int loadY = H / 2 + (H < 200 ? 10 : 20);
     drawText(loading, loadX, loadY, loadScale);
 
-    epdDisplayFast(imgBuf);
+    #if defined(EPD_PANEL_583) || defined(EPD_PANEL_75)
+        epdDisplay(imgBuf);
+    #else
+        epdDisplayFast(imgBuf);
+    #endif
     Serial.printf("Mode preview shown: %s\n", modeName);
 }
 
@@ -410,12 +414,15 @@ void smartDisplay(const uint8_t *image) {
         Serial.printf("smartDisplay: full refresh (cycle %d)\n", refreshCount);
         epdDisplay(image);
     } else {
-#if defined(EPD_PANEL_42_GXEPD2_GYE042A87)
-        Serial.printf("smartDisplay: full refresh fallback (cycle %d)\n", refreshCount);
+#if defined(EPD_PANEL_583) || defined(EPD_PANEL_75) || defined(EPD_PANEL_42_GXEPD2_GYE042A87)
+        // Large/slow panels: always full refresh to prevent ghosting.
+        // These devices refresh every 10-60 min so fast refresh offers no benefit.
+        Serial.printf("smartDisplay: full refresh (large panel, cycle %d)\n", refreshCount);
+        epdDisplay(image);
 #else
         Serial.printf("smartDisplay: fast refresh (cycle %d)\n", refreshCount);
-#endif
         epdDisplayFast(image);
+#endif
     }
     refreshCount++;
 }

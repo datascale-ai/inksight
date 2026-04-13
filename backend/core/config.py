@@ -82,6 +82,7 @@ FONTS = {
     # 英文字体
     "lora_regular": "Lora-Regular.ttf",
     "lora_bold": "Lora-Bold.ttf",
+    "lora_italic": "Lora-Italic.ttf",
     "inter_medium": "Inter_24pt-Medium.ttf",
 }
 

@@ -358,8 +358,6 @@ void loop() {
     static unsigned long lastAlertPollAt = 0;
     static bool alertVisible = false;
     static unsigned long alertShownAt = 0;
-    static uint8_t alertBackupBuf[IMG_BUF_LEN];
-    static bool hasAlertBackup = false;
 
     if (focusListening) {
         unsigned long nowMs = millis();
@@ -367,25 +365,22 @@ void loop() {
             const unsigned long ALERT_INTERVAL_MS = 10000UL;
             if (lastAlertPollAt == 0 || nowMs - lastAlertPollAt >= ALERT_INTERVAL_MS) {
                 lastAlertPollAt = nowMs;
-                memcpy(alertBackupBuf, imgBuf, IMG_BUF_LEN);
-                hasAlertBackup = true;
                 if (fetchFocusAlertBMP()) {
-                    epdDisplayFast(imgBuf);
+                    smartDisplay(imgBuf);
                     alertVisible = true;
                     alertShownAt = nowMs;
                 } else {
-                    if (hasAlertBackup) memcpy(imgBuf, alertBackupBuf, IMG_BUF_LEN);
-                    hasAlertBackup = false;
+                    // fetchFocusAlertBMP may have partially written imgBuf on error;
+                    // restore from flash cache (saved after every successful fetch).
+                    cacheLoad(imgBuf, IMG_BUF_LEN);
                 }
             }
         } else {
             const unsigned long ALERT_DISPLAY_MS = 30000UL;
             if (nowMs - alertShownAt >= ALERT_DISPLAY_MS) {
-                if (hasAlertBackup) {
-                    memcpy(imgBuf, alertBackupBuf, IMG_BUF_LEN);
-                    epdDisplayFast(imgBuf);
+                if (cacheLoad(imgBuf, IMG_BUF_LEN)) {
+                    smartDisplay(imgBuf);
                 }
-                hasAlertBackup = false;
                 alertVisible = false;
             }
         }
