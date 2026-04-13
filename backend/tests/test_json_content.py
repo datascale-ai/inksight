@@ -4,6 +4,7 @@
 """
 import os
 import sys
+from pathlib import Path
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -508,4 +509,80 @@ async def test_habit_computed_content_ignores_stale_derived_override_fields():
     assert "今日已完成 1/2 项" in result["summary"]
     assert result["week_progress"] == 1
     assert result["week_total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_almanac_api_uses_cache_db_across_calls(tmp_path):
+    from core import db as db_mod
+    from core.cache import init_cache_db
+
+    cache_db = str(Path(tmp_path) / "almanac_cache.db")
+    mode_def = {
+        "mode_id": "ALMANAC",
+        "content": {
+            "type": "computed",
+            "provider": "almanac_api",
+            "fallback": {
+                "solar_term": "",
+                "lunar_date_display": "",
+                "yi": "",
+                "ji": "",
+                "shenwei": "",
+                "xingsu": "",
+                "suisha": "",
+                "chongsha": "",
+                "health_tip": "默认提示",
+            },
+        },
+        "layout": {"body": []},
+    }
+    raw_payload = {
+        "jieqi": "谷雨",
+        "fitness": "祭祀.沐浴.扫舍",
+        "taboo": "嫁娶.安葬",
+        "shenwei": "喜神东南 福神东北 财神正北",
+        "lubarmonth": "三月",
+        "lunarday": "初八",
+        "xingsu": "角木蛟",
+        "suisha": "东",
+        "chongsha": "冲牛(辛丑)煞西",
+        "pengzu": "辛不合酱",
+    }
+
+    await db_mod.close_all()
+    try:
+        with (
+            patch.object(db_mod, "_CACHE_DB_PATH", cache_db),
+            patch("core.cache._CACHE_DB_PATH", cache_db),
+        ):
+            await init_cache_db()
+            with (
+                patch("core.json_content._fetch_tianapi_almanac_payload", new_callable=AsyncMock) as mock_fetch,
+                patch("core.json_content._generate_almanac_health_tip", new_callable=AsyncMock, return_value="宜早睡早起") as mock_tip,
+            ):
+                mock_fetch.return_value = raw_payload
+
+                first = await generate_json_mode_content(
+                    mode_def,
+                    date_ctx={"year": 2026, "month": 4, "day": 13},
+                    date_str="2026-04-13",
+                    weather_str="晴 15°C",
+                    language="zh",
+                )
+                second = await generate_json_mode_content(
+                    mode_def,
+                    date_ctx={"year": 2026, "month": 4, "day": 13},
+                    date_str="2026-04-13",
+                    weather_str="晴 15°C",
+                    language="zh",
+                )
+
+            assert first["solar_term"] == "谷雨"
+            assert first["health_tip"] == "宜早睡早起"
+            assert second["solar_term"] == "谷雨"
+            assert second["health_tip"] == "宜早睡早起"
+            assert mock_fetch.await_count == 1
+            assert mock_tip.await_count == 1
+    finally:
+        await db_mod.close_all()
 

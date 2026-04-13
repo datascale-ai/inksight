@@ -1187,3 +1187,32 @@ async def test_health_endpoint(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_uploads_accept_raw_octet_stream_image(client):
+    payload = png_payload()
+    resp = await client.post(
+        "/api/uploads",
+        content=payload,
+        headers={"x-upload-content-type": "image/png"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["url"].endswith(f"/api/uploads/{body['id']}")
+
+
+@pytest.mark.asyncio
+async def test_uploads_accept_multipart_form_image(client):
+    payload = png_payload()
+    resp = await client.post(
+        "/api/uploads",
+        files={"file": ("frame.png", payload, "image/png")},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["url"].endswith(f"/api/uploads/{body['id']}")

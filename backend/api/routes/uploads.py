@@ -199,6 +199,50 @@ def _validate_image_payload(payload: bytes, claimed_content_type: str) -> str:
     return content_type
 
 
+def _extract_multipart_file(payload: bytes, content_type_header: str) -> tuple[bytes, str]:
+    content_type = (content_type_header or "").strip()
+    if "multipart/form-data" not in content_type.lower():
+        raise ValueError("unsupported content type")
+
+    boundary_key = "boundary="
+    lower = content_type.lower()
+    idx = lower.find(boundary_key)
+    if idx < 0:
+        raise ValueError("missing multipart boundary")
+    boundary = content_type[idx + len(boundary_key):].strip().strip('"')
+    if not boundary:
+        raise ValueError("missing multipart boundary")
+
+    marker = f"--{boundary}".encode()
+    for part in payload.split(marker):
+        part = part.strip()
+        if not part or part == b"--":
+            continue
+        if b"\r\n\r\n" not in part:
+            continue
+        header_blob, body = part.split(b"\r\n\r\n", 1)
+        body = body.rstrip(b"\r\n")
+        headers: dict[str, str] = {}
+        for raw_line in header_blob.split(b"\r\n"):
+            if b":" not in raw_line:
+                continue
+            name, value = raw_line.split(b":", 1)
+            headers[name.decode("utf-8", errors="ignore").strip().lower()] = value.decode("utf-8", errors="ignore").strip()
+
+        disposition = headers.get("content-disposition", "")
+        if "name=\"file\"" not in disposition:
+            continue
+
+        part_content_type = headers.get("content-type", "").strip().lower()
+        if not part_content_type.startswith("image/"):
+            raise ValueError("only image/* is allowed")
+        if not body:
+            raise ValueError("missing file")
+        return body, part_content_type
+
+    raise ValueError("missing file")
+
+
 @router.post("/uploads")
 @limiter.limit("30/minute")
 async def upload_image(request: Request):
@@ -208,14 +252,25 @@ async def upload_image(request: Request):
     if len(payload) > _MAX_UPLOAD_BYTES:
         return JSONResponse({"error": "file_too_large", "message": "max 10MB"}, status_code=413)
 
+    content_type_header = (request.headers.get("content-type") or "").strip()
     claimed_content_type = (request.headers.get("x-upload-content-type") or "").strip().lower()
-    if not claimed_content_type.startswith("image/"):
+
+    if claimed_content_type.startswith("image/"):
+        image_payload = payload
+    elif "multipart/form-data" in content_type_header.lower():
+        try:
+            image_payload, claimed_content_type = _extract_multipart_file(payload, content_type_header)
+        except ValueError as exc:
+            return JSONResponse({"error": "invalid_request", "message": str(exc)}, status_code=400)
+    else:
         return JSONResponse({"error": "invalid_file", "message": "only image/* is allowed"}, status_code=400)
 
     try:
-        content_type = _validate_image_payload(payload, claimed_content_type)
+        content_type = _validate_image_payload(image_payload, claimed_content_type)
     except ValueError as exc:
         return JSONResponse({"error": "invalid_file", "message": str(exc)}, status_code=400)
+
+    payload = image_payload
 
     _ensure_upload_dir()
     upload_id = str(uuid.uuid4())

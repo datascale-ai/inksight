@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from urllib.parse import urlsplit
 
@@ -112,6 +113,31 @@ class OriginValidationMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
 
         return JSONResponse({"error": "origin_not_allowed"}, status_code=403)
+
+
+class _AccessLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        full_path = ""
+        if isinstance(record.args, tuple) and len(record.args) >= 3:
+            full_path = str(record.args[2] or "")
+        if not full_path:
+            try:
+                full_path = record.getMessage()
+            except Exception:
+                full_path = ""
+        return not (
+            full_path.startswith("/api/device/")
+            and (full_path.endswith("/state") or "/state?" in full_path)
+        )
+
+
+_uvicorn_access_logger = logging.getLogger("uvicorn.access")
+_state_access_filter_present = any(isinstance(f, _AccessLogFilter) for f in _uvicorn_access_logger.filters)
+if not _state_access_filter_present:
+    _state_access_filter = _AccessLogFilter()
+    _uvicorn_access_logger.addFilter(_state_access_filter)
+    for _handler in _uvicorn_access_logger.handlers:
+        _handler.addFilter(_state_access_filter)
 
 
 _cors_origins, _cors_origin_regex = _build_cors_settings()
