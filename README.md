@@ -99,11 +99,11 @@ We also provide the matching docs:
 We are thrilled to see the amazing cases and custom PCBs created by the InkSight community! Here are some excellent community contributions:
 
 ### 3D Printable Cases
-- **[Orange Desktop Case (MakerWorld)](https://makerworld.com.cn/zh/models/2315926-gua-pei-inksight-4-2cun-zhi-neng-dian-zi-mo-shui-p#profileId-2617500)**
+- **[Orange Desktop Case (MakerWorld)](https://makerworld.com/zh/@CANLAY)**
   
   <img src="images/community/case1.png" width="400">
 
-- **[Pink/Red Minimalist Cases (MakerWorld)](https://makerworld.com.cn/zh/models/2319168-fu-ke-jiao-cheng-gua-pei-inksight-4-2cun-zhi-neng#profileId-2621798)**
+- **[Pink/Red Minimalist Cases (MakerWorld)](https://makerworld.com/zh/@CANLAY)**
   
   <img src="images/community/case2.png" width="400">
   <img src="images/community/case3.png" width="400">
