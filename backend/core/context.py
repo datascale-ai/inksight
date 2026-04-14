@@ -1482,12 +1482,28 @@ async def _qweather_forecast_to_standard(
 
 
 def calc_battery_pct(voltage: float) -> int:
-    pct = int(voltage / 3.30 * 100)
-    if pct < 0:
-        return 0
+    """
+    两段式折线估算锂电池电量百分比。
+
+    锂离子电池电压-电量曲线是非线性的：
+    - 高电量区间 (3.70V~4.20V)：电压变化快，电量变化慢
+    - 低电量区间 (3.00V~3.70V)：电压变化慢，电量变化快
+    """
+    V_FULL = 4.20   # 满电电压
+    V_HIGH = 3.70   # 高电量阈值
+    V_LOW = 3.00    # 过放保护阈值
+
+    if voltage >= V_HIGH:
+        pct = (voltage - V_HIGH) / (V_FULL - V_HIGH) * 50 + 50
+    else:
+        pct = (voltage - V_LOW) / (V_HIGH - V_LOW) * 50
+
     if pct > 100:
-        return 100
-    return pct
+        pct = 100
+    elif pct < 0:
+        pct = 0
+
+    return int(pct)
 
 
 def choose_persona(weekday: int, hour: int) -> str:
