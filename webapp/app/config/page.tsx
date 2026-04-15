@@ -6,7 +6,7 @@ import Link from "next/link";
 import { DeviceInfo } from "@/components/config/device-info";
 import { LocationPicker } from "@/components/config/location-picker";
 import { ModeSelector } from "@/components/config/mode-selector";
-import { ModeComposer, type ComposerPropMeta, type ComposerCatalogItem, type ComposerCatalog, type ComposerFragmentState, type ComposerLayoutKind, type ComposerState, propDefaultValue, withPropDefaults, findCatalogItem, randomComposerId } from "@/components/config/mode-composer";
+import { ModeComposer, type ComposerPropMeta, type ComposerCatalog, type ComposerFragmentState, type ComposerState, withPropDefaults, findCatalogItem, randomComposerId } from "@/components/config/mode-composer";
 import { EInkPreviewPanel } from "@/components/config/eink-preview-panel";
 import { CalendarReminders } from "@/components/config/calendar-reminders";
 import { TimetableEditor, type TimetableData } from "@/components/config/timetable-editor";
@@ -109,9 +109,6 @@ function normalizeTone(v: unknown): string {
   return found?.value || "neutral";
 }
 
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
-}
 
 function normalizeModeIdFromName(name: string) {
   let modeId = name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
@@ -856,7 +853,7 @@ function ConfigPageInner() {
   const [composerCatalog, setComposerCatalog] = useState<ComposerCatalog | null>(null);
   const [composerState, setComposerState] = useState<ComposerState>({ layoutKind: "preset", bodyPreset: "", presetProps: {}, fragments: [], fragmentStack: {}, prompt: "", cacheable: true });
   const [composerSyncError, setComposerSyncError] = useState<string | null>(null);
-  const [customJsonError, setCustomJsonError] = useState<string | null>(null);
+  const [, setCustomJsonError] = useState<string | null>(null);
   const [composerPreviewUrl, setComposerPreviewUrl] = useState<string | null>(null);
   const [composerPreviewLoading, setComposerPreviewLoading] = useState(false);
   const [previewModeLabelOverride, setPreviewModeLabelOverride] = useState<string | null>(null);

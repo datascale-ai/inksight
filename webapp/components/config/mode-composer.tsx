@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent,
@@ -12,6 +12,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2, Copy, Type, AlignCenter, Minus, Layers, Columns, Hash, Image, List, X, Settings2, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import NextImage from "next/image";
 
 export type ComposerPropMeta = { name: string; label: string; label_zh?: string; type: "string"|"number"|"boolean"|"select"|"textarea"; value_kind?: "field"|"template"|"font"|"font_name"|"plain"; required?: boolean; default?: unknown; options?: string[]; hidden?: boolean };
 export type ComposerCatalogItem = { name: string; label: string; label_zh?: string; description?: string; description_zh?: string; props: ComposerPropMeta[] };
@@ -103,7 +104,7 @@ function PaletteItem({ item, isEn, onAdd }: { item: ComposerCatalogItem; isEn: b
 }
 
 export function ModeComposer({ tr, isEn, catalog, state, onChange, syncError, onPreview, previewDisabled, previewImgUrl, previewLoading, onRequestPreview }: ModeComposerProps) {
-  const fragOpts = catalog.fragments || [];
+  const fragOpts = useMemo(() => catalog.fragments || [], [catalog.fragments]);
   const presetOpts = catalog.presets || [];
   const stackProps = catalog.fragment_stack?.props || [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -309,7 +310,7 @@ export function ModeComposer({ tr, isEn, catalog, state, onChange, syncError, on
               {tr("渲染中...","Rendering...")}
             </div>
           ) : previewImgUrl ? (
-            <img src={previewImgUrl} alt="preview" className="max-w-full max-h-[240px] object-contain border border-ink/10 rounded" />
+            <NextImage src={previewImgUrl} alt="preview" width={400} height={240} className="max-w-full max-h-[240px] object-contain border border-ink/10 rounded" unoptimized />
           ) : (
             <div className="text-sm text-ink-light">{tr("点击「预览布局」查看框架效果","Click 'Preview Layout' to see the layout")}</div>
           )}
