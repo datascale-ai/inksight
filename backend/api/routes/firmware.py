@@ -13,6 +13,7 @@ from api.shared import (
     load_firmware_releases,
     validate_firmware_url,
 )
+from core.config_store import get_device_state as _get_device_state_row
 
 router = APIRouter(tags=["firmware"])
 logger = logging.getLogger(__name__)
@@ -166,94 +167,90 @@ async def firmware_download(
             headers={"Content-Type": "application/json"},
         )
 
-    # Find the firmware asset for this version
-    try:
-        data = await load_firmware_releases(force_refresh=False)
-    except Exception as exc:
-        sem.release()
-        raise HTTPException(
-            status_code=503,
-            detail=f"Failed to load firmware releases: {exc}",
-        )
+    # Look up the firmware URL stored by mobile when OTA was triggered.
+    # For new OTA records: use ota_original_url (GitHub CDN direct link) to download.
+    # For backward compatibility: fall back to ota_url if ota_original_url is not present.
+    state = await _get_device_state_row(mac)
+    ota_original_url = state.get("ota_original_url", "") if state else ""
+    download_url = ota_original_url or state.get("ota_url", "") if state else ""
 
-    releases: list[dict] = data.get("releases", [])
-    asset: Optional[dict] = None
-    for r in releases:
-        if r.get("version") == version.lstrip("v"):
-            asset = r
-            break
-
-    if not asset:
-        sem.release()
-        raise HTTPException(status_code=404, detail=f"Firmware version '{version}' not found")
-
-    download_url = asset.get("download_url")
     if not download_url:
         sem.release()
-        raise HTTPException(status_code=500, detail="Firmware asset has no download URL")
+        raise HTTPException(status_code=404, detail="No pending OTA firmware URL for this device")
 
-    # Fetch Content-Length first so the ESP32 always knows the download size.
-    # A plain HEAD request (without following redirects) lands on the CDN redirect
-    # page which returns 0 bytes and no Content-Length.  Use max_redirects=0 to
-    # get the Location header, then HEAD the final URL.
+    # ── Phase 1: Fetch headers only to get Content-Length ─────────────────
+    # This MUST succeed before we create StreamingResponse, because headers
+    # (including Content-Length) are sent before the generator runs.
     content_length: Optional[int] = None
-    asset_size = asset.get("size_bytes")
-    if isinstance(asset_size, int) and asset_size > 0:
-        content_length = asset_size
-    else:
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0), max_redirects=10) as client:
-                redirected_url = download_url
-                for _ in range(10):
-                    head_resp = await client.head(redirected_url)
-                    if head_resp.status_code in (301, 302, 303, 307, 308):
-                        redirected_url = str(head_resp.headers.get("location", ""))
-                        if not redirected_url:
-                            break
-                        if not redirected_url.startswith("http"):
-                            from urllib.parse import urljoin
-                            redirected_url = urljoin(redirected_url, redirected_url)
-                    else:
-                        break
-                cl = head_resp.headers.get("content-length")
+    try:
+        # Browser-like headers to avoid CDN returning placeholder data
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/octet-stream,application/x-bin,application/binary,*/*",
+            "Accept-Encoding": "identity",
+        }
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=20.0),
+            follow_redirects=True,
+            max_redirects=10,
+            http2=False,
+        ) as client:
+            async with client.stream("GET", download_url, headers=headers) as resp:
+                resp.raise_for_status()
+
+                # Check common case variations
+                cl = (resp.headers.get("content-length") or
+                      resp.headers.get("Content-Length") or
+                      resp.headers.get("CONTENT-LENGTH"))
                 if cl:
                     content_length = int(cl)
-        except Exception as exc:
-            logger.warning("[OTA DOWNLOAD] Could not determine Content-Length for %s: %s", download_url, exc)
+                else:
+                    logger.warning("[OTA DOWNLOAD] Phase-1: No Content-Length header in response")
+                await resp.aclose()
+    except Exception as exc:
+        # Phase-1 is mandatory: without Content-Length header we cannot set it
+        # in StreamingResponse, and the ESP32 will reject the OTA (magic byte error).
+        # Return 502 so device can retry later (network may recover).
+        logger.error("[OTA DOWNLOAD] Phase-1 FAILED (%s): %s", type(exc).__name__, exc, exc_info=True)
+        sem.release()
+        raise HTTPException(status_code=502, detail="Could not retrieve firmware metadata (network error)")
 
+    # If GitHub didn't provide Content-Length, we still proceed but warn.
+    if content_length is None:
+        logger.warning("[OTA DOWNLOAD] Proceeding without Content-Length; device will use unknown-size mode")
+
+    # ── Phase 2: Download full firmware then stream to device ───────────────
     async def stream_and_release():
-        """Stream firmware from GitHub CDN to the ESP32 as chunks arrive.
+        """Download full firmware then stream to device (non-streaming upstream).
 
-        Do NOT use client.stream() because it does not follow 302 redirects in
-        httpx 0.11.1.  Instead, manually follow redirects and stream the final
-        URL with a plain GET, yielding data as soon as each chunk arrives.
+        Uses full GET (not streaming) to avoid CDN issues with streaming requests.
         """
         try:
+            # Browser-like headers to avoid CDN returning placeholder data
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/octet-stream,application/x-bin,application/binary,*/*",
+                "Accept-Encoding": "identity",  # No compression
+            }
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(120.0, connect=10.0),
+                follow_redirects=True,
                 max_redirects=10,
+                http2=False,  # Disable HTTP/2
             ) as client:
-                # Follow redirects manually so we can stream the final response.
-                url = download_url
-                for _ in range(10):
-                    resp = await client.get(url)
-                    if resp.status_code in (301, 302, 303, 307, 308):
-                        location = resp.headers.get("location", "")
-                        if not location:
-                            break
-                        if not location.startswith("http"):
-                            from urllib.parse import urljoin
-                            url = urljoin(url, location)
-                        else:
-                            url = location
-                        # Release connection before following next hop.
-                        await resp.aclose()
-                    else:
-                        break
-
+                # Full download (not streaming) - mimics browser behavior
+                resp = await client.get(download_url, headers=headers)
                 resp.raise_for_status()
-                async for chunk in resp.aiter_bytes(chunk_size=8192):
-                    yield chunk
+
+                content = resp.content  # Full content in memory
+                total_bytes = len(content)
+
+                # Stream to device in chunks
+                for i in range(0, total_bytes, 8192):
+                    yield content[i:i + 8192]
+
+                if content_length is not None and total_bytes != content_length:
+                    logger.warning("[OTA DOWNLOAD] Size mismatch: declared=%d, actual=%d", content_length, total_bytes)
         except httpx.HTTPError as exc:
             logger.error(
                 "[OTA DOWNLOAD] Upstream fetch failed version=%s mac=%s: %s",
@@ -263,20 +260,16 @@ async def firmware_download(
             )
         except Exception as exc:
             logger.error(
-                "[OTA DOWNLOAD] Unexpected streaming error version=%s mac=%s: %s",
+                "[OTA DOWNLOAD] Unexpected download error version=%s mac=%s: %s",
                 version,
                 mac,
                 exc,
             )
         finally:
             sem.release()
-            logger.info(
-                "[OTA DOWNLOAD] Stream done — slot released (version=%s mac=%s)",
-                version,
-                mac,
-            )
 
-    filename = asset.get("asset_name") or f"inksight-firmware-{version}.bin"
+    # Build response headers (Content-Length set here, BEFORE generator runs)
+    filename = download_url.split("/")[-1] or f"inksight-{version}.bin"
     response_headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
         "X-Firmware-Version": version.lstrip("v"),

@@ -221,6 +221,9 @@ async def get_device_stats(mac: str) -> dict:
     )
     error_count = (await cursor.fetchone())[0]
 
+    # Latest heartbeat (battery voltage + wifi rssi)
+    latest_hb = await get_latest_heartbeat(mac)
+
     return {
         "mac": mac,
         "total_renders": total_renders,
@@ -231,6 +234,8 @@ async def get_device_stats(mac: str) -> dict:
         "daily_renders": daily_renders,
         "avg_render_time_ms": avg_render_time,
         "error_count": error_count,
+        "last_battery_voltage": latest_hb.get("battery_voltage") if latest_hb else None,
+        "last_rssi": latest_hb.get("wifi_rssi") if latest_hb else None,
     }
 
 

@@ -69,9 +69,7 @@ async def trigger_ota(
         )
 
     # 3. Validate the GitHub CDN URL so we can confirm it's reachable before
-    #    sending a task to the device.  The proxy endpoint uses this to fetch.
-    #    We only validate if it looks like a GitHub URL; proxy URLs bypass this.
-    ota_url = _build_firmware_proxy_url(request, req.version, mac)
+    #    sending a task to the device.
     if req.download_url and not req.download_url.startswith("/"):
         try:
             url_check = await validate_firmware_url(req.download_url)
@@ -82,12 +80,16 @@ async def trigger_ota(
         except (RuntimeError, Exception) as exc:
             raise HTTPException(status_code=503, detail=f"固件 URL 校验失败: {exc}")
 
-    # 4. Write OTA task
+    # 4. Write OTA task:
+    #    - ota_url: backend proxy URL (device downloads through backend to avoid TLS cert issues)
+    #    - ota_original_url: raw GitHub CDN URL (backend uses this to fetch and stream)
+    proxy_url = _build_firmware_proxy_url(request, req.version, mac)
     await update_device_state(
         mac,
         pending_ota=1,
         ota_version=req.version,
-        ota_url=ota_url,
+        ota_url=proxy_url,
+        ota_original_url=req.download_url,  # Keep original for firmware_download to use
         ota_progress=0,
         ota_result="",
     )

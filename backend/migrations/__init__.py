@@ -88,6 +88,7 @@ async def run_main_db_migrations(db, *, defaults: dict[str, str]) -> None:
         (20, "configs.timezone", lambda: _add_column_if_missing(db, "configs", "timezone", "timezone TEXT DEFAULT ''")),
         (21, "configs.admin1", lambda: _add_column_if_missing(db, "configs", "admin1", "admin1 TEXT DEFAULT ''")),
         (22, "configs.country", lambda: _add_column_if_missing(db, "configs", "country", "country TEXT DEFAULT ''")),
+        (23, "device_state.ota_original_url", lambda: _add_column_if_missing(db, "device_state", "ota_original_url", "ota_original_url TEXT DEFAULT ''")),
     ]
 
     now = datetime.now().isoformat()

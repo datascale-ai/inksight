@@ -212,6 +212,17 @@ async def init_db():
         except Exception:
             logger.warning("[MIGRATION] Failed to add alert token columns", exc_info=True)
 
+        # chip_family 列迁移（OTA 固件选型用）
+        try:
+            cursor = await db.execute("PRAGMA table_info(device_state)")
+            columns = await cursor.fetchall()
+            names = [c[1] for c in columns]
+            if "chip_family" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN chip_family TEXT DEFAULT ''")
+                await db.commit()
+        except Exception:
+            logger.warning("[MIGRATION] Failed to add chip_family column", exc_info=True)
+
         # Migration: add OTA columns if missing
         try:
             cursor = await db.execute("PRAGMA table_info(device_state)")
@@ -1805,13 +1816,16 @@ async def update_device_state(mac: str, **kwargs):
             "last_state_poll_at",
             "runtime_mode",
             "expected_refresh_min",
-            "last_reconnect_regen_at",
+            "            last_reconnect_regen_at",
             # OTA fields
             "pending_ota",
             "ota_version",
             "ota_url",
+            "ota_original_url",
             "ota_progress",
             "ota_result",
+            # chip_family
+            "chip_family",
         ):
             await db.execute(
                 f"UPDATE device_state SET {key} = ? WHERE mac = ?",
