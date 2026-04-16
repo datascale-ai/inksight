@@ -23,6 +23,18 @@
 #define PIN_BAT_ADC    35
 #define PIN_CFG_BTN    0
 #define PIN_LED        2
+#elif defined(BOARD_PROFILE_XIAO_ESP32S3)
+#define PIN_EPD_MOSI   9
+#define PIN_EPD_SCK    7
+#define PIN_EPD_CS     44
+#define PIN_EPD_DC     10
+#define PIN_EPD_RST    38
+#define PIN_EPD_BUSY   4
+// Seeed XIAO ESP32S3 onboard ADC_BAT shares GPIO10 with the current EPD_DC
+// wiring, so battery sampling must only happen while the display bus is idle.
+#define PIN_BAT_ADC    10
+#define PIN_CFG_BTN    2
+#define PIN_LED        LED_BUILTIN
 #else
 #error "Unsupported board profile"
 #endif
@@ -51,6 +63,15 @@ static const int IMG_BUF_LEN = ROW_BYTES * H;
 #ifndef EPD_BPP
 #define EPD_BPP 1
 #endif
+
+#if defined(EPD_PANEL_75_GDEY075Z08) || defined(EPD_PANEL_583_GDEY0583Z21) || defined(EPD_PANEL_42_UC8176) || defined(EPD_PANEL_42_HINK_SSD1683)
+#define EPD_COLOR_CAPABILITY 3
+#elif EPD_BPP >= 2
+#define EPD_COLOR_CAPABILITY 4
+#else
+#define EPD_COLOR_CAPABILITY 2
+#endif
+
 static const int COLOR_BUF_LEN = (W * H) / 4;  // 2bpp: 4 pixels per byte
 
 // Shared framebuffers (defined in main.cpp)
