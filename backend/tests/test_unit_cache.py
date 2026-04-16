@@ -84,9 +84,9 @@ class TestContentCache:
             "refresh_interval": 30,
         }
         ttl = cache._get_ttl_minutes(config)
-        # BRIEFING is not in CACHEABLE_MODES, so only STOIC and ZEN count
-        # 30 * 2 * 1.1 = 66
-        assert ttl == 66
+        # BRIEFING is now cacheable (2026-04-15), all 3 modes count
+        # 30 * 3 * 1.1 = 99
+        assert ttl == 99
 
     @pytest.mark.asyncio
     async def test_check_and_regenerate_all_skips_when_cached(self, cache, config):

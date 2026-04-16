@@ -2,7 +2,7 @@
   "mode_id": "WEATHER",
   "display_name": "天气看板",
   "icon": "weather",
-  "cacheable": false,
+  "cacheable": true,
   "description": "当日天气 + 未来3天预报 + 穿衣建议",
   "settings_schema": [
     {

@@ -2,7 +2,7 @@
   "mode_id": "BRIEFING",
   "display_name": "Tech Brief",
   "icon": "global",
-  "cacheable": false,
+  "cacheable": true,
   "description": "Top tech stories from HN, Product Hunt, and Dev.to",
   "content": {
     "type": "external_data",

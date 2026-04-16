@@ -2,7 +2,7 @@
   "mode_id": "WEATHER",
   "display_name": "Weather",
   "icon": "weather",
-  "cacheable": false,
+  "cacheable": true,
   "description": "Today's weather, forecast, and practical advice",
   "settings_schema": [
     {

@@ -26,6 +26,7 @@ fonts/*.pcf
 
 md/
 runtime_uploads/
+runtime_image_cache/
 
 scripts\fix_ota_url.py
 scripts\query_ota.py

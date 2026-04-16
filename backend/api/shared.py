@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import io
 import json
 import logging
@@ -609,9 +610,33 @@ async def build_image(
         "off",
     )
 
+    # ── Preview Cache: Check cache for preview requests (no mac required) ──
+    mode_override_hash = None
+    if preview_mode_override:
+        # Generate a hash of the mode override config for cache key
+        mode_override_hash = hashlib.md5(
+            json.dumps(preview_mode_override, sort_keys=True).encode()
+        ).hexdigest()[:12]
+
+    if not mac and is_mode_cacheable and not skip_cache:
+        # This is a preview request without device mac - use preview cache
+        preview_cache_key = content_cache._get_preview_cache_key(persona, screen_w, screen_h, preview_city_override, mode_override_hash, preview_ui_language)
+        cached_img = await content_cache.get_preview(
+            persona,
+            screen_w,
+            screen_h,
+            city_override=preview_city_override,
+            mode_override_hash=mode_override_hash,
+            ui_language=preview_ui_language,
+        )
+        if cached_img:
+            cache_hit = True
+            img = cached_img
+
     if mac and config and is_mode_cacheable and not skip_cache:
         if not intent_only:
-            await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h, colors=colors)
+            cacheable_modes = get_registry().get_cacheable_ids()
+            await content_cache.check_and_regenerate_all(mac, config, v, screen_w, screen_h, colors=colors, cacheable_modes=cacheable_modes)
         cached_img = await content_cache.get(
             mac,
             persona,
@@ -691,6 +716,11 @@ async def build_image(
                     )
         else:
             logger.info("[CACHE MISS] %s:%s - Generating content", mac, persona)
+    elif not mac:
+        # Preview request without device mac
+        if skip_cache:
+            logger.info("[PREVIEW] Skip cache for %s:%s", mac, persona)
+        # img is already set from preview cache above, don't overwrite
     else:
         if skip_cache:
             logger.info("[PREVIEW] Skip cache for %s:%s", mac, persona)
@@ -859,6 +889,18 @@ async def build_image(
 
         if mac and config and is_mode_cacheable:
             await content_cache.set(mac, persona, img, screen_w, screen_h)
+
+        # ── Preview Cache: Save generated image for preview requests ──
+        if not mac and is_mode_cacheable and not skip_cache and img is not None:
+            await content_cache.set_preview(
+                persona,
+                img,
+                screen_w,
+                screen_h,
+                city_override=preview_city_override,
+                mode_override_hash=mode_override_hash,
+                ui_language=preview_ui_language,
+            )
 
     if mac:
         await update_device_state(

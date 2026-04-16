@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlencode
@@ -49,6 +50,15 @@ def _first_text(value) -> str:
             if text:
                 return text
     return ""
+
+
+def _strip_image_url(content: dict) -> dict:
+    """Remove full path from image_url fields, keeping only the filename."""
+    result = dict(content)
+    if "image_url" in result and result["image_url"]:
+        url = str(result["image_url"])
+        result["image_url"] = os.path.basename(url)
+    return result
 
 
 def _pick_summary(content: dict) -> str:
@@ -179,13 +189,14 @@ async def get_today_content(
         except Exception:
             content = _fallback_content(mode_id, city)
         info = registry.get_mode_info(mode_id)
+        stripped = _strip_image_url(content)
         items.append(
             {
                 "mode_id": mode_id,
                 "display_name": info.display_name if info else mode_id,
                 "icon": info.icon if info else "star",
-                "summary": _pick_summary(content),
-                "content": content,
+                "summary": _pick_summary(stripped),
+                "content": stripped,
                 "preview_url": _preview_url(mode_id, city=city),
                 "image_url": _preview_url(mode_id, city=city),
             }

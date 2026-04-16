@@ -157,7 +157,9 @@ async def render(
                             ).total_seconds()
                             regen_cooldown_ok = since_last_regen > threshold_seconds
                         if delta_seconds > threshold_seconds and regen_cooldown_ok:
-                            skip_cache_for_this_render = True
+                            # Reconnect detected → synchronously pre-warm cache BEFORE
+                            # returning a response. This ensures the device gets a
+                            # cache hit on this very request (no regeneration delay).
                             await update_device_state(
                                 mac, last_reconnect_regen_at=now_dt.isoformat()
                             )
@@ -165,6 +167,8 @@ async def render(
                                 mac, cfg, params.v, params.w, params.h,
                                 colors=params.colors,
                             )
+                            # Do NOT set skip_cache=True here: after force_regenerate_all
+                            # the cache is warm, so build_image should hit it immediately.
                     except (TypeError, ValueError, OSError):
                         logger.warning("[RECONNECT] Failed to evaluate reconnect policy for %s", mac, exc_info=True)
 
@@ -535,3 +539,10 @@ async def preview_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/dev/cache/clear")
+async def clear_cache_dev():
+    """Clear all caches (in-memory + persistent) - dev/testing endpoint."""
+    await content_cache.clear()
+    return {"status": "ok", "message": "Cache cleared"}

@@ -65,12 +65,43 @@ class ContentCache:
         self._db_failure_count = 0
         self._db_disabled_until: Optional[datetime] = None
 
+    async def clear(self):
+        """Clear both in-memory and persistent cache (for testing/benchmarking)."""
+        async with self._lock:
+            self._cache.clear()
+            logger.info("[CACHE] In-memory cache cleared")
+        if self._persistent_cache_available():
+            try:
+                async with aiosqlite.connect(_CACHE_DB_PATH) as db:
+                    await db.execute("DELETE FROM image_cache")
+                    await db.commit()
+                    logger.info("[CACHE] Persistent cache cleared")
+            except Exception as exc:
+                logger.warning("[CACHE] Failed to clear persistent cache: %s", exc)
+
     def _get_cache_key(
         self, mac: str, persona: str,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
     ) -> str:
         persona = (persona or "").upper()
         return f"{mac}:{persona}:{screen_w}x{screen_h}"
+
+    def _get_preview_cache_key(
+        self, persona: str, screen_w: int, screen_h: int,
+        city_override: Optional[str] = None, mode_override_hash: Optional[str] = None,
+        ui_language: Optional[str] = None,
+    ) -> str:
+        """Generate cache key for preview requests (no mac required)."""
+        persona = (persona or "").upper()
+        # Use a fixed TTL for preview cache (5 minutes by default)
+        parts = [f"preview:{persona}:{screen_w}x{screen_h}"]
+        if city_override:
+            parts.append(f"city:{city_override}")
+        if mode_override_hash:
+            parts.append(f"cfg:{mode_override_hash}")
+        if ui_language:
+            parts.append(f"lang:{ui_language}")
+        return ":".join(parts)
 
     def _persistent_cache_available(self) -> bool:
         if self._db_disabled_until is None:
@@ -116,27 +147,28 @@ class ContentCache:
         """Get cached image if available and not expired"""
         if DISABLE_CACHE:
             return None
+        key = self._get_cache_key(mac, persona, screen_w, screen_h)
+        if ttl_minutes is None:
+            ttl_minutes = self._get_ttl_minutes(config)
         async with self._lock:
-            key = self._get_cache_key(mac, persona, screen_w, screen_h)
             if key in self._cache:
                 img, timestamp = self._cache[key]
-                if ttl_minutes is None:
-                    ttl_minutes = self._get_ttl_minutes(config)
-                if datetime.now() - timestamp < timedelta(minutes=ttl_minutes):
+                age_minutes = (datetime.now() - timestamp).total_seconds() / 60
+                if age_minutes < ttl_minutes:
                     return img.copy()
                 else:
-                    logger.debug(f"[CACHE] {key} expired (TTL={ttl_minutes}min)")
                     del self._cache[key]
             # Try SQLite persistent cache
-            if self._persistent_cache_available():
-                try:
-                    img = await self._get_from_db(key, ttl_minutes=ttl_minutes)
-                    self._record_db_success()
-                    if img:
-                        self._cache[key] = (img, datetime.now())
-                        return img.copy()
-                except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
-                    self._record_db_failure("load", exc)
+            if not self._persistent_cache_available():
+                return None
+            try:
+                img = await self._get_from_db(key, ttl_minutes=ttl_minutes)
+                self._record_db_success()
+                if img:
+                    self._cache[key] = (img, datetime.now())
+                    return img.copy()
+            except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
+                self._record_db_failure("load", exc)
             return None
 
     async def set(
@@ -146,8 +178,8 @@ class ContentCache:
         """Store image in cache"""
         if DISABLE_CACHE:
             return
+        key = self._get_cache_key(mac, persona, screen_w, screen_h)
         async with self._lock:
-            key = self._get_cache_key(mac, persona, screen_w, screen_h)
             img_copy = img.copy()
             self._cache[key] = (img_copy, datetime.now())
             if self._persistent_cache_available():
@@ -157,16 +189,71 @@ class ContentCache:
                 except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
                     self._record_db_failure("save", exc)
 
+    # ── Preview Cache Methods ──────────────────────────────────────────────
+
+    PREVIEW_CACHE_TTL_MINUTES = 5  # Short TTL for preview cache
+
+    async def get_preview(
+        self, persona: str, screen_w: int, screen_h: int,
+        city_override: Optional[str] = None, mode_override_hash: Optional[str] = None,
+        ui_language: Optional[str] = None,
+    ) -> Optional[Image.Image]:
+        """Get cached preview image if available and not expired."""
+        if DISABLE_CACHE:
+            return None
+        async with self._lock:
+            key = self._get_preview_cache_key(persona, screen_w, screen_h, city_override, mode_override_hash, ui_language)
+            if key in self._cache:
+                img, timestamp = self._cache[key]
+                if datetime.now() - timestamp < timedelta(minutes=self.PREVIEW_CACHE_TTL_MINUTES):
+                    return img.copy()
+                else:
+                    logger.debug(f"[PREVIEW_CACHE] {key} expired (TTL={self.PREVIEW_CACHE_TTL_MINUTES}min)")
+                    del self._cache[key]
+            # Try SQLite persistent cache
+            if self._persistent_cache_available():
+                try:
+                    img = await self._get_from_db(key, ttl_minutes=self.PREVIEW_CACHE_TTL_MINUTES)
+                    self._record_db_success()
+                    if img:
+                        self._cache[key] = (img, datetime.now())
+                        return img.copy()
+                except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
+                    self._record_db_failure("load-preview", exc)
+            return None
+
+    async def set_preview(
+        self, persona: str, img: Image.Image,
+        screen_w: int, screen_h: int,
+        city_override: Optional[str] = None, mode_override_hash: Optional[str] = None,
+        ui_language: Optional[str] = None,
+    ):
+        """Store preview image in cache."""
+        if DISABLE_CACHE:
+            return
+        async with self._lock:
+            key = self._get_preview_cache_key(persona, screen_w, screen_h, city_override, mode_override_hash, ui_language)
+            img_copy = img.copy()
+            self._cache[key] = (img_copy, datetime.now())
+            if self._persistent_cache_available():
+                try:
+                    await self._save_to_db(key, img_copy)
+                    self._record_db_success()
+                except (aiosqlite.Error, OSError, RuntimeError, ValueError) as exc:
+                    self._record_db_failure("save-preview", exc)
+
     async def check_and_regenerate_all(
         self, mac: str, config: dict, v: float = 3.3,
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
         colors: int = 2,
+        cacheable_modes: Optional[set[str]] = None,
     ) -> bool:
-        """Check if all modes are cached, if not, regenerate all modes"""
+        """Check if all modes are cached, if not, regenerate all modes."""
         if DISABLE_CACHE or DISABLE_BATCH_REGEN:
             return False
-        cacheable = get_cacheable_modes()
-        modes = [m.upper() for m in config.get("modes", DEFAULT_MODES) if m.upper() in cacheable]
+        if cacheable_modes is None:
+            cacheable_modes = get_cacheable_modes()
+        modes = [m.upper() for m in config.get("modes", DEFAULT_MODES) if m.upper() in cacheable_modes]
 
         if not modes:
             return False
@@ -215,11 +302,17 @@ class ContentCache:
             logger.debug(f"[CACHE] Background regeneration already in progress for {mac}")
             return False
         self._regenerating.add(mac)
-        logger.info(f"[CACHE] Force regenerating all {len(modes)} modes for {mac}...")
-        asyncio.create_task(
-            self._regenerate_background(mac, config, modes, v, screen_w, screen_h, colors=colors)
-        )
-        return True
+        logger.info(f"[CACHE] Regenerating all {len(modes)} modes for {mac} (synchronous)...")
+        try:
+            # Synchronous: wait for ALL modes to finish before returning.
+            # This ensures the cache is warm before build_image continues.
+            await self._generate_all_modes(mac, config, modes, v, screen_w, screen_h, colors=colors)
+            return True
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
+            logger.error(f"[CACHE] Synchronous regeneration failed for {mac}: {e}")
+            return False
+        finally:
+            self._regenerating.discard(mac)
 
     async def _regenerate_background(
         self, mac: str, config: dict, modes: list[str], v: float,
@@ -239,23 +332,68 @@ class ContentCache:
         screen_w: int = SCREEN_WIDTH, screen_h: int = SCREEN_HEIGHT,
         colors: int = 2,
     ):
-        """Generate and cache all modes"""
+        """Generate and cache all modes.
+
+        Optimization: pre-fetch weather ONCE for the device's primary location,
+        then generate all modes in parallel. If different modes use different
+        location overrides, each distinct location gets its own weather fetch.
+        """
         battery_pct = calc_battery_pct(v)
         date_ctx = await get_date_context()
 
-        tasks = [
-            self._render_single_mode_for_batch(
-                mac, persona, battery_pct, copy.deepcopy(config), copy.deepcopy(date_ctx),
-                screen_w, screen_h, colors=colors,
+        # ── Step 1: Group modes by effective location → pre-fetch weather once per group ──
+        # Build effective config for each persona to determine their location
+        location_groups: dict[tuple, list[str]] = {}  # (city, lat, lon) -> [persona, ...]
+        persona_effective_cfg: dict[str, dict] = {}
+
+        for persona in modes:
+            effective_cfg = get_effective_mode_config(config, persona)
+            persona_effective_cfg[persona] = effective_cfg
+            loc = extract_location_settings(effective_cfg)
+            key = (loc.get("city"), loc.get("lat"), loc.get("lon"))
+            if key not in location_groups:
+                location_groups[key] = []
+            location_groups[key].append(persona)
+
+        # Pre-fetch weather for each unique location (typically just 1)
+        weather_by_loc: dict[tuple, dict] = {}
+        weather_tasks = []
+        for loc_key in location_groups:
+            city, lat, lon = loc_key
+            weather_tasks.append(self._fetch_weather_for_location(city, lat, lon))
+        weather_results = await asyncio.gather(*weather_tasks, return_exceptions=True)
+        for loc_key, result in zip(location_groups.keys(), weather_results):
+            if isinstance(result, Exception):
+                logger.warning(f"[CACHE] Weather fetch failed for {loc_key}: {result}, using fallback")
+                weather_by_loc[loc_key] = {"temp": 0, "weather_str": "--°C", "weather_code": -1, "humidity": 0}
+            else:
+                weather_by_loc[loc_key] = result
+
+        # ── Step 2: Generate all modes in parallel, each reusing pre-fetched weather ──
+        tasks = []
+        for persona in modes:
+            effective_cfg = persona_effective_cfg[persona]
+            loc = extract_location_settings(effective_cfg)
+            key = (loc.get("city"), loc.get("lat"), loc.get("lon"))
+            weather = weather_by_loc.get(key, {"temp": 0, "weather_str": "--°C", "weather_code": -1, "humidity": 0})
+            tasks.append(
+                self._render_single_mode_for_batch_optimized(
+                    mac, persona, battery_pct,
+                    copy.deepcopy(config), copy.deepcopy(date_ctx),
+                    weather,
+                    screen_w, screen_h, colors=colors,
+                )
             )
-            for persona in modes
-        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         generated_entries: list[tuple[str, Image.Image]] = []
-        for result in results:
-            if isinstance(result, tuple):
+        for persona, result in zip(modes, results):
+            if isinstance(result, Exception):
+                logger.error(f"[CACHE] ✗ {mac}:{persona} raised: {result}")
+            elif isinstance(result, tuple):
                 generated_entries.append(result)
+            else:
+                logger.error(f"[CACHE] ✗ {mac}:{persona} returned unexpected type: {type(result)}")
 
         async with self._lock:
             now = datetime.now()
@@ -278,22 +416,32 @@ class ContentCache:
         success_count = len(generated_entries)
         logger.info(f"[CACHE] ✓ Generated {success_count}/{len(modes)} modes for {mac}")
 
-    async def _render_single_mode_for_batch(
+    async def _fetch_weather_for_location(
+        self, city: str | None, lat: float | None, lon: float | None,
+    ) -> dict:
+        """Fetch weather for a specific location, using in-process cache to avoid
+        redundant Open-Meteo API calls when multiple modes share the same location."""
+        try:
+            return await get_weather(city=city, lat=lat, lon=lon)
+        except Exception as e:
+            logger.warning(f"[CACHE] Weather fetch error for {city or (lat, lon)}: {e}")
+            return {"temp": 0, "weather_str": "--°C", "weather_code": -1, "humidity": 0}
+
+    async def _render_single_mode_for_batch_optimized(
         self,
         mac: str,
         persona: str,
         battery_pct: float,
         config: dict,
         date_ctx: dict,
+        weather: dict,
         screen_w: int = SCREEN_WIDTH,
         screen_h: int = SCREEN_HEIGHT,
         colors: int = 2,
     ) -> Optional[tuple[str, Image.Image]]:
+        """Render a single mode with pre-fetched weather (no redundant API calls)."""
         try:
-            logger.info(f"[CACHE] Generating {mac}:{persona}...")
-            effective_cfg = get_effective_mode_config(config, persona)
-            weather = await get_weather(**extract_location_settings(effective_cfg))
-
+            logger.info(f"[CACHE] Rendering {mac}:{persona} (pre-fetched weather)...")
             img, _content = await generate_and_render(
                 persona, config, date_ctx, weather, battery_pct,
                 screen_w=screen_w, screen_h=screen_h, colors=colors,

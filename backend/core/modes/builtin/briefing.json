@@ -2,7 +2,7 @@
   "mode_id": "BRIEFING",
   "display_name": "科技简报",
   "icon": "global",
-  "cacheable": false,
+  "cacheable": true,
   "description": "HN/PH/Dev.to 科技改变生活",
   "content": {
     "type": "external_data",
