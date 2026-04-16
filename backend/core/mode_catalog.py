@@ -182,8 +182,8 @@ BUILTIN_CATALOG: list[CatalogItem] = [
     CatalogItem(
         mode_id="MY_ADAPTIVE",
         category="custom",
-        zh=CatalogText(name="相框", tip="上传本地照片，自适应墨水屏显示"),
-        en=CatalogText(name="Photo Frame", tip="Upload a local photo and auto-fit it to the e-ink screen"),
+        zh=CatalogText(name="相框", tip="上传本地照片（至多6张），循环播放"),
+        en=CatalogText(name="Photo Frame", tip="Upload up to 6 photos, cycle on each refresh"),
     ),
 ]
 

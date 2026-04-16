@@ -670,6 +670,23 @@ async def generate_json_mode_content(
                 if k in {"city", "llm_provider", "llm_model", "image_provider", "image_model"}:
                     continue
                 content[k] = v
+        # MY_ADAPTIVE multi-image cycling: pick next image from image_urls array
+        if mode_id == "MY_ADAPTIVE" and isinstance(override, dict):
+            image_urls = override.get("image_urls")
+            if isinstance(image_urls, list) and image_urls:
+                urls = [u for u in image_urls if isinstance(u, str) and u.strip()]
+            elif content.get("image_url"):
+                urls = [content["image_url"]]
+            else:
+                urls = []
+            if urls:
+                if mac and len(urls) > 1:
+                    from .config_store import get_photo_frame_index, set_photo_frame_index
+                    idx = await get_photo_frame_index(mac)
+                    content["image_url"] = urls[idx % len(urls)]
+                    await set_photo_frame_index(mac, (idx + 1) % len(urls))
+                else:
+                    content["image_url"] = urls[0]
         content = await _prefetch_images(content, mode_def)
         return content
     if ctype == "computed":

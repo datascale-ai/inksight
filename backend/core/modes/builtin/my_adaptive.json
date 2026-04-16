@@ -1,7 +1,7 @@
 {
   "mode_id": "MY_ADAPTIVE",
   "display_name": "相框",
-  "description": "上传本地照片，自适应墨水屏显示",
+  "description": "上传本地照片（至多6张），循环播放",
   "icon": "my_adaptive",
   "cacheable": false,
   "content": {

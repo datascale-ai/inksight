@@ -223,6 +223,17 @@ async def init_db():
         except Exception:
             logger.warning("[MIGRATION] Failed to add chip_family column", exc_info=True)
 
+        # Migration: add photo_frame_index column if missing
+        try:
+            cursor = await db.execute("PRAGMA table_info(device_state)")
+            columns = await cursor.fetchall()
+            names = [c[1] for c in columns]
+            if "photo_frame_index" not in names:
+                await db.execute("ALTER TABLE device_state ADD COLUMN photo_frame_index INTEGER DEFAULT 0")
+            await db.commit()
+        except Exception:
+            logger.warning("[MIGRATION] Failed to add photo_frame_index column", exc_info=True)
+
         # Migration: add OTA columns if missing
         try:
             cursor = await db.execute("PRAGMA table_info(device_state)")
@@ -1795,6 +1806,27 @@ async def set_cycle_index(mac: str, idx: int):
     await db.commit()
 
 
+async def get_photo_frame_index(mac: str) -> int:
+    db = await get_main_db()
+    cursor = await db.execute(
+        "SELECT photo_frame_index FROM device_state WHERE mac = ?", (mac,)
+    )
+    row = await cursor.fetchone()
+    return row[0] if row and row[0] else 0
+
+
+async def set_photo_frame_index(mac: str, idx: int):
+    now = datetime.now().isoformat()
+    db = await get_main_db()
+    await db.execute(
+        """INSERT INTO device_state (mac, photo_frame_index, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(mac) DO UPDATE SET photo_frame_index = ?, updated_at = ?""",
+        (mac, idx, now, idx, now),
+    )
+    await db.commit()
+
+
 async def update_device_state(mac: str, **kwargs):
     """Update device state fields (last_persona, last_refresh_at, pending_refresh, etc.)."""
     now = datetime.now().isoformat()
@@ -1812,6 +1844,7 @@ async def update_device_state(mac: str, **kwargs):
             "last_refresh_at",
             "pending_refresh",
             "cycle_index",
+            "photo_frame_index",
             "pending_mode",
             "last_state_poll_at",
             "runtime_mode",

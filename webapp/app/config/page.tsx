@@ -780,10 +780,11 @@ function ConfigPageInner() {
   const [previewLlmStatus, setPreviewLlmStatus] = useState<string | null>(null);
   const [previewConfirm, setPreviewConfirm] = useState<PendingPreviewConfirm | null>(null);
 
-  // 自适应图片（MY_ADAPTIVE）本地选图 + 上传（与 /preview 页面一致）
+  // 自适应图片（MY_ADAPTIVE）多图上传弹窗
   const adaptiveFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [pendingAdaptiveAction, setPendingAdaptiveAction] = useState<null | { action: "preview" | "apply"; mode: string }>(null);
-  const [, setAdaptiveUploading] = useState(false);
+  const [adaptiveModal, setAdaptiveModal] = useState<{ action: "preview" | "apply" } | null>(null);
+  const [adaptiveImageUrls, setAdaptiveImageUrls] = useState<string[]>([]);
+  const [adaptiveUploading2, setAdaptiveUploading2] = useState(false);
 
   // 参数弹窗（与 /preview 页面保持一致）
   const [paramModal, setParamModal] = useState<ParamModalState | null>(null);
@@ -1092,6 +1093,15 @@ function ConfigPageInner() {
         setIsFocusListening(Boolean(cfg.is_focus_listening ?? Number(cfg.focus_listening || 0) === 1));
         setAlwaysActive(Boolean(cfg.is_always_active ?? Number(cfg.always_active || 0) === 1));
         const loadedOverrides = ((cfg.mode_overrides || cfg.modeOverrides || {}) as Record<string, ModeOverride>);
+        const adaptiveOv = loadedOverrides?.MY_ADAPTIVE;
+        if (adaptiveOv) {
+          const urls = adaptiveOv.image_urls;
+          if (Array.isArray(urls) && urls.length > 0) {
+            setAdaptiveImageUrls(urls.filter((u: unknown) => typeof u === "string" && (u as string).trim()) as string[]);
+          } else if (typeof adaptiveOv.image_url === "string" && (adaptiveOv.image_url as string).trim()) {
+            setAdaptiveImageUrls([adaptiveOv.image_url as string]);
+          }
+        }
         const memoFromOverride = loadedOverrides?.MEMO?.memo_text;
         if (typeof memoFromOverride === "string" && memoFromOverride.trim()) {
           setMemoText(memoFromOverride);
@@ -2023,8 +2033,7 @@ function ConfigPageInner() {
     const modeId = (m || "").toUpperCase();
     setPreviewMode(modeId);
     if (modeId === "MY_ADAPTIVE") {
-      setPendingAdaptiveAction({ action: "preview", mode: modeId });
-      adaptiveFileInputRef.current?.click();
+      setAdaptiveModal({ action: "preview" });
       return;
     }
     if (requiresParamModal(modeId)) {
@@ -2040,8 +2049,7 @@ function ConfigPageInner() {
   const handleModeApply = async (m: string) => {
     const modeId = (m || "").toUpperCase();
     if (modeId === "MY_ADAPTIVE" && !selectedModes.has(modeId)) {
-      setPendingAdaptiveAction({ action: "apply", mode: modeId });
-      adaptiveFileInputRef.current?.click();
+      setAdaptiveModal({ action: "apply" });
       return;
     }
     if (requiresParamModal(modeId) && !selectedModes.has(modeId)) {
@@ -2301,7 +2309,7 @@ function ConfigPageInner() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      {/* Hidden file picker for MY_ADAPTIVE (local upload only) */}
+      {/* Hidden file picker for MY_ADAPTIVE multi-image upload */}
       <input
         ref={adaptiveFileInputRef}
         type="file"
@@ -2311,17 +2319,18 @@ function ConfigPageInner() {
           const f = e.target.files?.[0] || null;
           e.currentTarget.value = "";
           if (!f) return;
-          setAdaptiveUploading(true);
+          setAdaptiveUploading2(true);
           try {
             const url = await uploadLocalImage(f);
-            const pending = pendingAdaptiveAction;
-            setPendingAdaptiveAction(null);
-            await commitModalAction("MY_ADAPTIVE", pending?.action || "preview", { image_url: url } as ModeOverride);
+            setAdaptiveImageUrls((prev) => {
+              if (prev.length >= 6) return prev;
+              return [...prev, url];
+            });
           } catch (err) {
             const msg = err instanceof Error ? err.message : tr("请选择一张本地图片", "Please choose a local image");
             showToast(msg, "error");
           } finally {
-            setAdaptiveUploading(false);
+            setAdaptiveUploading2(false);
           }
         }}
       />
@@ -3467,6 +3476,87 @@ function ConfigPageInner() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      ) : null}
+
+      {/* 相框多图管理弹窗 */}
+      {adaptiveModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setAdaptiveModal(null)} />
+          <div className="relative w-[min(520px,calc(100vw-32px))] rounded-sm border border-ink/15 bg-white shadow-xl">
+            <div className="px-4 py-3 border-b border-ink/10 flex items-center justify-between">
+              <div className="text-sm font-semibold text-ink">
+                {tr("相框图片管理", "Photo Frame Images")}
+              </div>
+              <button className="text-ink-light hover:text-ink" onClick={() => setAdaptiveModal(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              <div className="text-xs text-ink-light">
+                {tr(
+                  "上传至多 6 张图片，设备每次刷新时循环显示下一张。",
+                  "Upload up to 6 images. The device cycles to the next image on each refresh.",
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {adaptiveImageUrls.map((url, i) => (
+                  <div key={`${url}-${i}`} className="relative group aspect-[4/3] rounded border border-ink/15 overflow-hidden bg-paper-dark">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={`photo ${i + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => setAdaptiveImageUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                      title={tr("移除", "Remove")}
+                    >
+                      ✕
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] text-center py-0.5">
+                      {i + 1}
+                    </div>
+                  </div>
+                ))}
+                {adaptiveImageUrls.length < 6 && (
+                  <button
+                    className="aspect-[4/3] rounded border-2 border-dashed border-ink/20 flex flex-col items-center justify-center text-ink-light hover:text-ink hover:border-ink/40 transition-colors"
+                    onClick={() => adaptiveFileInputRef.current?.click()}
+                    disabled={adaptiveUploading2}
+                  >
+                    {adaptiveUploading2 ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <>
+                        <span className="text-xl leading-none">+</span>
+                        <span className="text-[10px] mt-0.5">{tr("添加图片", "Add")}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setAdaptiveModal(null)}
+                >
+                  {tr("取消", "Cancel")}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={adaptiveImageUrls.length === 0 || previewLoading}
+                  onClick={async () => {
+                    const action = adaptiveModal.action;
+                    const override: ModeOverride = { image_urls: [...adaptiveImageUrls], image_url: adaptiveImageUrls[0] || "" };
+                    setAdaptiveModal(null);
+                    await commitModalAction("MY_ADAPTIVE", action, override);
+                  }}
+                >
+                  {adaptiveModal.action === "apply"
+                    ? tr("确认并加入轮播", "Confirm & Add to Rotation")
+                    : tr("确认并预览", "Confirm & Preview")}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
