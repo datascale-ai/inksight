@@ -1,0 +1,30 @@
+# Text files: LF in repo and on checkout (align with Linux CI; stable diffs on Windows).
+# Git still detects binary vs text via heuristics; see binary rules below.
+* text=auto eol=lf
+
+# Binary / generated assets — never apply line-ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.rar binary
+*.gz binary
+*.7z binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.ttf binary
+*.otf binary
+*.bin binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.stl binary
+*.mp3 binary
+*.mp4 binary
+*.webm binary

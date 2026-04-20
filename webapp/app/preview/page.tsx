@@ -119,7 +119,6 @@ export default function ExperiencePage() {
   const [memoText] = useState(t(locale, "preview.memo.default", "写点什么吧…"));
 
   const [previewLoading, setPreviewLoading] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
@@ -131,7 +130,6 @@ export default function ExperiencePage() {
   const toastTimerRef = useRef<number | null>(null);
 
   const [modal, setModal] = useState<null | { type: "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar" | "calendar" | "timetable"; modeId: string }>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_imageUploadLoading, setImageUploadLoading] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
   const [authorDraft, setAuthorDraft] = useState("");
@@ -262,7 +260,6 @@ export default function ExperiencePage() {
     modeMeta[previewMode]?.name ||
     previewMode ||
     t(locale, "preview.unknown_mode", "Unknown");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const previewModeTip =
     modeMeta[previewMode]?.tip ||
     "";

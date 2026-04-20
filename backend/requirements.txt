@@ -15,13 +15,14 @@ slowapi~=0.1.9
 PyJWT~=2.8.0
 zhdate~=0.1
 qrcode~=7.4
-dashscope~=1.14.0
+dashscope>=1.20.0
 cryptography~=41.0.0
+websockets>=10.0,<13
+opuslib>=3.0.1
 phonenumbers~=9.0.26
-Jinja2~=3.1.0
-playwright~=1.49.0
-alibabacloud_alimt20181012>=1.5.2
-alibabacloud_tea_openapi>=0.4.4
+# Alibaba Cloud Machine Translation (json_content imports); PyPI: alibabacloud-*
+alibabacloud-alimt20181012>=1.5.2
+alibabacloud-tea-openapi>=0.4.4
 
 # Dev / Test
 # Keep test toolchain stable across Python 3.9/3.10 in CI.

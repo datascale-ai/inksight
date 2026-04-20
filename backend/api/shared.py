@@ -110,8 +110,11 @@ async def lifespan(app):
     await init_stats_db()
     from core.cache import init_cache_db
     from core.db import close_all
+    from core.static_store import init_static_tables, migrate_device_state_columns
 
     await init_cache_db()
+    await init_static_tables()
+    await migrate_device_state_columns()
 
     yield
 
@@ -137,7 +140,7 @@ class _NoopLimiter:
 
 
 try:
-    limiter = Limiter(key_func=_rate_limit_key)
+    limiter = Limiter(key_func=_rate_limit_key, storage_uri="memory://")
 except Exception as exc:  # pragma: no cover - depends on optional runtime dependency
     logger.warning("Rate limiter disabled due to init error: %s", exc)
     limiter = _NoopLimiter()
@@ -183,9 +186,11 @@ async def require_membership_access(
     mac = validate_mac_param(mac, lang)
     user_id = await resolve_user_id(request, ink_session)
     if user_id is None:
+        logger.warning("[AUTH] require_membership_access: user_id is None for mac=%s", mac)
         raise HTTPException(status_code=401, detail=msg("auth.login_required", lang))
     membership = await get_device_membership(mac, user_id)
     if not membership:
+        logger.warning("[AUTH] require_membership_access: no membership for mac=%s user_id=%s", mac, user_id)
         raise HTTPException(status_code=403, detail=msg("auth.no_device_access", lang))
     if owner_only and membership.get("role") != "owner":
         raise HTTPException(status_code=403, detail=msg("auth.owner_only", lang))
@@ -202,6 +207,8 @@ async def ensure_web_or_device_access(
     allow_device_token: bool = True,
 ) -> dict:
     mac = validate_mac_param(mac)
+    logger.info("[AUTH] ensure_web_or_device_access: mac=%s, has_device_token=%s, has_ink_session=%s",
+                mac, bool(x_device_token), bool(ink_session))
     if allow_device_token and x_device_token:
         await require_device_token(mac, x_device_token)
         return {"mode": "device", "role": "device"}

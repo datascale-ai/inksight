@@ -1,0 +1,109 @@
+{
+  "mode_id": "AI_CHAT",
+  "display_name": "AI 对话",
+  "icon": "message-circle",
+  "cacheable": false,
+  "description": "进入按键语音对话模式，适用于接入麦克风和喇叭的设备",
+  "content": {
+    "type": "static",
+    "fallback": {
+      "title": "AI 对话",
+      "hint": "按设备按键开始说话",
+      "tip": "再次对话可连续追问，说出退出对话即可结束"
+    },
+    "static_data": {
+      "title": "AI 对话",
+      "hint": "按设备按键开始说话",
+      "tip": "再次对话可连续追问，说出退出对话即可结束"
+    }
+  },
+  "layout": {
+    "status_bar": { "line_width": 1, "dashed": false },
+    "body": [
+      {
+        "type": "centered_text",
+        "field": "title",
+        "font_name": "NotoSerifSC-Regular.ttf",
+        "font_size": 22,
+        "y": 88,
+        "max_width_ratio": 0.8
+      },
+      {
+        "type": "centered_text",
+        "field": "hint",
+        "font_name": "NotoSerifSC-Light.ttf",
+        "font_size": 14,
+        "y": 148,
+        "max_width_ratio": 0.84
+      },
+      {
+        "type": "centered_text",
+        "field": "tip",
+        "font_name": "NotoSerifSC-Light.ttf",
+        "font_size": 12,
+        "y": 192,
+        "max_width_ratio": 0.86
+      }
+    ],
+    "footer": { "label": "AI_CHAT" }
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "title",
+          "font_name": "NotoSerifSC-Regular.ttf",
+          "font_size": 16,
+          "y": 34,
+          "max_width_ratio": 0.86
+        },
+        {
+          "type": "centered_text",
+          "field": "hint",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 11,
+          "y": 62,
+          "max_width_ratio": 0.92
+        },
+        {
+          "type": "centered_text",
+          "field": "tip",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 9,
+          "y": 86,
+          "max_width_ratio": 0.92
+        }
+      ],
+      "footer": { "label": "AI_CHAT", "height": 18 }
+    },
+    "800x480": {
+      "body": [
+        {
+          "type": "centered_text",
+          "field": "title",
+          "font_name": "NotoSerifSC-Regular.ttf",
+          "font_size": 34,
+          "y": 140,
+          "max_width_ratio": 0.76
+        },
+        {
+          "type": "centered_text",
+          "field": "hint",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 20,
+          "y": 230,
+          "max_width_ratio": 0.8
+        },
+        {
+          "type": "centered_text",
+          "field": "tip",
+          "font_name": "NotoSerifSC-Light.ttf",
+          "font_size": 16,
+          "y": 292,
+          "max_width_ratio": 0.82
+        }
+      ]
+    }
+  }
+}

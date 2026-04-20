@@ -3,7 +3,7 @@
 
 #if defined(EPD_PANEL_42_SSD1683_BW) || defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
 
-// ── Software SPI (bit-bang) for 4.2" SSD1683 BW panels ──
+// ── Software SPI (bit-bang) for 4.2" panels ──
 // Avoids Busy Timeout on ESP32-C3 with non-default pins; no GxEPD2 dependency.
 
 static void spiWriteByte(uint8_t data) {
@@ -107,7 +107,7 @@ void gpioInit() {
     digitalWrite(PIN_EPD_SCK, LOW);
 }
 
-// ── EPD full init (standard mode, 4.2" SSD1683 BW) ──
+// ── EPD full init (standard mode) ──
 
 void epdInit() {
 #if defined(EPD_PANEL_42_DKE_RY683)
@@ -411,6 +411,7 @@ static void epdSend2bppAndRefresh(const uint8_t *buf2bpp) {
 
 void epdDisplay(const uint8_t *image) {
 #if defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
+    if (!ensureColorBuf()) { Serial.println("[EPD] colorBuf alloc failed"); return; }
     int rowBytes = W / 8;
     int out = 0;
     for (int y = 0; y < H; y++) {
@@ -450,10 +451,57 @@ void epdDisplay2bpp(const uint8_t *image2bpp) {
 #endif
 }
 
+// ── EPD deep clear (multi-cycle anti-ghosting) ──────────────
+// SSD1683 BW: cycles all-black/all-white via 0x24/0x26 registers.
+// 4-color panels: falls back to epdDisplay (no register-level deep clear).
+
+void epdDisplayDeepClear(const uint8_t *image) {
+#if defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
+    epdDisplay(image);
+#else
+    epdInit();
+    int w = W / 8;
+    int total = w * H;
+
+    for (int pass = 0; pass < 4; pass++) {
+        uint8_t fill = (pass % 2 == 0) ? 0x00 : 0xFF;
+
+        epdSendCommand(0x24);
+        for (int i = 0; i < total; i++)
+            epdSendData(fill);
+
+        epdSendCommand(0x26);
+        for (int i = 0; i < total; i++)
+            epdSendData(fill);
+
+        epdSendCommand(0x22);
+        epdSendData(0xF7);
+        epdSendCommand(0x20);
+        epdWaitBusy();
+    }
+
+    epdSendCommand(0x24);
+    for (int j = 0; j < H; j++)
+        for (int i = 0; i < w; i++)
+            epdSendData(image[i + j * w]);
+
+    epdSendCommand(0x26);
+    for (int j = 0; j < H; j++)
+        for (int i = 0; i < w; i++)
+            epdSendData(image[i + j * w]);
+
+    epdSendCommand(0x22);
+    epdSendData(0xF7);
+    epdSendCommand(0x20);
+    epdWaitBusy();
+#endif
+}
+
 // ── EPD full-screen display (fast refresh, 0xC7) ────────────
 
 void epdDisplayFast(const uint8_t *image) {
 #if defined(EPD_PANEL_42_GDEM042F52)
+    if (!ensureColorBuf()) { Serial.println("[EPD] colorBuf alloc failed"); return; }
     int rowBytes = W / 8;
     int out = 0;
     for (int y = 0; y < H; y++) {
@@ -575,7 +623,7 @@ void epdSleep() {
       GxEPD2_420_GDEY042T81(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 #elif defined(EPD_PANEL_42_GXEPD2_GYE042A87)
   #include <other/GxEPD2_420_GYE042A87.h>
-  GxEPD2_BW<GxEPD2_420_GYE042A87, GxEPD2_420_GYE042A87::HEIGHT / 4> display(
+  GxEPD2_BW<GxEPD2_420_GYE042A87, GxEPD2_420_GYE042A87::HEIGHT> display(
       GxEPD2_420_GYE042A87(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 #elif defined(EPD_PANEL_42_GXEPD2_420)
   #include <epd/GxEPD2_420.h>
@@ -700,10 +748,27 @@ void epdDisplayFast(const uint8_t *image) {
         false
     );
 #else
-    display.writeImage(image, 0, 0, W, H, false, false, false);
+    display.writeImage(image, 0, 0, W, H, false, false, true);
 #endif
     display.refresh(true);
     display.powerOff();
+}
+
+void epdDisplayDeepClear(const uint8_t *image) {
+    epdInit();
+
+    uint8_t *clearBuf = (uint8_t *)malloc(IMG_BUF_LEN);
+    if (clearBuf) {
+        for (int pass = 0; pass < 4; pass++) {
+            memset(clearBuf, (pass % 2 == 0) ? 0x00 : 0xFF, IMG_BUF_LEN);
+            display.writeImage(clearBuf, 0, 0, W, H, false, false, true);
+            display.refresh(false);
+        }
+        free(clearBuf);
+        display.powerOff();
+    }
+
+    epdDisplay(image);
 }
 
 void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd) {
@@ -724,7 +789,8 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
 #else
     int w = xEnd - xStart;
     int h = yEnd - yStart;
-    display.writeImage(data, xStart, yStart, w, h, false, false, false);
+    display.writeImage(data, xStart, yStart, w, h, false, false, true);
+    display.epd2.writeImageAgain(data, xStart, yStart, w, h, false, false, true);
     display.refresh(xStart, yStart, w, h);
 #endif
     display.powerOff();

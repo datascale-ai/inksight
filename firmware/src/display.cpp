@@ -220,6 +220,280 @@ void showDiagnostic(const char *line1, const char *line2, const char *line3, con
     epdDisplay(imgBuf);
 }
 
+// ── AI chat drawing helpers ───────────────────────────────────
+
+static bool isAsciiOnly(const char *s) {
+    if (!s) return false;
+    for (const unsigned char *p = (const unsigned char*)s; *p; ++p) {
+        if (*p >= 128) return false;
+    }
+    return true;
+}
+
+static const char *aiStatusTitle(const char *state) {
+    if (!state) return "AI";
+    if (strcmp(state, "IDLE") == 0) return "AI IDLE";
+    if (strcmp(state, "CONNECTING") == 0) return "CONNECT";
+    if (strcmp(state, "LISTENING") == 0) return "LISTEN";
+    if (strcmp(state, "THINKING") == 0) return "THINK";
+    if (strcmp(state, "SPEAKING") == 0) return "SPEAK";
+    // Fallback: keep it short (must be ASCII to display well)
+    return "AI";
+}
+
+static const char *aiStatusDetailFallback(const char *state) {
+    // Keep details short for 4.2" screens.
+    if (!state) return "NON-ASCII";
+    if (strcmp(state, "ERROR") == 0) return "ERROR";
+    if (strcmp(state, "IDLE") == 0) return "WAITING";
+    if (strcmp(state, "CONNECTING") == 0) return "WS CONNECT";
+    if (strcmp(state, "LISTENING") == 0) return "MIC LISTEN";
+    if (strcmp(state, "THINKING") == 0) return "WORKING";
+    if (strcmp(state, "SPEAKING") == 0) return "PLAYING";
+    return "NON-ASCII";
+}
+
+static void drawHLine(int x0, int x1, int y) {
+    if (x1 <= x0) return;
+    // draw black pixels
+    fillRect(x0, y, x1 - x0, 1);
+}
+
+static void drawWrappedAsciiText(const char *msg, int x, int y, int width, int scale, int maxLines) {
+    if (!msg || !msg[0] || width <= 0 || scale <= 0 || maxLines <= 0) return;
+
+    const int charW = 5 * scale + scale;
+    int maxChars = width / charW;
+    if (maxChars < 1) maxChars = 1;
+
+    const int lineHeight = 7 * scale + scale * 2;
+    char lineBuf[96];
+
+    int lineNo = 0;
+    int lineLen = 0;
+
+    for (const char *p = msg; *p && lineNo < maxLines; ++p) {
+        char ch = *p;
+        if (ch == '\n' || ch == '\r') {
+            if (lineLen > 0) {
+                lineBuf[lineLen] = '\0';
+                drawText(lineBuf, x, y + lineNo * lineHeight, scale);
+                lineNo++;
+                lineLen = 0;
+            }
+            continue;
+        }
+
+        lineBuf[lineLen++] = ch;
+        if (lineLen >= maxChars) {
+            lineBuf[lineLen] = '\0';
+            drawText(lineBuf, x, y + lineNo * lineHeight, scale);
+            lineNo++;
+            lineLen = 0;
+        }
+    }
+
+    if (lineLen > 0 && lineNo < maxLines) {
+        lineBuf[lineLen] = '\0';
+        drawText(lineBuf, x, y + lineNo * lineHeight, scale);
+    }
+}
+
+// Conversation body region (used for partial refresh)
+
+
+// Compute how many wrapped lines can be safely drawn in [startY, endY)
+// without any pixel going outside the region.
+static int computeMaxWrappedLines(int startY, int endY, int scale) {
+    if (endY <= startY) return 0;
+    const int textHeight = 7 * scale;                 // drawText() pixel height
+    const int lineHeight = 7 * scale + scale * 2;    // same as drawWrappedAsciiText()
+    int availableForFirstLine = (endY - startY) - textHeight;
+    if (availableForFirstLine < 0) return 0;
+    // N lines: last line index is (N-1)
+    // startY + (N-1)*lineHeight + textHeight <= endY
+    return availableForFirstLine / lineHeight + 1;
+}
+
+
+void showAiChatStatus(const char *state, const char *detail) {
+    memset(imgBuf, 0xFF, IMG_BUF_LEN);
+
+    int titleScale = (H < 200) ? 2 : 4;
+    int bodyScale = (H < 200) ? 1 : 2;
+    int marginX = W * 7 / 100;
+    int contentWidth = W - marginX * 2;
+    if (contentWidth < 40) contentWidth = W - 8;
+
+    const char *title = aiStatusTitle(state);
+    const char *body = detail;
+    if (!body || !body[0] || !isAsciiOnly(body)) {
+        body = aiStatusDetailFallback(state);
+    }
+
+    int titleWidth = textWidth(strlen(title), titleScale);
+    int titleX = (W - titleWidth) / 2;
+    if (titleX < marginX) titleX = marginX;
+    int titleY = H * 12 / 100;
+
+    drawText(title, titleX, titleY, titleScale);
+
+    int lineY = titleY + 7 * titleScale + titleScale * 3;
+    drawHLine(marginX, W - marginX, lineY);
+    drawHLine(marginX, W - marginX, lineY + 3);
+
+    int bodyY = lineY + ((H < 200) ? 12 : 20);
+    int yEnd = H - ((H < 200) ? 10 : 8);
+    int maxLines = computeMaxWrappedLines(bodyY, yEnd, bodyScale);
+    drawWrappedAsciiText(body, marginX, bodyY, contentWidth, bodyScale, maxLines);
+
+    epdDisplayFast(imgBuf);
+}
+
+
+// ── Voice indicator (robot icon) ─────────────────────────────
+
+#define ROBOT_ICON_W 24
+#define ROBOT_ICON_H 24
+static const uint8_t ROBOT_ICON[72] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3C, 0x00, 0x00, 0x7E, 0x00,
+    0x00, 0x7E, 0x00, 0x07, 0xFF, 0xE0, 0x0F, 0xFF, 0xF0, 0x0C, 0x00, 0x30,
+    0x0C, 0x00, 0x30, 0x3C, 0x00, 0x3C, 0x7C, 0xC3, 0x3E, 0x7C, 0xC3, 0x3E,
+    0x7C, 0xC3, 0x3E, 0x7C, 0x00, 0x3E, 0x3C, 0x00, 0x3C, 0x0C, 0xFF, 0x30,
+    0x0C, 0xFF, 0x30, 0x0C, 0x00, 0x30, 0x0C, 0x00, 0x30, 0x0F, 0xFF, 0xF0,
+    0x07, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+// Draw robot icon into imgBuf at (ox, oy) with integer scale factor
+static void drawRobotIcon(int ox, int oy, int scale) {
+    int iconRowBytes = ROBOT_ICON_W / 8;
+    for (int row = 0; row < ROBOT_ICON_H; row++) {
+        for (int col = 0; col < ROBOT_ICON_W; col++) {
+            int iconByte = row * iconRowBytes + col / 8;
+            int iconBit = 7 - (col % 8);
+            if (!((ROBOT_ICON[iconByte] >> iconBit) & 1)) continue;
+            for (int sy = 0; sy < scale; sy++) {
+                for (int sx = 0; sx < scale; sx++) {
+                    int px = ox + col * scale + sx;
+                    int py = oy + row * scale + sy;
+                    if (px < 0 || px >= W || py < 0 || py >= H) continue;
+                    imgBuf[py * ROW_BYTES + px / 8] &= ~(0x80 >> (px % 8));
+                }
+            }
+        }
+    }
+}
+
+// ── Small partial-refresh indicator for single-turn ─────────
+
+#define VOICE_PARTIAL_MAX ((ROBOT_ICON_W / 8 + 1) * ROBOT_ICON_H)
+static uint8_t voiceIconBackup[ROBOT_ICON_W / 8 * ROBOT_ICON_H];
+static uint8_t voicePartialBuf[VOICE_PARTIAL_MAX];
+static int voiceIconX = -1;
+static int voiceIconY = -1;
+
+void showVoiceIndicator(bool footerCenter) {
+    int iconW = ROBOT_ICON_W;
+    int iconH = ROBOT_ICON_H;
+    int padding = 4;
+    int ix = footerCenter ? ((W - iconW) / 2) : (W - iconW - padding);
+    int iy = H - iconH - padding;
+    if (ix < 0) ix = 0;
+    if (iy < 0) iy = 0;
+    voiceIconX = ix;
+    voiceIconY = iy;
+
+    int iconRowBytes = iconW / 8;
+    for (int row = 0; row < iconH; row++) {
+        int srcByteIdx = (iy + row) * ROW_BYTES + (ix / 8);
+        memcpy(voiceIconBackup + row * iconRowBytes, imgBuf + srcByteIdx, iconRowBytes);
+    }
+
+    drawRobotIcon(ix, iy, 1);
+
+    int xStart = (ix / 8) * 8;
+    int xEnd = xStart + iconW + 8;
+    if (xEnd > W) xEnd = W;
+    int yStart = iy;
+    int yEnd = iy + iconH;
+    if (yEnd > H) yEnd = H;
+
+    int xS = xStart / 8;
+    int xE = (xEnd - 1) / 8;
+    int widthBytes = xE - xS + 1;
+    int height = yEnd - yStart;
+
+    for (int row = 0; row < height; row++) {
+        memcpy(
+            voicePartialBuf + row * widthBytes,
+            imgBuf + (yStart + row) * ROW_BYTES + xS,
+            widthBytes
+        );
+    }
+    epdPartialDisplay(voicePartialBuf, xStart, yStart, xEnd, yEnd);
+    Serial.println("[VOICE] indicator shown");
+}
+
+void hideVoiceIndicator() {
+    if (voiceIconX < 0 || voiceIconY < 0) return;
+
+    int iconW = ROBOT_ICON_W;
+    int iconH = ROBOT_ICON_H;
+    int iconRowBytes = iconW / 8;
+
+    for (int row = 0; row < iconH; row++) {
+        int dstByteIdx = (voiceIconY + row) * ROW_BYTES + (voiceIconX / 8);
+        memcpy(imgBuf + dstByteIdx, voiceIconBackup + row * iconRowBytes, iconRowBytes);
+    }
+
+    int xStart = (voiceIconX / 8) * 8;
+    int xEnd = xStart + iconW + 8;
+    if (xEnd > W) xEnd = W;
+    int yStart = voiceIconY;
+    int yEnd = voiceIconY + iconH;
+    if (yEnd > H) yEnd = H;
+
+    int xS = xStart / 8;
+    int xE = (xEnd - 1) / 8;
+    int widthBytes = xE - xS + 1;
+    int height = yEnd - yStart;
+
+    for (int row = 0; row < height; row++) {
+        memcpy(
+            voicePartialBuf + row * widthBytes,
+            imgBuf + (yStart + row) * ROW_BYTES + xS,
+            widthBytes
+        );
+    }
+    epdPartialDisplay(voicePartialBuf, xStart, yStart, xEnd, yEnd);
+    voiceIconX = -1;
+    voiceIconY = -1;
+    Serial.println("[VOICE] indicator hidden");
+}
+
+// ── Full-screen voice chat screen for multi-turn ────────────
+
+void showVoiceChatScreen() {
+    memset(imgBuf, 0xFF, IMG_BUF_LEN);
+
+    int scale = (H < 200) ? 2 : 4;
+    int iconDrawW = ROBOT_ICON_W * scale;
+    int iconDrawH = ROBOT_ICON_H * scale;
+    int ix = (W - iconDrawW) / 2;
+    int iy = (H - iconDrawH) / 2 - ((H < 200) ? 8 : 20);
+    drawRobotIcon(ix, iy, scale);
+
+    int labelScale = (H < 200) ? 1 : 2;
+    const char *label = "AI Chat";
+    int labelW = textWidth(strlen(label), labelScale);
+    int labelX = (W - labelW) / 2;
+    int labelY = iy + iconDrawH + ((H < 200) ? 6 : 16);
+    drawText(label, labelX, labelY, labelScale);
+
+    epdDisplayFast(imgBuf);
+    Serial.println("[VOICE] chat screen shown");
+}
+
 // ── Show centered error message ─────────────────────────────
 
 void showError(const char *msg) {
@@ -394,11 +668,15 @@ void showModePreview(const char *modeName) {
     Serial.printf("Mode preview shown: %s\n", modeName);
 }
 
+// ── Smart display with hybrid refresh strategy ──────────────
+// Uses fast refresh (0xC7 + temperature LUT, ~1.5s, minimal flash) most of the time.
+// Performs a full refresh (0xF7, clears ghosting) every FULL_REFRESH_INTERVAL cycles.
+
 static int refreshCount = 0;
 
 void smartDisplay(const uint8_t *image) {
 #if EPD_BPP >= 2
-    if (useColorBuf) {
+    if (useColorBuf && colorBuf) {
         Serial.printf("smartDisplay: 2bpp color (cycle %d)\n", refreshCount);
         epdDisplay2bpp(colorBuf);
         useColorBuf = false;

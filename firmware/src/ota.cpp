@@ -12,6 +12,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+// ── Forward declarations for static functions in other modules ─
+bool beginHttpForUrl(HTTPClient &http, WiFiClient &plainClient, WiFiClientSecure &secClient, const String &url);
+void ledFeedback(const char *pattern);
+
 // ── Global parameters set by network.cpp ───────────────────
 String g_pending_ota_url = "";
 String g_pending_ota_version = "";
@@ -91,8 +95,8 @@ static bool performOTAUpdate(const char* ota_url, const char* ota_version) {
         Serial.println("[OTA] Transport       : HTTP (plain)");
     }
 
-    http.setTimeout(static_cast<uint32_t>(HTTP_TIMEOUT) * 3);  // 90s total
-    Serial.printf("[OTA] HTTP timeout    : %lu ms\n", (unsigned long)HTTP_TIMEOUT * 3);
+    http.setTimeout(60000);  // 60s (max ~65s for uint16_t)
+    Serial.printf("[OTA] HTTP timeout    : 60000 ms\n");
 
     // ── Connect & GET ─────────────────────────────────────────
     Serial.println("[OTA] Connecting to OTA server...");
