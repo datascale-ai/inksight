@@ -25,6 +25,7 @@ const sidebarSections = [
           { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
           { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
           { labelKey: "docs.item.config", href: "/docs/config" },
+          { labelKey: "docs.item.voiceMode", href: "/docs/voice-mode" },
         ],
       },
   {

@@ -88,6 +88,7 @@
   "docs.item.buttonControls": "按键说明",
   "docs.item.apiKey": "配置 API Key",
   "docs.item.config": "设备配置",
+  "docs.item.voiceMode": "AI 对话模式",
   "docs.item.deploy": "本地部署",
   "docs.item.pluginDev": "自定义模式开发",
   "docs.item.apiReference": "API 参考",

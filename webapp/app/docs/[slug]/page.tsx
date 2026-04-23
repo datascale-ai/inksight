@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { notFound } from "next/navigation";
@@ -7,6 +8,14 @@ import { t } from "@/lib/i18n";
 import { localeForRequest } from "@/lib/locale-server";
 
 import Image from "next/image";
+
+async function syncLocaleCookie(locale: string) {
+  const cookieStore = await cookies();
+  const current = cookieStore.get("ink_locale")?.value;
+  if (current !== locale) {
+    cookieStore.set("ink_locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  }
+}
 
 type DocConfig = {
   title: string;
@@ -25,6 +34,7 @@ const DOCS: Record<string, DocConfig> = {
   "button-controls": { title: "Button Controls", file: "button-controls.md" },
   "api-key": { title: "Configure API Key", file: "api-key.md" },
   config: { title: "Web Configuration", file: "config.md" },
+  "voice-mode": { title: "AI Chat Mode", file: "voice-mode.md" },
   deploy: { title: "Local Deployment", file: "deploy.md" },
   "custom-mode-dev": { title: "Custom Mode Development", file: "custom-mode-dev.md" },
   "api-reference": { title: "API Reference", file: "api.md" },
@@ -59,6 +69,7 @@ export default async function DocSlugPage({
   const cfg = DOCS[slug];
   if (!cfg) notFound();
   const locale = await localeForRequest();
+  await syncLocaleCookie(locale);
 
   const markdown = cfg.file ? await readDocMarkdown(cfg.file, locale) : null;
   const content =

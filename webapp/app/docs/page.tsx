@@ -1,11 +1,21 @@
+import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { Lightbulb, Zap } from "lucide-react";
 import { withLocalePath } from "@/lib/i18n";
 import { localeForRequest } from "@/lib/locale-server";
 
+async function syncLocaleCookie(locale: string) {
+  const cookieStore = await cookies();
+  const current = cookieStore.get("ink_locale")?.value;
+  if (current !== locale) {
+    cookieStore.set("ink_locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  }
+}
+
 export default async function DocsPage() {
   const locale = await localeForRequest();
+  await syncLocaleCookie(locale);
   if (locale === "en") {
     return (
       <article className="docs-prose">
@@ -37,6 +47,7 @@ export default async function DocsPage() {
           <li><Link href={withLocalePath(locale, "/docs/flash")}>Web Flasher</Link></li>
           <li><Link href={withLocalePath(locale, "/docs/api-key")}>Configure API Key</Link></li>
           <li><Link href={withLocalePath(locale, "/docs/config")}>Device Configuration</Link></li>
+          <li><Link href={withLocalePath(locale, "/docs/voice-mode")}>AI Chat Mode</Link></li>
           <li><Link href={withLocalePath(locale, "/docs/deploy")}>Local Deployment</Link></li>
         </ul>
         <div className="callout callout-tip">
@@ -92,6 +103,7 @@ export default async function DocsPage() {
         <li><Link href={withLocalePath(locale, "/docs/flash")}>Web 在线刷机</Link></li>
         <li><Link href={withLocalePath(locale, "/docs/api-key")}>配置 API Key</Link></li>
         <li><Link href={withLocalePath(locale, "/docs/config")}>设备配置</Link></li>
+        <li><Link href={withLocalePath(locale, "/docs/voice-mode")}>AI 对话模式</Link></li>
         <li><Link href={withLocalePath(locale, "/docs/deploy")}>本地部署</Link></li>
       </ul>
       <div className="callout callout-tip">

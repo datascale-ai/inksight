@@ -89,6 +89,7 @@
   "docs.item.buttonControls": "Button Controls",
   "docs.item.apiKey": "Configure API Key",
   "docs.item.config": "Device Configuration",
+  "docs.item.voiceMode": "AI Chat Mode",
   "docs.item.deploy": "Local Deployment",
   "docs.item.pluginDev": "Custom Mode Dev",
   "docs.item.apiReference": "API Reference",

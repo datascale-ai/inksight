@@ -1,8 +1,17 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { DocsMobileNav } from "./mobile-nav";
 import { t, withLocalePath } from "@/lib/i18n";
 import { localeForRequest } from "@/lib/locale-server";
+
+async function syncLocaleCookie(locale: string) {
+  const cookieStore = await cookies();
+  const current = cookieStore.get("ink_locale")?.value;
+  if (current !== locale) {
+    cookieStore.set("ink_locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  }
+}
 
 const sidebarSections = [
   {
@@ -24,6 +33,7 @@ const sidebarSections = [
           { labelKey: "docs.item.buttonControls", href: "/docs/button-controls" },
           { labelKey: "docs.item.apiKey", href: "/docs/api-key" },
           { labelKey: "docs.item.config", href: "/docs/config" },
+          { labelKey: "docs.item.voiceMode", href: "/docs/voice-mode" },
         ],
       },
   {
@@ -70,6 +80,7 @@ export default async function DocsLayout({
   children: React.ReactNode;
 }) {
   const locale = await localeForRequest();
+  await syncLocaleCookie(locale);
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Mobile nav trigger */}

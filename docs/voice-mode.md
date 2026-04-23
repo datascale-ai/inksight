@@ -1,0 +1,354 @@
+# AI 对话模式开发指南
+
+AI 对话模式（AI_CHAT）是 InkSight 新增的语音交互功能，允许用户通过设备上的按键触发语音对话，与 AI 助手进行实时语音交流。该模式适用于已接入麦克风和扬声器的设备，底层调用阿里百炼的实时 ASR、流式 TTS 与大语言模型，实现端到端的语音对话体验。
+
+## 1. 功能概述
+
+AI 对话模式的核心链路为：
+
+```
+用户说话 → 设备麦克风采集 → 后端 STT 语音识别 → LLM 生成回复 → TTS 流式语音合成 → 设备扬声器播放
+```
+
+具体能力包括：
+
+- **实时语音识别（STT）**：采用百炼 `qwen3-asr-flash-realtime` 模型，通过 WebSocket 实时上传音频流，支持中文识别，并可在识别过程中返回中间结果（partial transcript）
+- **流式语音合成（TTS）**：采用百炼 `cosyvoice-v3-plus` 模型，以流式方式合成语音，支持边生成边播放，缩短首字节延迟
+- **LLM 回复生成**：复用用户或系统已配置的 LLM 模型（支持通义、百炼、Deepseek、月之暗面等多种提供商），生成简洁、口语化的回复
+- **模式语音切换**：在对话过程中，用户可通过语音指令（如"切换到天气模式"）直接切换设备显示模式，系统会智能识别意图
+- **墨水屏对话卡片**：对话完成后，设备会渲染一张包含用户提问和 AI 回复的 BMP 图片，显示在墨水屏上
+
+### 两种交互模式
+
+AI 对话模式支持两种使用路径：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| **按键交互** | 用户按设备按键说话，松开后设备将音频发送到后端，等待 AI 回复后播放 | 物理设备有麦克风和扬声器 |
+| **HTTP 请求** | 通过 HTTP POST 上传 PCM 音频，获取识别文本、回复文本、回复音频和对话图片 | 设备能力有限或需要 Web 端集成 |
+
+## 2. 硬件接线
+
+AI 对话模式目前仅在 **ESP32-WROOM32E** 开发板上可用。ESP32-C3 系列的语音功能支持已在路线图中，但当前固件尚未包含。
+
+### 2.1 推荐音频模块
+
+| 模块 | 角色 | 接口 | 说明 |
+|------|------|------|------|
+| **INMP441** | 麦克风（I2S 输入） | I2S | 全向 MEMS 麦克风，16kHz 采样，I2S 接口 |
+| **MAX98357A** | 扬声器功放（I2S 输出） | I2S | D 类功放模块，直推 3W 8Ω 喇叭 |
+
+### 2.2 引脚对应关系
+
+ESP32-WROOM-32E 的语音相关引脚在固件中的定义如下：
+
+**麦克风（INMP441）**
+
+| INMP441 引脚 | ESP32-WROOM-32E GPIO | 说明 |
+|-------------|---------------------|------|
+| VCC | 3.3V | 供电 |
+| GND | GND | 地 |
+| SCK | GPIO 18 | I2S 时钟 |
+| WS | GPIO 19 | I2S 字选择 |
+| SD | GPIO 33 | I2S 数据输出 |
+
+**扬声器（MAX98357A）**
+
+| MAX98357A 引脚 | ESP32-WROOM-32E GPIO | 说明 |
+|---------------|---------------------|------|
+| VCC | 3.3V | 供电（MAX98357A 支持 3.3V-5V） |
+| GND | 不要连接 | 连接后会检测不到声音 |
+| BCK (DIN/BCLK) | GPIO 17 | I2S 位时钟 |
+| LCK (WS/FS) | GPIO 16 | I2S 字选择 |
+| DIN (DOUT) | GPIO 22 | I2S 数据输入 |
+
+### 2.3 语音触发按键
+
+| 功能 | ESP32-WROOM-32E GPIO | 说明 |
+|------|---------------------|------|
+| 按键一侧 | **GPIO 23** | 长按 3 秒进入 AI 对话模式 |
+| 按键另一侧 | GND | 短按进入配网模式 |
+
+> `PIN_AI_CHAT_SW` 在 `firmware/src/config.h` 中定义为 GPIO 23。如需自定义按键引脚，可修改该宏定义。
+
+### 2.4 接线示意图
+
+```
+ESP32-WROOM-32E
+┌─────────────────────────────────┐
+│                           3.3V  │────────────── VCC (INMP441) VCC (MAX98357A)
+│                             GND │────────────── GND (INMP441)
+│                        GPIO 18 │────────────── SCK  (INMP441)
+│                        GPIO 19 │────────────── WS   (INMP441)
+│                        GPIO 33 │────────────── SD   (INMP441)
+│                        GPIO 17 │────────────── BCK  (MAX98357A)
+│                        GPIO 16 │────────────── LCK  (MAX98357A)
+│                        GPIO 22 │────────────── DIN  (MAX98357A)
+│                        GPIO 23 │────────────── 语音触发按键 (另一端接 GND)
+│                         ...    │
+└─────────────────────────────────┘
+```
+
+### 2.5 固件配置宏
+
+在 `firmware/platformio.ini` 中，确保构建目标对应 `WROOM32E`，例如使用环境 `epd_42_wsv2_ssd1683_wroom32e`。
+
+如果希望设备上电后自动进入 AI 对话模式，可在 `platformio.ini` 中定义：
+
+```ini
+build_flags =
+    ...
+    -D AUTO_BOOT_AI_CHAT=1
+```
+
+语音相关固件参数：
+
+| 宏 | 默认值 | 说明 |
+|----|--------|------|
+| `SAMPLE_RATE` | 16000 | 采样率（Hz），必须为 16kHz |
+| `ENABLE_OPUS` | 可选 | 启用 Opus 编解码（节省带宽，需后端配合） |
+| `AI_CHAT_BTN_HOLD_MS` | 3000 | 长按触发 AI 对话的时长（毫秒） |
+
+### 2.6 音频参数
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| 采样率 | 16kHz | STT 和 TTS 均使用此采样率 |
+| 麦克风位深 | 32-bit I2S | INMP441 输出为 24-bit，固件取高 16-bit |
+| 扬声器位深 | 16-bit | MAX98357A 输入要求 16-bit stereo |
+| Opus 帧长 | 60ms | 当启用 Opus 时，每帧 60ms（960 samples） |
+| I2S DMA buffer | 240 samples | 输入/输出 DMA 缓冲大小 |
+
+## 3. 前置要求
+
+### 硬件要求
+
+- ESP32 系列设备（推荐 WROOM32E 或支持更大 Flash 的型号）
+- 麦克风模块（支持 16kHz PCM 音频采集）
+- 扬声器或音频输出模块
+- 已连接 Wi-Fi
+
+### 服务端要求
+
+- InkSight 后端服务已部署并可访问
+- 阿里百炼账号及有效的 API Key
+- 设备已完成配对和绑定
+
+### 百炼 API Key 申请
+
+1. 访问 [阿里云百炼平台](https://bailian.console.aliyun.com)，注册并登录
+2. 在「API-KEY 管理」中创建新的 API Key
+3. 确保该 Key 已开通以下服务：
+   - **语音识别（ASR）**：`qwen3-asr-flash-realtime`
+   - **语音合成（TTS）**：`cosyvoice-v3-plus`
+   - **模型服务**：你计划使用的 LLM 模型
+
+## 4. .env 参数配置（个人开发）
+
+所有语音相关参数均在后端 `.env` 文件中配置。以下按功能分组说明每个参数的作用、默认值和调优建议。
+
+### 4.1 API 密钥配置
+
+```
+# 百炼 API 密钥（STT/TTS 共用，留空则回退到 DASHSCOPE_API_KEY）
+VOICE_DASHSCOPE_API_KEY=
+
+# 可选：分别为 STT / TTS 单独配置密钥
+VOICE_STT_API_KEY=
+VOICE_TTS_API_KEY=
+```
+
+**说明**：优先使用 `VOICE_DASHSCOPE_API_KEY`。如果留空，则自动使用 `DASHSCOPE_API_KEY`。如需为 STT 和 TTS 分别使用不同 Key，可通过 `VOICE_STT_API_KEY` 和 `VOICE_TTS_API_KEY` 单独指定。
+
+### 4.2 语音识别（STT）配置
+
+```
+# 实时 ASR 模型（通常不需要修改）
+VOICE_REALTIME_ASR_MODEL=qwen3-asr-flash-realtime
+
+# 百炼 ASR WebSocket 地址（通常不需要修改）
+VOICE_REALTIME_ASR_WS_URL=wss://dashscope.aliyuncs.com/api-ws/v1/realtime
+
+# ASR 识别语言
+VOICE_REALTIME_ASR_LANGUAGE=zh
+
+# 空闲超时（秒），超过该时间无新音频则自动结束本次识别
+VOICE_REALTIME_ASR_IDLE_TIMEOUT_SECONDS=20
+
+# ASR WebSocket 单次消息最大字节数
+VOICE_REALTIME_ASR_MAX_EVENT_BYTES=15728640
+```
+
+**调优建议**：
+- `VOICE_REALTIME_ASR_IDLE_TIMEOUT_SECONDS`：如果用户说话间隔较长，可适当增大（如 30）；如果设备误触发较多，可减小（如 15）
+- `VOICE_REALTIME_ASR_LANGUAGE`：当前仅支持 `zh`（中文），如需英文可改为 `en`
+
+### 4.3 语音合成（TTS）配置
+
+```
+# 是否启用流式 TTS（1=启用，0=禁用）
+VOICE_STREAMING_TTS_ENABLED=1
+
+# TTS 模型
+VOICE_STREAMING_TTS_MODEL=cosyvoice-v3-plus
+
+# 语音音色（longanyang 为默认中文音色，可换用其他音色 ID）
+VOICE_STREAMING_TTS_VOICE=longanyang
+
+# TTS WebSocket 地址（通常不需要修改）
+VOICE_STREAMING_TTS_WS_URL=wss://dashscope.aliyuncs.com/api-ws/v1/inference
+
+# 输出音频采样率（Hz）
+VOICE_STREAMING_TTS_SAMPLE_RATE=16000
+
+# 音量（0-100）
+VOICE_STREAMING_TTS_VOLUME=50
+
+# 音调（1.0 为标准音调）
+VOICE_STREAMING_TTS_PITCH=1.0
+
+# 语速（1.0 为标准语速）
+VOICE_STREAMING_TTS_SPEED=1.0
+
+# TTS WebSocket 单次消息最大字节数
+VOICE_STREAMING_TTS_MAX_EVENT_BYTES=4194304
+```
+
+**调优建议**：
+- `VOICE_STREAMING_TTS_VOLUME`：根据扬声器灵敏度调整，过响可降至 30-40
+- `VOICE_STREAMING_TTS_SPEED`：语速过快可降至 0.8-0.9，过慢可升至 1.1-1.2
+- `VOICE_STREAMING_TTS_PITCH`：如需不同音色风格可微调（0.8-1.2 范围内效果较好）
+- 百炼支持多种音色 ID，可在百炼控制台查看可用音色列表并替换 `VOICE_STREAMING_TTS_VOICE`
+
+### 4.4 流式合成与预热控制
+
+这些参数控制 LLM 流式生成与 TTS 流式合成的协同策略，影响对话的响应速度和流畅度。
+
+```
+# 是否启用 LLM 流式输出（1=启用，0=一次性生成完整回复后再合成）
+VOICE_LLM_STREAMING=1
+
+# 是否启用 TTS 流式合成（1=启用，0=等完整文本生成后再合成）
+VOICE_TTS_STREAMING=1
+
+# TTS 流式合成的最小分段字符数（单个分段至少这么多字符才触发合成）
+VOICE_TTS_STREAM_MIN_CHARS=12
+
+# TTS 流式合成的最大分段字符数（单个分段最多这么多字符）
+VOICE_TTS_STREAM_MAX_CHARS=36
+
+# Delta 分段最小字符数（LLM 输出 delta 达到此长度才考虑分段）
+VOICE_TTS_DELTA_MIN_CHARS=6
+
+# Delta 分段最大字符数
+VOICE_TTS_DELTA_MAX_CHARS=16
+
+# Delta 分段空闲间隔（毫秒），LLM 输出停顿超过此时间则强制分段
+VOICE_TTS_DELTA_IDLE_MS=320
+
+# 预热最小字符数（partial ASR 结果达到此长度才启动预热）
+VOICE_WS_PARTIAL_WARMUP_MIN_CHARS=2
+
+# 预热稳定阈值（毫秒），ASR partial 结果稳定这么久后开始预热 LLM/TTS
+VOICE_WS_PARTIAL_WARMUP_STABLE_MS=180
+
+# WebSocket 音频分块大小（字节），影响网络传输效率
+VOICE_WS_AUDIO_CHUNK_BYTES=2048
+```
+
+**调优建议**：
+- 如果对响应速度要求高（希望边说边开始播放），保持 `VOICE_LLM_STREAMING=1` 和 `VOICE_TTS_STREAMING=1`
+- 如果设备处理能力有限或网络不稳定，可将两者都设为 `0`，改用非流式模式（速度较慢但稳定）
+- `VOICE_TTS_DELTA_IDLE_MS`：AI 思考时停顿超过 320ms 会触发分段播放，避免用户等待过久
+- `VOICE_WS_PARTIAL_WARMUP_STABLE_MS`：ASR 识别稳定 180ms 后就开始生成回复，缩短感知延迟
+
+### 4.5 服务端 VAD（语音活动检测）
+
+服务端 VAD 允许后端在检测到静音后自动触发语音识别提交，无需等待设备主动发送 commit 信号。
+
+```
+# 是否启用服务端 VAD（1=启用，0=禁用）
+VOICE_SERVER_VAD_ENABLED=1
+
+# 静音检测阈值（毫秒），静音持续这么久则视为用户已说完
+VOICE_SERVER_VAD_SILENCE_MS=800
+```
+
+**说明**：启用服务端 VAD 后，即使设备固件没有主动 commit 语音，后端也能在 800ms 静音后自动处理。这有助于在网络不稳定时提升体验，但可能增加误触发。如果设备固件已实现了本地 VAD，建议将 `VOICE_SERVER_VAD_ENABLED` 设为 `0`。
+
+### 4.6 会话缓存配置
+
+```
+# 语音会话缓存保留时长（秒），超出后自动清理
+VOICE_TURN_TTL_SECONDS=900
+```
+
+**说明**：每次语音对话会生成一条 turn 记录，包含识别文本、回复文本、音频数据和对话图片。这些数据在 TTL 内可通过 API 获取，用于回放、断点续传等场景。900 秒（约 15 分钟）对于日常使用足够，无需频繁修改。
+
+## 5. 模式切换指令
+
+用户可以在对话过程中通过自然语言指令切换设备模式。系统会识别以下类型的指令：
+
+| 触发词 | 目标模式 | 示例 |
+|--------|----------|------|
+| 天气、天气看板 | WEATHER | "切换到天气模式" |
+| 日历、月历 | CALENDAR | "帮我换个日历模式" |
+| 每日推荐、每日 | DAILY | "切换到每日推荐模式" |
+
+**说明**：设备检测到模式切换指令后，会生成一条简短确认语音（如"好的，帮你切换"），然后自动切换到目标模式。
+
+## 6. 使用流程
+
+### 6.1 首次配置
+
+1. 在阿里百炼平台申请 API Key，确保开通 ASR、TTS 和 LLM 服务
+2. 在后端 `.env` 中配置 `VOICE_DASHSCOPE_API_KEY`（或单独配置 `VOICE_STT_API_KEY` 和 `VOICE_TTS_API_KEY`）
+3. 根据需要调整 TTS 参数（音色、音量、语速）和流式控制参数
+4. 重启后端服务使配置生效
+5. 在 WebApp 设备配置页中，将设备模式切换到「AI 对话」
+6. 确保设备已烧录支持语音功能的固件
+
+### 6.2 日常使用
+
+1. 长按设备按键，进入 AI 对话模式
+2. 对着设备麦克风说话（松开按键或等待超时后自动发送）
+3. 等待 AI 回复并通过扬声器播放
+4. 如需继续对话，再次按键说话
+5. 如需切换模式，直接说出切换指令（如"切换到天气"）
+6. 说"退出对话"或"关闭模式"结束对话
+
+
+## 7. 故障排查
+
+### 常见问题
+
+**1. 语音识别无反应或返回空文本**
+- 检查 `VOICE_DASHSCOPE_API_KEY` 是否正确配置
+- 确认百炼账号已开通 ASR 服务
+- 检查音频格式是否为 16kHz PCM（mono）
+- 查看后端日志中 `[VOICE_STT]` 相关输出
+
+**2. TTS 播放声音异常（无声或杂音）**
+- 确认 `VOICE_STREAMING_TTS_SAMPLE_RATE` 与设备音频采样率一致（通常为 16000Hz）
+- 检查 `VOICE_STREAMING_TTS_ENABLED` 是否为 1
+- 确认设备音频驱动支持 PCM 格式解码
+
+**3. 模式切换不生效**
+- 检查触发词是否在支持列表中（参考第 5 节）
+- 确认固件实现了对 `switch_to_mode` 的处理逻辑
+
+**4. 响应延迟过高**
+- 确认网络连接到百炼服务稳定
+- 尝试减小 `VOICE_TTS_DELTA_IDLE_MS`（如改为 200）以加快分段
+- 检查 `VOICE_WS_PARTIAL_WARMUP_STABLE_MS` 是否合理
+
+**5. 服务端 VAD 误触发**
+- 如果设备固件已实现本地 VAD，将 `VOICE_SERVER_VAD_ENABLED` 设为 `0`
+- 如果需要服务端 VAD，适当增大 `VOICE_SERVER_VAD_SILENCE_MS`（如 1200）
+
+## 8. 相关文档
+
+- [设备配置指南](config.md)
+- [自定义模式开发指南](custom-mode-dev.md)
+- [本地部署指南](deploy.md)
+- [常见问题 FAQ](faq.md)
