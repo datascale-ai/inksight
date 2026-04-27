@@ -1,11 +1,21 @@
-import eslintConfig from "eslint-config-next/core-web-vitals";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import { FlatCompat } from "@eslint/eslintrc";
 
-/** @type {import("eslint").Linter.Config[]} */
-const config = [
-  ...eslintConfig,
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+const eslintConfig = [
+  {
+    ignores: [".next/**", "node_modules/**", "package-lock.json"],
+  },
+  ...compat.extends("plugin:@next/next/core-web-vitals"),
   {
     rules: {
-      // React Compiler rules: enable later when aligning large pages with compiler expectations.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
       "react-hooks/preserve-manual-memoization": "off",
@@ -13,4 +23,4 @@ const config = [
   },
 ];
 
-export default config;
+export default eslintConfig;
