@@ -108,10 +108,18 @@ We are thrilled to see the amazing cases and custom PCBs created by the InkSight
   <img src="images/community/case2.png" width="400">
   <img src="images/community/case3.png" width="400">
 
+- **[Huawei Nova 14 Color Display Phone Case 3.98-inch 4-Color E-ink Screen](https://makerworld.com.cn/zh/models/2399226-gu-jian-kai-yuan-diy-hua-wei-nova14cai-xian-shou-j#profileId-2744953)**
+
+  <img src="images/community/case4.png" width="400">
+
 ### Custom PCBs
 - **[InkSight 4.2" Custom Driver Board (OSHWHUB)](https://oshwhub.com/kidstory/4-2)**
   
   <img src="images/community/pcb1.png" width="400">
+
+- **[Moyu AI E-ink Screen (Verified)](https://oshwhub.com/qq173972819/project_mqihrlpc)**
+  
+  <img src="images/community/pcb2.png" width="400">
 
 ## Self-Host or Develop
 

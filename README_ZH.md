@@ -106,10 +106,18 @@
   <img src="images/community/case2.png" width="400">
   <img src="images/community/case3.png" width="400">
 
+- **[华为Nova14彩显手机壳3.98寸四色墨水屏](https://makerworld.com.cn/zh/models/2399226-gu-jian-kai-yuan-diy-hua-wei-nova14cai-xian-shou-j#profileId-2744953)**
+
+<img src="images/community/case4.png" width="400">
+
 ### 定制 PCB 驱动板
 - **[4.2寸墨水屏驱动（InkSight 定制版）](https://oshwhub.com/kidstory/4-2)**
   
   <img src="images/community/pcb1.png" width="400">
+
+- **[墨鱼AI墨水屏（已验证）](https://oshwhub.com/qq173972819/project_mqihrlpc)**
+  
+  <img src="images/community/pcb2.png" width="400">
 
 ## 本地部署服务 / 二次开发
 
