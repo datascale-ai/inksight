@@ -9,10 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from api.shared import logger
+from core.activity_store import log_user_activity
 from core.auth import require_user
 from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
 from core.config_store import get_main_db
@@ -99,6 +100,7 @@ async def list_shared_modes(
 @router.post("/discover/modes/publish")
 async def publish_mode(
     body: dict,
+    request: Request,
     user_id: int = Depends(require_user),
 ):
     """发布模式到广场（需要认证）"""
@@ -329,6 +331,12 @@ async def publish_mode(
     shared_mode_id = cursor.lastrowid
 
     logger.info(f"[DISCOVER] User {user_id} published mode {source_custom_mode_id} as shared mode {shared_mode_id}")
+    await log_user_activity(
+        user_id,
+        "mode.publish",
+        request=request,
+        metadata={"mode_id": source_custom_mode_id, "shared_mode_id": shared_mode_id, "category": category, "mac": mac},
+    )
     return {"ok": True, "id": shared_mode_id}
 
 
@@ -336,6 +344,7 @@ async def publish_mode(
 async def install_shared_mode(
     mode_id: int,
     body: dict,
+    request: Request,
     user_id: int = Depends(require_user),
 ):
     """安装共享模式到用户本地设备（需要认证）"""
@@ -406,4 +415,10 @@ async def install_shared_mode(
         return JSONResponse({"error": "模式加载失败"}, status_code=500)
 
     logger.info(f"[DISCOVER] User {user_id} installed shared mode {mode_id} as {new_mode_id} on device {mac}")
+    await log_user_activity(
+        user_id,
+        "mode.install",
+        request=request,
+        metadata={"shared_mode_id": mode_id, "mode_id": new_mode_id, "mac": mac},
+    )
     return {"ok": True, "custom_mode_id": new_mode_id}

@@ -5,10 +5,11 @@ from datetime import datetime
 
 import aiosqlite
 import phonenumbers
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from phonenumbers.phonenumberutil import NumberParseException
 
+from core.activity_store import log_user_activity
 from core.auth import clear_session_cookie, create_session_token, require_user, set_session_cookie
 from core.config_store import authenticate_user, _hash_password, get_user_api_quota
 from core.db import get_main_db
@@ -62,7 +63,7 @@ async def _phone_exists(db, normalized_phone: str) -> bool:
 
 
 @router.post("/auth/register")
-async def auth_register(body: dict, response: Response):
+async def auth_register(body: dict, response: Response, request: Request = None):
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     phone = (body.get("phone") or "").strip()
@@ -133,11 +134,12 @@ async def auth_register(body: dict, response: Response):
 
     token = create_session_token(user_id, username)
     set_session_cookie(response, token)
+    await log_user_activity(user_id, "auth.register", request=request, metadata={"username": username})
     return {"ok": True, "user_id": user_id, "username": username, "token": token}
 
 
 @router.post("/auth/login")
-async def auth_login(body: dict, response: Response):
+async def auth_login(body: dict, response: Response, request: Request = None):
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     user = await authenticate_user(username, password)
@@ -145,6 +147,7 @@ async def auth_login(body: dict, response: Response):
         return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
     token = create_session_token(user["id"], user["username"])
     set_session_cookie(response, token)
+    await log_user_activity(user["id"], "auth.login", request=request)
     return {"ok": True, "user_id": user["id"], "username": user["username"], "token": token}
 
 

@@ -24,6 +24,7 @@ from api.shared import (
     resolve_preview_voltage,
     resolve_refresh_minutes_for_device_state,
 )
+from core.activity_store import log_user_activity
 from core.auth import require_device_token, validate_mac_param
 from core.config import DEFAULT_REFRESH_INTERVAL, SCREEN_HEIGHT, SCREEN_WIDTH
 from core.config_store import (
@@ -368,6 +369,13 @@ async def preview(
         )
         if intent == 1:
             from fastapi.responses import JSONResponse
+            if current_user_id:
+                await log_user_activity(
+                    current_user_id,
+                    "preview.intent",
+                    request=request,
+                    metadata={"mac": mac or "", "persona": resolved_persona, "cache_hit": bool(cache_hit)},
+                )
 
             return JSONResponse(
                 status_code=200,
@@ -410,6 +418,13 @@ async def preview(
             )
         png_bytes = image_to_png_bytes(img)
         logger.info("[PREVIEW] Generated PNG persona=%s size=%sx%s", resolved_persona, w, h)
+        if current_user_id:
+            await log_user_activity(
+                current_user_id,
+                "preview.render",
+                request=request,
+                metadata={"mac": mac or "", "persona": resolved_persona, "cache_hit": bool(cache_hit), "size": f"{w}x{h}"},
+            )
         
         # 确定生成状态（使用英文避免编码问题）
         status_msg = "no_llm_required" if not llm_mode_requires_quota else ("model_generated" if not _content_fallback else "fallback_used")

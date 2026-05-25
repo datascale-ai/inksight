@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter, Noto_Serif_SC } from "next/font/google";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { PageviewTracker } from "@/components/pageview-tracker";
 import { t } from "@/lib/i18n";
 import { localeForRequest } from "@/lib/locale-server";
 import "./globals.css";
@@ -49,6 +51,9 @@ export default async function RootLayout({
   return (
     <html lang={lang}>
       <body className={`${inter.variable} ${notoSerifSc.variable} antialiased`}>
+        <Suspense fallback={null}>
+          <PageviewTracker />
+        </Suspense>
         <Navbar />
         <main className="min-h-screen">{children}</main>
         <Footer />

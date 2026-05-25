@@ -4,11 +4,12 @@ import io
 import json as jsonlib
 from pathlib import Path
 import os
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai import OpenAIError
 
 from api.shared import logger
+from core.activity_store import log_user_activity
 from core.auth import require_user, optional_user
 from core.config import SCREEN_HEIGHT, SCREEN_WIDTH, get_default_llm_model_for_provider
 from core.config_store import remove_mode_from_all_configs
@@ -553,7 +554,7 @@ async def custom_mode_preview(
 
 
 @router.post("/modes/custom")
-async def create_custom_mode(body: dict, user_id: int = Depends(require_user)):
+async def create_custom_mode(body: dict, request: Request, user_id: int = Depends(require_user)):
     """Create a custom mode.
 
     - With `mac`: persist to DB with user+device isolation.
@@ -585,6 +586,7 @@ async def create_custom_mode(body: dict, user_id: int = Depends(require_user)):
             file_path.unlink(missing_ok=True)
             return JSONResponse({"error": "Failed to load mode definition"}, status_code=400)
         logger.info("[MODES] Created legacy custom mode %s for user %s", mode_id, user_id)
+        await log_user_activity(user_id, "mode.custom.create", request=request, metadata={"mode_id": mode_id, "legacy": True})
         return {"ok": True, "mode_id": mode_id}
 
     # Validate device ownership for DB path
@@ -609,6 +611,7 @@ async def create_custom_mode(body: dict, user_id: int = Depends(require_user)):
         return JSONResponse({"error": "Failed to load mode definition"}, status_code=400)
 
     logger.info(f"[MODES] Created custom mode {mode_id} for user {user_id} on device {mac}")
+    await log_user_activity(user_id, "mode.custom.create", request=request, metadata={"mode_id": mode_id, "mac": mac})
     return {"ok": True, "mode_id": mode_id}
 
 

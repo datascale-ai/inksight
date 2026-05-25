@@ -6,6 +6,7 @@ from fastapi import APIRouter, Cookie, Depends, Header, Request
 from fastapi.responses import JSONResponse
 
 from api.shared import ensure_web_or_device_access, logger
+from core.activity_store import log_user_activity
 from core.auth import is_admin_authorized, require_admin, validate_mac_param
 from core.config_store import (
     activate_config,
@@ -32,8 +33,9 @@ async def post_config(
 ):
     data = body.model_dump(by_alias=True)
     mac = data["mac"]
+    access = None
     if not is_admin_authorized(authorization):
-        await ensure_web_or_device_access(
+        access = await ensure_web_or_device_access(
             request,
             mac,
             x_device_token,
@@ -50,6 +52,13 @@ async def post_config(
     )
     config_id = await save_config(mac, data)
     await set_pending_refresh(mac, True)
+    if access and access.get("mode") == "user":
+        await log_user_activity(
+            int(access["user_id"]),
+            "config.save",
+            request=request,
+            metadata={"mac": mac, "modes": len(modes) if isinstance(modes, list) else 0},
+        )
 
     saved_config = await get_active_config(mac)
     if saved_config:

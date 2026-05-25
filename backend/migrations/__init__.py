@@ -89,6 +89,33 @@ async def run_main_db_migrations(db, *, defaults: dict[str, str]) -> None:
         (21, "configs.admin1", lambda: _add_column_if_missing(db, "configs", "admin1", "admin1 TEXT DEFAULT ''")),
         (22, "configs.country", lambda: _add_column_if_missing(db, "configs", "country", "country TEXT DEFAULT ''")),
         (23, "device_state.ota_original_url", lambda: _add_column_if_missing(db, "device_state", "ota_original_url", "ota_original_url TEXT DEFAULT ''")),
+        (
+            24,
+            "user_activity_events.create",
+            lambda: db.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS user_activity_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    event_name TEXT NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'web',
+                    path TEXT DEFAULT '',
+                    method TEXT DEFAULT '',
+                    ip_hash TEXT DEFAULT '',
+                    user_agent TEXT DEFAULT '',
+                    metadata_json TEXT DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_user_activity_user_time
+                    ON user_activity_events(user_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_user_activity_event_time
+                    ON user_activity_events(event_name, created_at);
+                CREATE INDEX IF NOT EXISTS idx_user_activity_time
+                    ON user_activity_events(created_at);
+                """
+            ),
+        ),
     ]
 
     now = datetime.now().isoformat()

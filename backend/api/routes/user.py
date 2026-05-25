@@ -8,6 +8,7 @@ from fastapi import APIRouter, Cookie, Depends, Request
 from fastapi.responses import JSONResponse
 
 from api.shared import require_membership_access
+from core.activity_store import log_user_activity
 from core.auth import require_user, validate_mac_param
 from core.config_store import (
     approve_access_request,
@@ -40,12 +41,14 @@ async def list_user_devices(user_id: int = Depends(require_user)):
 
 
 @router.post("/user/devices")
-async def bind_user_device(body: dict, user_id: int = Depends(require_user)):
+async def bind_user_device(body: dict, request: Request, user_id: int = Depends(require_user)):
     mac = validate_mac_param((body.get("mac") or "").strip().upper())
     nickname = (body.get("nickname") or "").strip()
     if not mac:
         return JSONResponse({"error": "MAC 地址不能为空"}, status_code=400)
-    return {"ok": True, **await bind_device(user_id, mac, nickname)}
+    result = await bind_device(user_id, mac, nickname)
+    await log_user_activity(user_id, "device.bind", request=request, metadata={"mac": mac, "role": result.get("role")})
+    return {"ok": True, **result}
 
 
 @router.delete("/user/devices/{mac}")
@@ -129,7 +132,7 @@ def _mask_key(key: str) -> str:
 
 
 @router.get("/user/profile")
-async def get_user_profile(user_id: int = Depends(require_user)):
+async def get_user_profile(request: Request, user_id: int = Depends(require_user)):
     db = await get_main_db()
 
     cursor = await db.execute(
@@ -139,6 +142,7 @@ async def get_user_profile(user_id: int = Depends(require_user)):
     user_row = await cursor.fetchone()
     if not user_row:
         return JSONResponse({"error": "用户不存在"}, status_code=404)
+    await log_user_activity(user_id, "profile.open", request=request)
 
     quota = await get_user_api_quota(user_id)
 
@@ -160,7 +164,7 @@ async def get_user_profile(user_id: int = Depends(require_user)):
 
 
 @router.put("/user/profile/llm")
-async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_user)):
+async def save_user_llm_config_route(body: dict, request: Request, user_id: int = Depends(require_user)):
     """保存用户级别的 LLM 配置。"""
     llm_access_mode = (body.get("llm_access_mode") or "preset").strip().lower()
     provider = (body.get("provider") or "deepseek").strip()
@@ -199,14 +203,21 @@ async def save_user_llm_config_route(body: dict, user_id: int = Depends(require_
     )
     if not ok:
         return JSONResponse({"error": "保存配置失败"}, status_code=500)
+    await log_user_activity(
+        user_id,
+        "profile.llm_config.save",
+        request=request,
+        metadata={"llm_access_mode": llm_access_mode, "provider": provider, "image_provider": image_provider},
+    )
     
     return {"ok": True, "message": "配置已保存"}
 
 
 @router.delete("/user/profile/llm")
-async def delete_user_llm_config_route(user_id: int = Depends(require_user)):
+async def delete_user_llm_config_route(request: Request, user_id: int = Depends(require_user)):
     """删除用户级别的 LLM 配置（BYOK）。"""
     deleted = await delete_user_llm_config(user_id)
+    await log_user_activity(user_id, "profile.llm_config.delete", request=request, metadata={"deleted": bool(deleted)})
     # 幂等：即使本来就没有配置，也返回 ok，避免前端交互分叉
     return {"ok": True, "deleted": bool(deleted), "message": "配置已删除"}
 
