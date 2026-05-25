@@ -62,8 +62,7 @@ async def _rows(sql: str, params: tuple = ()) -> list[dict]:
     return [dict(zip(columns, row)) for row in await cursor.fetchall()]
 
 
-@router.get("/admin/analytics/overview")
-async def admin_analytics_overview(_: int = Depends(get_current_root_user)):
+async def _analytics_overview_payload() -> dict:
     """Root-only analytics summary for the operations dashboard."""
     return {
         "users": {
@@ -214,3 +213,13 @@ async def admin_analytics_overview(_: int = Depends(get_current_root_user)):
             ),
         },
     }
+
+
+@router.get("/admin/analytics/overview")
+async def admin_analytics_overview(_: int = Depends(get_current_root_user)):
+    return await _analytics_overview_payload()
+
+
+@router.get("/admin/console/summary")
+async def admin_console_summary(_: int = Depends(get_current_root_user)):
+    return await _analytics_overview_payload()

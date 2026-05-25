@@ -9,33 +9,33 @@
     "provider": "text2image",
     "fallback": {
       "artwork_title": "Ink Muse",
-      "image_url": "/webconfig/assets/art/moyun.png",
+      "image_url": "/static/art/moyun.png",
       "description": "Today's artwork"
     },
     "fallback_pool": [
       {
         "artwork_title": "Ink Muse",
-        "image_url": "/webconfig/assets/art/moyun.png",
+        "image_url": "/static/art/moyun.png",
         "description": "Today's artwork"
       },
       {
         "artwork_title": "Mountain Dusk",
-        "image_url": "/webconfig/assets/art/shanjuqiuming.png",
+        "image_url": "/static/art/shanjuqiuming.png",
         "description": "Ink wash landscape"
       },
       {
         "artwork_title": "Bamboo Sages",
-        "image_url": "/webconfig/assets/art/zhulinqixian.png",
+        "image_url": "/static/art/zhulinqixian.png",
         "description": "Classical woodcut figures"
       },
       {
         "artwork_title": "Zen Lotus",
-        "image_url": "/webconfig/assets/art/chanyilianhua.png",
+        "image_url": "/static/art/chanyilianhua.png",
         "description": "Minimalist zen aesthetics"
       },
       {
         "artwork_title": "Cloud Drift",
-        "image_url": "/webconfig/assets/art/yunjuanyunshu.png",
+        "image_url": "/static/art/yunjuanyunshu.png",
         "description": "Black and white cloud sea"
       }
     ]

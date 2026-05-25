@@ -2469,12 +2469,27 @@ def _render_icon_list(ctx: RenderContext, block: dict) -> None:
 
 def _resolve_local_asset(url: str) -> str | None:
     """Resolve known local URLs to local filesystem paths."""
-    if url.startswith("/webconfig/"):
-        project_root = Path(__file__).resolve().parent.parent.parent
-        local = project_root / "webconfig" / url[len("/webconfig/"):]
-        if local.exists() and local.is_file():
+    backend_root = Path(__file__).resolve().parent.parent
+    repo_root = backend_root.parent
+
+    def _resolve_under(root: Path, rel_path: str) -> str | None:
+        root = root.resolve()
+        local = (root / rel_path).resolve()
+        try:
+            local.relative_to(root)
+        except ValueError:
+            return None
+        if local != root and local.exists() and local.is_file():
             return str(local)
         return None
+
+    if url.startswith("/static/"):
+        return _resolve_under(backend_root / "static", url[len("/static/"):])
+    if url.startswith("/webconfig/"):
+        legacy_path = url[len("/webconfig/"):]
+        if legacy_path.startswith("assets/art/"):
+            return _resolve_under(backend_root / "static" / "art", legacy_path[len("assets/art/"):])
+        return _resolve_under(repo_root / "webconfig", legacy_path)
     try:
         parsed = urlparse(url)
     except ValueError:
