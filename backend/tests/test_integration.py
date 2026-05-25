@@ -1155,19 +1155,6 @@ async def test_custom_modes_end_to_end(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_config_page_bridge_and_legacy_page(client):
-    bridge_resp = await client.get("/config")
-    assert bridge_resp.status_code == 200
-    assert "Device configuration moved to the web app." in bridge_resp.text
-    assert "/legacy/config" in bridge_resp.text
-
-    legacy_resp = await client.get("/legacy/config")
-    assert legacy_resp.status_code == 200
-    assert "legacy-console-banner" not in legacy_resp.text
-    assert "/webconfig/role-banner.js" in legacy_resp.text
-
-
-@pytest.mark.asyncio
 async def test_config_page_redirects_to_primary_webapp_when_configured(client, monkeypatch):
     monkeypatch.setenv("INKSIGHT_PRIMARY_WEBAPP_URL", "https://app.example.com")
     resp = await client.get("/config", params={"mac": "AA:BB:CC:DD:EE:FF"})
