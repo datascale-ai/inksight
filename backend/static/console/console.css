@@ -167,6 +167,12 @@ button.secondary {
   font-size: 13px;
 }
 
+.metric-unit {
+  font: 700 14px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
 .wide { grid-column: span 2; }
 
 table {
@@ -228,6 +234,62 @@ th {
 }
 
 .footnote p:last-child { margin-bottom: 0; }
+
+.mini-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.mini-metrics div {
+  border: 1px solid #eee2ce;
+  border-radius: 18px;
+  background: rgba(255, 253, 248, 0.72);
+  padding: 14px;
+}
+
+.mini-metrics p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font: 800 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mini-metrics strong {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.mini-metrics span {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font: 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+}
+
+.section-title {
+  margin: 22px 0 10px;
+  font: 700 26px/1 ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  letter-spacing: -0.04em;
+}
+
+.event-groups {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.event-groups section > p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font: 800 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 
 @media (max-width: 900px) {
   .hero {

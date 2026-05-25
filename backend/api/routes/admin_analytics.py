@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, Request
@@ -9,6 +8,10 @@ from core.auth import decode_session_token, get_current_root_user
 from core.db import get_main_db
 
 router = APIRouter(tags=["admin-analytics"])
+
+_LEGACY_NGINX_VISITS_TOTAL = 25070
+_LEGACY_NGINX_VISITORS_TOTAL = 6052
+_LEGACY_NGINX_VISITS_START_DATE = "2026-05-11"
 
 
 def _optional_user_id(request: Request, ink_session: Optional[str]) -> int | None:
@@ -146,6 +149,114 @@ async def _analytics_overview_payload() -> dict:
             "custom_modes": await _scalar("SELECT COUNT(*) FROM custom_modes"),
             "shared_modes": await _scalar("SELECT COUNT(*) FROM shared_modes WHERE is_active=1"),
             "users_with_llm_config": await _scalar("SELECT COUNT(*) FROM user_llm_config"),
+        },
+        "traffic": {
+            "historical_visits": {
+                "total": _LEGACY_NGINX_VISITS_TOTAL
+                + await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='page.view'"),
+                "legacy_total": _LEGACY_NGINX_VISITS_TOTAL,
+                "tracked_total": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='page.view'"),
+                "start_date": _LEGACY_NGINX_VISITS_START_DATE,
+                "source": "one-time nginx estimate plus page.view events",
+            },
+            "historical_visitors": {
+                "total": _LEGACY_NGINX_VISITORS_TOTAL
+                + await _scalar(
+                    """
+                    SELECT COUNT(*) FROM (
+                        SELECT DISTINCT ip_hash, user_agent
+                        FROM user_activity_events
+                        WHERE event_name='page.view'
+                          AND (ip_hash != '' OR user_agent != '')
+                    )
+                    """
+                ),
+                "legacy_total": _LEGACY_NGINX_VISITORS_TOTAL,
+                "tracked_total": await _scalar(
+                    """
+                    SELECT COUNT(*) FROM (
+                        SELECT DISTINCT ip_hash, user_agent
+                        FROM user_activity_events
+                        WHERE event_name='page.view'
+                          AND (ip_hash != '' OR user_agent != '')
+                    )
+                    """
+                ),
+                "start_date": _LEGACY_NGINX_VISITS_START_DATE,
+                "source": "one-time nginx ip+ua estimate plus distinct page.view ip+ua",
+            },
+        },
+        "activity": {
+            "events_today": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE date(created_at)=date('now','localtime')"),
+            "events_7d": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE created_at >= datetime('now','localtime','-7 days')"),
+            "events_total": await _scalar("SELECT COUNT(*) FROM user_activity_events"),
+            "pageviews_today": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='page.view' AND date(created_at)=date('now','localtime')"),
+            "pageviews_7d": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='page.view' AND created_at >= datetime('now','localtime','-7 days')"),
+            "pageviews_total": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='page.view'"),
+            "visitors_today": await _scalar(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT DISTINCT ip_hash, user_agent
+                    FROM user_activity_events
+                    WHERE event_name='page.view'
+                      AND date(created_at)=date('now','localtime')
+                      AND (ip_hash != '' OR user_agent != '')
+                )
+                """
+            ),
+            "visitors_7d": await _scalar(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT DISTINCT ip_hash, user_agent
+                    FROM user_activity_events
+                    WHERE event_name='page.view'
+                      AND created_at >= datetime('now','localtime','-7 days')
+                      AND (ip_hash != '' OR user_agent != '')
+                )
+                """
+            ),
+            "visitors_total": await _scalar(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT DISTINCT ip_hash, user_agent
+                    FROM user_activity_events
+                    WHERE event_name='page.view'
+                      AND (ip_hash != '' OR user_agent != '')
+                )
+                """
+            ),
+            "logins_today": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='auth.login' AND date(created_at)=date('now','localtime')"),
+            "logins_7d": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='auth.login' AND created_at >= datetime('now','localtime','-7 days')"),
+            "logins_total": await _scalar("SELECT COUNT(*) FROM user_activity_events WHERE event_name='auth.login'"),
+            "events_today_by_name": await _rows(
+                """
+                SELECT event_name, COUNT(*) AS count
+                FROM user_activity_events
+                WHERE date(created_at)=date('now','localtime')
+                GROUP BY event_name
+                ORDER BY count DESC
+                LIMIT 12
+                """
+            ),
+            "events_7d_by_name": await _rows(
+                """
+                SELECT event_name, COUNT(*) AS count
+                FROM user_activity_events
+                WHERE created_at >= datetime('now','localtime','-7 days')
+                GROUP BY event_name
+                ORDER BY count DESC
+                LIMIT 12
+                """
+            ),
+            "events_total_by_name": await _rows(
+                """
+                SELECT event_name, COUNT(*) AS count
+                FROM user_activity_events
+                GROUP BY event_name
+                ORDER BY count DESC
+                LIMIT 12
+                """
+            ),
         },
         "series": {
             "new_users": await _rows(

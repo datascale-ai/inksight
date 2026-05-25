@@ -39,7 +39,7 @@ def _load_jwt_secret() -> str:
 
 _JWT_SECRET = _load_jwt_secret()
 _JWT_ALGORITHM = "HS256"
-_JWT_EXPIRE_DAYS = 30
+_JWT_EXPIRE_DAYS = 1
 _COOKIE_NAME = "ink_session"
 
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
