@@ -104,6 +104,12 @@ class OriginValidationMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"error": "origin_not_allowed"}, status_code=403)
 
         normalized = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+        forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+        forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+        same_origin = f"{forwarded_proto.lower()}://{forwarded_host.lower()}" if forwarded_host else ""
+        if normalized == same_origin:
+            return await call_next(request)
+
         if normalized in self.allow_origins:
             return await call_next(request)
 

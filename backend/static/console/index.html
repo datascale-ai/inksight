@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>InkSight Console</title>
+    <link rel="stylesheet" href="/static/console/console.css" />
+    <script src="/static/console/console.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div>
+          <p class="eyebrow" data-i18n="eyebrow">InkSight Console</p>
+          <h1 data-i18n="title">后端运营看板</h1>
+          <p class="sub" data-i18n="subtitle">
+            仅限 root 账号的后台运营视图，展示用户、活跃会话、渲染、设备与内容指标。
+          </p>
+        </div>
+        <div class="panel">
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button id="langZh" type="button">中文</button>
+            <button id="langEn" type="button">EN</button>
+          </div>
+          <form id="loginForm" class="auth">
+            <input id="username" name="username" data-i18n-placeholder="username" placeholder="用户名" autocomplete="username" />
+            <input id="password" name="password" type="password" data-i18n-placeholder="password" placeholder="密码" autocomplete="current-password" />
+            <button id="login" type="submit" data-i18n="signIn">登录</button>
+            <button id="logout" class="secondary" type="button" data-i18n="signOut">退出</button>
+          </form>
+        </div>
+      </header>
+
+      <p id="status" class="status" data-i18n="statusIdle">请使用 root 账号登录以加载受保护的指标。</p>
+
+      <section class="grid metrics" aria-live="polite">
+        <article class="card"><p class="metric-label" data-i18n="metricUsers">用户</p><p id="usersTotal" class="metric-value">--</p><p id="usersNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricDau">日活</p><p id="dau" class="metric-value">--</p><p id="activeNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricActiveDevices">活跃设备</p><p id="devicesActive" class="metric-value">--</p><p id="devicesNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricRenders">渲染</p><p id="rendersToday" class="metric-value">--</p><p id="rendersNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricHeartbeats">设备心跳</p><p id="heartbeatsToday" class="metric-value">--</p><p id="heartbeatsNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricRenderHealth">渲染健康</p><p id="renderErrors" class="metric-value">--</p><p id="renderHealthNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricContent">内容创作</p><p id="customModes" class="metric-value">--</p><p id="contentNote" class="metric-note">--</p></article>
+        <article class="card"><p class="metric-label" data-i18n="metricDeviceUsers">设备用户</p><p id="deviceUsers" class="metric-value">--</p><p id="deviceUsersNote" class="metric-note">--</p></article>
+      </section>
+
+      <section class="grid charts">
+        <article class="card wide"><p class="metric-label" data-i18n="metricNewUsers">14 日新增用户</p><div id="userBars" class="bars"></div></article>
+        <article class="card wide"><p class="metric-label" data-i18n="metricRendersSeries">14 日渲染量</p><div id="renderBars" class="bars"></div></article>
+        <article class="card wide"><p class="metric-label" data-i18n="metricActiveDeviceSeries">14 日活跃设备</p><div id="deviceBars" class="bars"></div></article>
+        <article class="card wide"><p class="metric-label" data-i18n="metricActivitySeries">14 日用户活跃</p><div id="activityBars" class="bars"></div></article>
+        <article class="card wide"><p class="metric-label" data-i18n="metricTopModes">7 日热门模式</p><div id="topModes" class="table-wrap"></div></article>
+        <article class="card wide"><p class="metric-label" data-i18n="metricTopEvents">7 日用户事件</p><div id="topEvents" class="table-wrap"></div></article>
+      </section>
+
+      <section class="card footnote">
+        <p class="metric-label" data-i18n="metricNotes">统计口径</p>
+        <p data-i18n="notesBody">
+          注册数来自 users；DAU/WAU/MAU 来自 user_activity_events；设备活跃来自心跳和渲染日志；渲染量来自 render_logs。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
