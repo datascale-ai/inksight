@@ -111,6 +111,14 @@ async def _analytics_overview_payload() -> dict:
                 WHERE dm.status = 'active'
                 """
             ),
+            "login_users_today": await _scalar(
+                """
+                SELECT COUNT(DISTINCT user_id) FROM user_activity_events
+                WHERE user_id IS NOT NULL
+                  AND event_name='auth.login'
+                  AND date(created_at)=date('now','localtime')
+                """
+            ),
         },
         "devices": {
             "bound": await _scalar("SELECT COUNT(DISTINCT mac) FROM device_memberships WHERE status='active'"),

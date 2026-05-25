@@ -22,6 +22,7 @@ const I18N = {
     statusLoadFailed: "加载看板指标失败：{message}",
     metricUsers: "用户",
     metricDau: "日活",
+    metricLoginUsers: "今日登录用户",
     metricActiveDevices: "今日活跃设备",
     metricRenders: "今日渲染",
     metricHeartbeats: "设备心跳",
@@ -46,6 +47,7 @@ const I18N = {
     noData: "暂无数据",
     usersNote: "今日 +{today} / 7日 +{week} / 30日 +{month}",
     activeNote: "WAU {wau} / MAU {mau}",
+    loginUsersNote: "DAU {dau} / WAU {wau} / MAU {mau}",
     devicesNote: "已绑定 {bound} / 7日活跃 {week}",
     rendersNote: "7日 {week} / 今日平均耗时 {avg}ms",
     heartbeatsNote: "今日设备心跳请求",
@@ -89,6 +91,7 @@ const I18N = {
     statusLoadFailed: "Failed to load console metrics: {message}",
     metricUsers: "Users",
     metricDau: "DAU",
+    metricLoginUsers: "Login Users Today",
     metricActiveDevices: "Active Devices Today",
     metricRenders: "Renders Today",
     metricHeartbeats: "Heartbeats",
@@ -113,6 +116,7 @@ const I18N = {
     noData: "No data yet.",
     usersNote: "+{today} today / +{week} 7d / +{month} 30d",
     activeNote: "WAU {wau} / MAU {mau}",
+    loginUsersNote: "DAU {dau} / WAU {wau} / MAU {mau}",
     devicesNote: "{bound} bound / {week} active 7d",
     rendersNote: "{week} 7d / {avg}ms avg today",
     heartbeatsNote: "device heartbeats today",
@@ -221,7 +225,7 @@ function renderBars(id, rows, key = "count") {
     const value = Number(d[key] || 0);
     const height = Math.max(8, Math.round((value / max) * 116));
     const day = String(d.day || "");
-    return `<div class="bar" title="${escapeHtml(`${day}: ${value}`)}" style="height:${height}px"><span>${escapeHtml(day.slice(5))}</span></div>`;
+    return `<div class="bar" title="${escapeHtml(`${day}: ${value}`)}" style="height:${height}px"><b>${escapeHtml(fmt(value))}</b><span>${escapeHtml(day.slice(5))}</span></div>`;
   }).join("");
 }
 
@@ -250,10 +254,9 @@ function render(data) {
     week: fmt(data.users.new_7d),
     month: fmt(data.users.new_30d),
   });
-  $("dau").textContent = fmt(data.users.dau);
-  $("activeNote").textContent = t("activeNote", {
-    wau: fmt(data.users.wau),
-    mau: fmt(data.users.mau),
+  $("deviceUsers").textContent = fmt(data.users.device_active_24h);
+  $("deviceUsersNote").textContent = t("deviceUsersNote", {
+    withDevice: fmt(data.users.with_device),
   });
   $("devicesActive").textContent = fmt(data.devices.active_today);
   $("devicesNote").textContent = t("devicesNote", {
@@ -277,9 +280,11 @@ function render(data) {
     shared: fmt(data.content.shared_modes),
     byok: fmt(data.content.users_with_llm_config),
   });
-  $("deviceUsers").textContent = fmt(data.users.device_active_24h);
-  $("deviceUsersNote").textContent = t("deviceUsersNote", {
-    withDevice: fmt(data.users.with_device),
+  $("loginUsersToday").textContent = fmt(data.users.login_users_today);
+  $("loginUsersNote").textContent = t("loginUsersNote", {
+    dau: fmt(data.users.dau),
+    wau: fmt(data.users.wau),
+    mau: fmt(data.users.mau),
   });
 
   renderBars("userBars", data.series.new_users);
