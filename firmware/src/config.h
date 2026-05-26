@@ -141,5 +141,8 @@ static const int DEBUG_REFRESH_MIN = 1;  // 1 minute for debugging
 #ifndef AUTO_BOOT_AI_CHAT
 #define AUTO_BOOT_AI_CHAT 0
 #endif
+#ifndef VOCAB_REVIEW_BUILD
+#define VOCAB_REVIEW_BUILD 0
+#endif
 
 #endif // INKSIGHT_CONFIG_H

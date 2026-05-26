@@ -35,6 +35,7 @@ from core.config_store import (
     update_device_state,
     validate_alert_token,
 )
+from core.vocab_store import VOCAB_MODE_ID, handle_vocab_event
 from core.patterns.utils import apply_text_fontmode, load_font
 from core.renderer import image_to_bmp_bytes, image_to_png_bytes
 from core.schemas import DeviceHeartbeatRequest, OkResponse
@@ -136,6 +137,30 @@ async def set_runtime_mode(
         return JSONResponse({"error": "mode must be active or interval"}, status_code=400)
     await update_device_state(mac, runtime_mode=mode)
     return {"ok": True, "runtime_mode": mode}
+
+
+@router.post("/device/{mac}/vocab/event")
+async def vocab_review_event(
+    mac: str,
+    body: dict,
+    x_device_token: Optional[str] = Header(default=None),
+):
+    mac = validate_mac_param(mac)
+    await require_device_token(mac, x_device_token)
+    action = str((body or {}).get("action") or "").strip().lower()
+    rating = str((body or {}).get("rating") or "").strip().lower() or None
+    cfg = await get_active_config(mac, log_load=False)
+
+    if action == "enter":
+        result = await handle_vocab_event(mac, action, cfg, rating=rating)
+        await update_device_state(mac, pending_mode=VOCAB_MODE_ID, pending_refresh=1)
+        return result
+
+    result = await handle_vocab_event(mac, action, cfg, rating=rating)
+    if not result.get("ok"):
+        return JSONResponse({"error": result.get("error") or "invalid_action"}, status_code=400)
+    await update_device_state(mac, pending_refresh=1)
+    return result
 
 
 @router.post("/device/{mac}/heartbeat", response_model=OkResponse)

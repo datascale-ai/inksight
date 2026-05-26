@@ -219,6 +219,7 @@ async def render(
         headers: dict[str, str] = {
             "X-Render-Time-Ms": str(elapsed_ms),
             "X-Cache-Hit": "1" if cache_hit else "0",
+            "X-Mode-Id": resolved_persona,
         }
         if configured_refresh_minutes is not None:
             headers["X-Refresh-Minutes"] = str(configured_refresh_minutes)

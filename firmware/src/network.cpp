@@ -933,6 +933,46 @@ bool postRuntimeMode(const char *mode) {
     return false;
 }
 
+bool postVocabEvent(const char *action, const char *rating) {
+    if (!ensureDeviceToken()) return false;
+    String mac = WiFi.macAddress();
+    String url = cfgServer + "/api/device/" + mac + "/vocab/event";
+    bool useSSL = cfgServer.startsWith("https://");
+    String body = String("{\"action\":\"") + (action ? action : "") + "\"";
+    if (rating && strlen(rating) > 0) {
+        body += String(",\"rating\":\"") + rating + "\"";
+    }
+    body += "}";
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(HTTP_TIMEOUT);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
+
+        int code = http.POST(body);
+        http.end();
+        Serial.printf("[VOCAB] POST %s -> %d\n", action ? action : "", code);
+        if (code >= 200 && code < 300) {
+            return true;
+        }
+        if (!recoverDeviceTokenIfUnauthorized(code)) {
+            return false;
+        }
+    }
+    return false;
+}
+
 static bool parseVoiceTurnResponse(const String &body, String &turnId, String &replyText, String &transcript, bool &exitConversation) {
     turnId = extractJsonStringField(body, "turn_id");
     replyText = extractJsonStringField(body, "reply_text");

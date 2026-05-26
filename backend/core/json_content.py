@@ -646,6 +646,7 @@ async def generate_json_mode_content(
         image_model=image_model,
         config=config or {},
         date_ctx=date_ctx or {},
+        mac=mac,
         api_key=api_key,
         image_api_key=image_api_key,
     )
@@ -1073,6 +1074,16 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
                 default_title = "TODO" if lang == "en" else "今日待办"
                 items = [{"title": default_title, "text": "1. \n2. \n3. "}]
         return {"memo_items": items}
+
+    if provider == "vocab_review":
+        from .vocab_store import get_vocab_content
+
+        mac = str(kwargs.get("mac") or "").strip()
+        if not mac:
+            return dict(fallback)
+        result = dict(fallback)
+        result.update(await get_vocab_content(mac, kwargs.get("config") or {}))
+        return result
 
     if provider == "habit":
         config = kwargs.get("config") or {}

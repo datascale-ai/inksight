@@ -1,0 +1,87 @@
+{
+  "mode_id": "VOCAB_REVIEW",
+  "display_name": "背单词",
+  "icon": "book",
+  "cacheable": false,
+  "description": "单按键间隔重复背词卡片",
+  "settings_schema": [
+    {"key": "deck_id", "label": "词库", "type": "select", "default": "core_en", "options": [{"label": "核心英语", "value": "core_en"}]},
+    {"key": "daily_limit", "label": "每日上限", "type": "number", "default": 30, "min": 1, "max": 200},
+    {"key": "new_cards_per_day", "label": "每日新词", "type": "number", "default": 10, "min": 0, "max": 100}
+  ],
+  "content": {
+    "type": "computed",
+    "provider": "vocab_review",
+    "fallback": {
+      "state": "empty",
+      "word": "VOCAB",
+      "phonetic": "",
+      "definition": "暂无词卡",
+      "example": "",
+      "progress": "0/30",
+      "rating_label": "",
+      "rating_hint": ""
+    }
+  },
+  "layout": {
+    "status_bar": {"line_width": 1, "dashed": false},
+    "body": [
+      {"type": "text", "template": "VOCAB  {progress}", "font": "noto_serif_regular", "font_size": 12, "align": "center", "margin_x": 20, "max_lines": 1},
+      {"type": "spacer", "height": 12},
+      {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 42, "align": "center", "margin_x": 18, "max_lines": 1},
+      {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_size": 16, "align": "center", "margin_x": 24, "max_lines": 1},
+      {
+        "type": "conditional",
+        "field": "state",
+        "conditions": [
+          {
+            "op": "eq",
+            "value": "back",
+            "children": [
+              {"type": "separator", "style": "short", "width": 70, "line_width": 1},
+              {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 18, "align": "center", "margin_x": 32, "max_lines": 2},
+              {"type": "text", "field": "example", "font": "noto_serif_light", "font_size": 12, "align": "center", "margin_x": 38, "max_lines": 2},
+              {"type": "spacer", "height": 6},
+              {"type": "text", "template": "评分：{rating_label}", "font": "noto_serif_bold", "font_size": 18, "align": "center", "margin_x": 20, "max_lines": 1},
+              {"type": "text", "field": "rating_hint", "font": "noto_serif_light", "font_size": 10, "align": "center", "margin_x": 20, "max_lines": 1}
+            ]
+          },
+          {
+            "op": "eq",
+            "value": "empty",
+            "children": [
+              {"type": "separator", "style": "short", "width": 70, "line_width": 1},
+              {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 18, "align": "center", "margin_x": 30, "max_lines": 2},
+              {"type": "text", "field": "rating_hint", "font": "noto_serif_light", "font_size": 12, "align": "center", "margin_x": 30, "max_lines": 1}
+            ]
+          }
+        ],
+        "fallback_children": [
+          {"type": "spacer", "height": 28},
+          {"type": "text", "template": "短按翻面", "font": "noto_serif_light", "font_size": 14, "align": "center", "margin_x": 20, "max_lines": 1}
+        ]
+      }
+    ],
+    "footer": {"label": "VOCAB"}
+  },
+  "layout_overrides": {
+    "296x128": {
+      "body": [
+        {"type": "text", "template": "VOCAB {progress}", "font": "noto_serif_regular", "font_size": 9, "align": "center", "margin_x": 8, "max_lines": 1},
+        {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 25, "align": "center", "margin_x": 8, "max_lines": 1},
+        {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_size": 10, "align": "center", "margin_x": 8, "max_lines": 1},
+        {"type": "conditional", "field": "state", "conditions": [{"op": "eq", "value": "back", "children": [{"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 12, "align": "center", "margin_x": 10, "max_lines": 1}, {"type": "text", "template": "{rating_label}", "font": "noto_serif_bold", "font_size": 13, "align": "center", "margin_x": 8, "max_lines": 1}]}], "fallback_children": [{"type": "text", "template": "短按翻面", "font": "noto_serif_light", "font_size": 10, "align": "center", "margin_x": 8, "max_lines": 1}]}
+      ],
+      "footer": {"label": "VOCAB", "height": 18}
+    },
+    "648x480": {
+      "body": [
+        {"type": "text", "template": "VOCAB  {progress}", "font": "noto_serif_regular", "font_size": 16, "align": "center", "margin_x": 24, "max_lines": 1},
+        {"type": "spacer", "height": 22},
+        {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 62, "align": "center", "margin_x": 24, "max_lines": 1},
+        {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_size": 22, "align": "center", "margin_x": 30, "max_lines": 1},
+        {"type": "conditional", "field": "state", "conditions": [{"op": "eq", "value": "back", "children": [{"type": "separator", "style": "short", "width": 90, "line_width": 1}, {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 28, "align": "center", "margin_x": 52, "max_lines": 2}, {"type": "text", "field": "example", "font": "noto_serif_light", "font_size": 18, "align": "center", "margin_x": 70, "max_lines": 2}, {"type": "text", "template": "评分：{rating_label}", "font": "noto_serif_bold", "font_size": 28, "align": "center", "margin_x": 30, "max_lines": 1}]}], "fallback_children": [{"type": "spacer", "height": 44}, {"type": "text", "template": "短按翻面", "font": "noto_serif_light", "font_size": 20, "align": "center", "margin_x": 30, "max_lines": 1}]}
+      ]
+    }
+  }
+}

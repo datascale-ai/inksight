@@ -59,6 +59,7 @@ bool peekPendingMode(String &pendingModeOut);
 
 // POST runtime mode (active/interval) to backend.
 bool postRuntimeMode(const char *mode);
+bool postVocabEvent(const char *action, const char *rating = nullptr);
 
 // POST device config JSON to backend /api/config endpoint.
 void postConfigToBackend();

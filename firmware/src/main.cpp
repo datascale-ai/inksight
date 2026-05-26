@@ -44,6 +44,7 @@ bool ensureColorBuf() {
 
 // ── Voice constants ─────────────────────────────────────────
 static const char *AI_CHAT_MODE_ID = "AI_CHAT";
+static const char *VOCAB_REVIEW_MODE_ID = "VOCAB_REVIEW";
 static const int VOICE_SILENCE_COMMIT_MS = 600;
 static const float VOICE_STREAM_VAD_THRESHOLD = 150.0f;
 static const unsigned long VOICE_MAX_CAPTURE_MS = 8000;
@@ -105,6 +106,12 @@ struct DeviceContext {
     bool wantEnterLiveMode = false;
     bool wantEnterAiChatMode = false;
     bool wantSingleVoiceTurn = false;
+    bool wantEnterVocabReview = false;
+    bool wantVocabFlip = false;
+    bool wantVocabNextRating = false;
+    bool wantVocabSubmitRating = false;
+    bool vocabReviewBackSide = false;
+    String currentRenderedModeId;
     String switchToModeId;
 };
 
@@ -787,6 +794,12 @@ void setup() {
     ctx.lastClockTick = millis();
 
     bool aiChatRequested = renderedModeId.equalsIgnoreCase(AI_CHAT_MODE_ID);
+    if (renderedModeId.length() > 0) {
+        ctx.currentRenderedModeId = renderedModeId;
+        if (!ctx.currentRenderedModeId.equalsIgnoreCase(VOCAB_REVIEW_MODE_ID)) {
+            ctx.vocabReviewBackSide = false;
+        }
+    }
     if (aiChatRequested) {
         g_userAborted = false;
         bool exited = runAiChatConversation();
@@ -873,7 +886,36 @@ void loop() {
                 postRuntimeMode("active");
             }
         }
+#if VOCAB_REVIEW_BUILD
+    } else if (ctx.wantEnterVocabReview || ctx.wantVocabFlip || ctx.wantVocabNextRating || ctx.wantVocabSubmitRating) {
+        const char *action = ctx.wantEnterVocabReview ? "enter" :
+                             (ctx.wantVocabFlip ? "flip" :
+                              (ctx.wantVocabNextRating ? "next_rating" : "submit_rating"));
+        ctx.wantEnterVocabReview = false;
+        ctx.wantVocabFlip = false;
+        ctx.wantVocabNextRating = false;
+        ctx.wantVocabSubmitRating = false;
+        ledFeedback("ack");
+        if (WiFi.status() != WL_CONNECTED && !connectWiFi()) {
+            Serial.println("[VOCAB] WiFi reconnect failed, skip");
+        } else if (postVocabEvent(action)) {
+            if (strcmp(action, "enter") == 0 || strcmp(action, "submit_rating") == 0) {
+                ctx.vocabReviewBackSide = false;
+            } else if (strcmp(action, "flip") == 0) {
+                ctx.vocabReviewBackSide = true;
+            }
+            lastContentChecksum = 0;
+            triggerImmediateRefresh(false, true);
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+            ctx.setupDoneAt = millis();
+        } else {
+            ledFeedback("fail");
+        }
     } else if (ctx.wantSingleVoiceTurn) {
+#else
+    } else if (ctx.wantSingleVoiceTurn) {
+#endif
         ctx.wantSingleVoiceTurn = false;
         ctx.switchToModeId = "";
         Serial.println("[VOICE] Short press -> single voice turn");
@@ -1644,6 +1686,12 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi) {
         ledFeedback("downloading");
         String renderedModeId;
         bool fetched = fetchBMP(nextMode, nullptr, &renderedModeId);
+        if (fetched && renderedModeId.length() > 0) {
+            ctx.currentRenderedModeId = renderedModeId;
+            if (!ctx.currentRenderedModeId.equalsIgnoreCase(VOCAB_REVIEW_MODE_ID)) {
+                ctx.vocabReviewBackSide = false;
+            }
+        }
         bool aiChatRequested = renderedModeId.equalsIgnoreCase(AI_CHAT_MODE_ID);
         String pendingMode;
         if (!aiChatRequested) {
@@ -1827,8 +1875,18 @@ static void checkAiChatButton() {
             ctx.aiBtnPressStart = millis();
         } else if (!ctx.wantEnterAiChatMode &&
                    (millis() - ctx.aiBtnPressStart >= (unsigned long)AI_CHAT_BTN_HOLD_MS)) {
+#if VOCAB_REVIEW_BUILD
+            if (ctx.currentRenderedModeId.equalsIgnoreCase(VOCAB_REVIEW_MODE_ID) && ctx.vocabReviewBackSide) {
+                Serial.printf("[VOCAB] Switch held for %dms, submit rating\n", AI_CHAT_BTN_HOLD_MS);
+                ctx.wantVocabSubmitRating = true;
+            } else {
+                Serial.printf("[VOCAB] Switch held for %dms, enter vocab review\n", AI_CHAT_BTN_HOLD_MS);
+                ctx.wantEnterVocabReview = true;
+            }
+#else
             Serial.printf("[AI CHAT] Switch held for %dms, queue enter ai chat\n", AI_CHAT_BTN_HOLD_MS);
             ctx.wantEnterAiChatMode = true;
+#endif
             ctx.aiBtnPressStart = 0;
         }
     } else {
@@ -1836,8 +1894,20 @@ static void checkAiChatButton() {
             unsigned long duration = millis() - ctx.aiBtnPressStart;
             if (duration >= (unsigned long)SHORT_PRESS_MIN_MS &&
                 duration < (unsigned long)AI_CHAT_BTN_HOLD_MS) {
+#if VOCAB_REVIEW_BUILD
+                if (ctx.currentRenderedModeId.equalsIgnoreCase(VOCAB_REVIEW_MODE_ID)) {
+                    if (ctx.vocabReviewBackSide) {
+                        Serial.printf("[VOCAB] Short press %lums, next rating\n", duration);
+                        ctx.wantVocabNextRating = true;
+                    } else {
+                        Serial.printf("[VOCAB] Short press %lums, flip card\n", duration);
+                        ctx.wantVocabFlip = true;
+                    }
+                }
+#else
                 Serial.printf("[VOICE] Short press %lums, queue single voice turn\n", duration);
                 ctx.wantSingleVoiceTurn = true;
+#endif
             }
         }
         ctx.aiBtnPressStart = 0;

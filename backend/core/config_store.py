@@ -553,6 +553,12 @@ async def init_db():
         await _migrate_legacy_user_devices(db)
         await _fix_duplicate_owners(db)
         await db.commit()
+    try:
+        from .vocab_store import seed_builtin_vocab
+
+        await seed_builtin_vocab()
+    except Exception:
+        logger.warning("[VOCAB] Failed to seed builtin vocabulary", exc_info=True)
 
 
 # ── User system ─────────────────────────────────────────────

@@ -116,6 +116,56 @@ async def run_main_db_migrations(db, *, defaults: dict[str, str]) -> None:
                 """
             ),
         ),
+        (
+            25,
+            "vocab_review.create",
+            lambda: db.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS vocab_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    deck_id TEXT NOT NULL,
+                    word TEXT NOT NULL,
+                    phonetic TEXT DEFAULT '',
+                    definition TEXT NOT NULL,
+                    example TEXT DEFAULT '',
+                    difficulty INTEGER DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(deck_id, word)
+                );
+                CREATE INDEX IF NOT EXISTS idx_vocab_items_deck
+                    ON vocab_items(deck_id, difficulty, id);
+
+                CREATE TABLE IF NOT EXISTS vocab_progress (
+                    mac TEXT NOT NULL,
+                    vocab_item_id INTEGER NOT NULL,
+                    due_at TEXT NOT NULL,
+                    interval_days INTEGER DEFAULT 0,
+                    ease_factor REAL DEFAULT 2.5,
+                    repetitions INTEGER DEFAULT 0,
+                    lapses INTEGER DEFAULT 0,
+                    last_grade TEXT DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(mac, vocab_item_id),
+                    FOREIGN KEY(vocab_item_id) REFERENCES vocab_items(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_vocab_progress_due
+                    ON vocab_progress(mac, due_at);
+
+                CREATE TABLE IF NOT EXISTS vocab_session_state (
+                    mac TEXT PRIMARY KEY,
+                    deck_id TEXT DEFAULT 'core_en',
+                    current_item_id INTEGER,
+                    side TEXT DEFAULT 'front',
+                    rating_cursor INTEGER DEFAULT 0,
+                    review_date TEXT DEFAULT '',
+                    reviewed_count INTEGER DEFAULT 0,
+                    new_count INTEGER DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(current_item_id) REFERENCES vocab_items(id)
+                );
+                """
+            ),
+        ),
     ]
 
     now = datetime.now().isoformat()
