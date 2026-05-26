@@ -39,6 +39,7 @@ export type DeviceConfig = {
   llmProvider?: string;
   llmModel?: string;
   modeOverrides?: Record<string, Record<string, unknown>>;
+  screenSize?: string;
 };
 
 export type DeviceMember = {
@@ -275,6 +276,27 @@ export async function pushPreviewImageToDevice(mac: string, token: string, previ
   }
 
   return response.json() as Promise<{ ok: boolean; message: string }>;
+}
+
+export async function uploadImage(uri: string, mimeType: string, fileName: string): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", {
+    uri,
+    name: fileName || "photo.jpg",
+    type: mimeType || "image/jpeg",
+  } as any);
+  const resp = await apiFetch("/uploads", { method: "POST", body: fd, contentType: null });
+  if (!resp.ok) {
+    let msg = `upload failed: ${resp.status}`;
+    try {
+      const payload = await resp.json();
+      msg = payload.message || payload.error || msg;
+    } catch {}
+    throw new Error(msg);
+  }
+  const data = (await resp.json()) as { url?: string };
+  if (!data.url) throw new Error("upload failed: missing url");
+  return data.url;
 }
 
 export function getDeviceShareImageUrl(mac: string, width = 800, height = 450) {

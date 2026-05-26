@@ -51,6 +51,8 @@ export default function DeviceConfigScreen() {
   const [city, setCity] = useState('Hangzhou');
   const [refreshInterval, setRefreshInterval] = useState('60');
   const [selectedModes, setSelectedModes] = useState<string[]>(['DAILY']);
+  const [screenSize, setScreenSize] = useState('400x300');
+  const [screenColors, setScreenColors] = useState(2);
 
   useEffect(() => {
     if (!configQuery.data) return;
@@ -58,6 +60,7 @@ export default function DeviceConfigScreen() {
     setCity(configQuery.data.city || 'Hangzhou');
     setRefreshInterval(String(configQuery.data.refreshInterval || 60));
     setSelectedModes(configQuery.data.modes || ['DAILY']);
+    if (configQuery.data.screenSize) setScreenSize(configQuery.data.screenSize);
   }, [configQuery.data]);
 
   const saveMutation = useMutation({
@@ -74,6 +77,7 @@ export default function DeviceConfigScreen() {
         llmProvider: configQuery.data?.llmProvider || 'deepseek',
         llmModel: configQuery.data?.llmModel || 'deepseek-chat',
         modeOverrides: configQuery.data?.modeOverrides,
+        screenSize,
       }),
     onSuccess: () => {
       if (mac) {
@@ -143,6 +147,38 @@ export default function DeviceConfigScreen() {
         )}
       </InkCard>
 
+      <InkCard>
+        <InkText style={styles.label}>{t('device.configScreenSize')}</InkText>
+        <View style={styles.segmentRow}>
+          {[{ label: '4.2"', size: '400x300' }, { label: '2.9"', size: '296x128' }, { label: '5.83"', size: '648x480' }].map((opt, i) => {
+            const active = screenSize === opt.size;
+            return (
+              <InkButton
+                key={opt.size}
+                label={opt.label}
+                variant={active ? 'primary' : 'secondary'}
+                onPress={() => setScreenSize(opt.size)}
+              />
+            );
+          })}
+        </View>
+        <View style={{ height: 14 }} />
+        <InkText style={styles.label}>{t('device.configColors')}</InkText>
+        <View style={styles.segmentRow}>
+          {[{ label: t('device.colorBW'), value: 2 }, { label: t('device.colorBWR'), value: 3 }, { label: t('device.colorBWRY'), value: 4 }].map((opt) => {
+            const active = screenColors === opt.value;
+            return (
+              <InkButton
+                key={opt.value}
+                label={opt.label}
+                variant={active ? 'primary' : 'secondary'}
+                onPress={() => setScreenColors(opt.value)}
+              />
+            );
+          })}
+        </View>
+      </InkCard>
+
       <InkButton
         label={saveMutation.isPending ? t('common.loading') : t('common.save')}
         block
@@ -187,5 +223,10 @@ const styles = StyleSheet.create({
   modeSectionEmpty: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

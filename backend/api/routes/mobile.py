@@ -289,6 +289,8 @@ async def get_widget_data(
             content = _fallback_content(selected_mode, city)
         updated_at = datetime.now().isoformat()
 
+    # Strip _prefetched_* binary blobs from content before JSON serialization
+    clean_content = {k: v for k, v in content.items() if not k.startswith("_prefetched_")}
     info = get_registry().get_mode_info(selected_mode)
     return {
         "mac": mac.upper(),
@@ -297,5 +299,5 @@ async def get_widget_data(
         "icon": info.icon if info else "star",
         "updated_at": updated_at,
         "preview_url": _preview_url(selected_mode, mac=mac.upper(), city=(config or {}).get("city")),
-        "content": content,
+        "content": clean_content,
     }

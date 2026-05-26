@@ -86,6 +86,8 @@ export default function DeviceDetailScreen() {
   const [lastWidgetRefreshAt, setLastWidgetRefreshAt] = useState(0);
   const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
   const [previewImageBytes, setPreviewImageBytes] = useState<ArrayBuffer | null>(null);
+  const [previewColors, setPreviewColors] = useState(2);
+  const [previewSize, setPreviewSize] = useState('400x300');
 
   const stateQuery = useQuery({
     queryKey: ['device-state', mac, token],
@@ -112,12 +114,15 @@ export default function DeviceDetailScreen() {
     if (configQuery.data?.modes?.[0]) {
       setSelectedWidgetMode(configQuery.data.modes[0]);
     }
+    if (configQuery.data?.screenSize) {
+      setPreviewSize(configQuery.data.screenSize);
+    }
   }, [configQuery.data]);
 
   useEffect(() => {
     setPreviewImageUri(null);
     setPreviewImageBytes(null);
-  }, [selectedWidgetMode]);
+  }, [selectedWidgetMode, previewColors, previewSize]);
 
   const state = stateQuery.data;
   const config = configQuery.data;
@@ -175,8 +180,13 @@ export default function DeviceDetailScreen() {
     if (data?.preview_url) {
       try {
         const rawUrl = buildApiUrl(data.preview_url);
+        const [pw, ph] = previewSize.split('x').map(Number);
+        const params = new URLSearchParams();
+        if (previewColors > 2) params.set('colors', String(previewColors));
+        if (pw && ph) { params.set('w', String(pw)); params.set('h', String(ph)); }
+        const extra = params.toString();
         const sep = rawUrl.includes('?') ? '&' : '?';
-        const url = `${rawUrl}${sep}no_cache=1`;
+        const url = `${rawUrl}${sep}no_cache=1${extra ? '&' + extra : ''}`;
         const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (resp.ok) {
           const bytes = await resp.arrayBuffer();
@@ -238,7 +248,7 @@ export default function DeviceDetailScreen() {
     return t('device.widgetEmpty');
   }
 
-  const HARDCODED_CONFIGURABLE = ['CALENDAR', 'TIMETABLE'];
+  const HARDCODED_CONFIGURABLE = ['CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE'];
 
   function isModeConfigurable(modeId: string): boolean {
     if (HARDCODED_CONFIGURABLE.includes(modeId.toUpperCase())) return true;
@@ -291,6 +301,26 @@ export default function DeviceDetailScreen() {
               label={modeDisplayName(mode, locale, mode)}
               variant={selectedWidgetMode === mode ? 'primary' : 'secondary'}
               onPress={() => setSelectedWidgetMode(mode)}
+            />
+          ))}
+        </View>
+        <View style={styles.segmentRow}>
+          {[{ label: '4.2"', s: '400x300' }, { label: '2.9"', s: '296x128' }, { label: '5.83"', s: '648x480' }].map((opt) => (
+            <InkButton
+              key={opt.s}
+              label={opt.label}
+              variant={previewSize === opt.s ? 'primary' : 'secondary'}
+              onPress={() => setPreviewSize(opt.s)}
+            />
+          ))}
+        </View>
+        <View style={styles.segmentRow}>
+          {[{ label: t('device.colorBW'), v: 2 }, { label: t('device.colorBWR'), v: 3 }, { label: t('device.colorBWRY'), v: 4 }].map((opt) => (
+            <InkButton
+              key={opt.v}
+              label={opt.label}
+              variant={previewColors === opt.v ? 'primary' : 'secondary'}
+              onPress={() => setPreviewColors(opt.v)}
             />
           ))}
         </View>
@@ -366,5 +396,11 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     aspectRatio: 400 / 300,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
   },
 });

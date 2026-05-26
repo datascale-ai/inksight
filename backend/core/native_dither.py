@@ -8,7 +8,10 @@ from PIL import Image
 
 from .config import EINK_4COLOR_PALETTE
 
-_LIB_PATH = Path(__file__).resolve().parent / "native" / "libeink_dither.so"
+import platform
+
+_EXT = ".dll" if platform.system() == "Windows" else ".so"
+_LIB_PATH = Path(__file__).resolve().parent / "native" / f"libeink_dither{_EXT}"
 _LIB: ctypes.CDLL | None = None
 _BUILD_HINT = "run `python3 backend/scripts/build_native_dither.py` from the repository root"
 

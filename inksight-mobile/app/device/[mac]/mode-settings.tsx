@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
 import { AppScreen } from '@/components/layout/AppScreen';
 import { InkCard } from '@/components/ui/InkCard';
 import { InkText } from '@/components/ui/InkText';
 import { InkButton } from '@/components/ui/InkButton';
 import { useToast } from '@/components/ui/InkToastProvider';
 import { useAuthStore } from '@/features/auth/store';
-import { getDeviceConfig, saveDeviceConfig } from '@/features/device/api';
+import { getDeviceConfig, saveDeviceConfig, uploadImage } from '@/features/device/api';
 import { listModes, type ModeCatalogItem } from '@/features/modes/api';
 import { useI18n } from '@/lib/i18n';
 import { modeDisplayName } from '@/lib/mode-display';
@@ -69,6 +70,10 @@ export default function ModeSettingsScreen() {
   // --- Generic schema fields ---
   const [schemaValues, setSchemaValues] = useState<Record<string, string>>({});
 
+  // --- MY_ADAPTIVE ---
+  const [adaptiveImageUrls, setAdaptiveImageUrls] = useState<string[]>([]);
+  const [adaptiveUploading, setAdaptiveUploading] = useState(false);
+
   useEffect(() => {
     if (!configQuery.data) return;
     const ov = configQuery.data.modeOverrides?.[modeId] ?? {};
@@ -102,6 +107,15 @@ export default function ModeSettingsScreen() {
         setTtStyle(ov.style === 'weekly' ? 'weekly' : 'daily');
         setPeriods(p);
         setCourseGrid(c);
+      }
+    } else if (modeId === 'MY_ADAPTIVE') {
+      const urls = ov.image_urls;
+      if (Array.isArray(urls) && urls.length > 0) {
+        setAdaptiveImageUrls(urls.filter((u: unknown) => typeof u === 'string' && (u as string).trim()) as string[]);
+      } else if (typeof ov.image_url === 'string' && (ov.image_url as string).trim()) {
+        setAdaptiveImageUrls([ov.image_url as string]);
+      } else {
+        setAdaptiveImageUrls([]);
       }
     } else {
       const sv: Record<string, string> = {};
@@ -138,6 +152,9 @@ export default function ModeSettingsScreen() {
         if (v.trim()) c[k] = v.trim();
       }
       base.courses = c;
+    } else if (modeId === 'MY_ADAPTIVE') {
+      base.image_urls = [...adaptiveImageUrls];
+      base.image_url = adaptiveImageUrls[0] || '';
     } else {
       for (const [k, v] of Object.entries(schemaValues)) {
         if (v.trim()) base[k] = v.trim();
@@ -176,6 +193,39 @@ export default function ModeSettingsScreen() {
     },
     onError: (err) => Alert.alert(t('device.modeSettingsSaveFailed'), err instanceof Error ? err.message : ''),
   });
+
+  const handlePickAdaptiveImage = async () => {
+    if (adaptiveImageUrls.length >= 6) {
+      Alert.alert(t('ms.adaptiveMaxReached'));
+      return;
+    }
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('ms.adaptiveSelectPhoto'));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets || result.assets.length === 0) return;
+    const asset = result.assets[0];
+    setAdaptiveUploading(true);
+    try {
+      const url = await uploadImage(
+        asset.uri,
+        asset.mimeType || 'image/jpeg',
+        asset.fileName || 'photo.jpg',
+      );
+      setAdaptiveImageUrls((prev) => (prev.length >= 6 ? prev : [...prev, url]));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('ms.adaptiveUploadFailed');
+      Alert.alert(t('ms.adaptiveUploadFailed'), msg);
+    } finally {
+      setAdaptiveUploading(false);
+    }
+  };
 
   const modeLabel = modeDisplayName(modeId, locale, modeId);
 
@@ -451,7 +501,48 @@ export default function ModeSettingsScreen() {
     );
   }
 
-  const hasCustomEditor = ['WEATHER', 'MEMO', 'COUNTDOWN', 'CALENDAR', 'TIMETABLE'].includes(modeId);
+  function renderAdaptive() {
+    return (
+      <InkCard>
+        <InkText style={styles.label}>{t('ms.adaptiveTitle')}</InkText>
+        <InkText dimmed style={{ fontSize: 12, marginBottom: 10 }}>{t('ms.adaptiveHint')}</InkText>
+        <View style={styles.adaptiveGrid}>
+          {adaptiveImageUrls.map((url, i) => (
+            <View key={`${url}-${i}`} style={styles.adaptiveItem}>
+              <Image source={{ uri: url }} style={styles.adaptiveImg} />
+              <Pressable
+                style={styles.adaptiveRemoveBtn}
+                onPress={() => setAdaptiveImageUrls((prev) => prev.filter((_, idx) => idx !== i))}
+              >
+                <InkText style={styles.adaptiveRemoveText}>✕</InkText>
+              </Pressable>
+              <View style={styles.adaptiveIndex}>
+                <InkText style={styles.adaptiveIndexText}>{i + 1}</InkText>
+              </View>
+            </View>
+          ))}
+          {adaptiveImageUrls.length < 6 && (
+            <Pressable
+              style={styles.adaptiveAddBtn}
+              onPress={handlePickAdaptiveImage}
+              disabled={adaptiveUploading}
+            >
+              {adaptiveUploading ? (
+                <InkText dimmed style={{ fontSize: 12 }}>{t('ms.adaptiveUploading')}</InkText>
+              ) : (
+                <>
+                  <InkText style={styles.adaptiveAddIcon}>+</InkText>
+                  <InkText dimmed style={{ fontSize: 10 }}>{t('ms.adaptiveAdd')}</InkText>
+                </>
+              )}
+            </Pressable>
+          )}
+        </View>
+      </InkCard>
+    );
+  }
+
+  const hasCustomEditor = ['WEATHER', 'MEMO', 'COUNTDOWN', 'CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE'].includes(modeId);
 
   return (
     <AppScreen>
@@ -463,6 +554,7 @@ export default function ModeSettingsScreen() {
       {modeId === 'COUNTDOWN' && renderCountdown()}
       {modeId === 'CALENDAR' && renderCalendar()}
       {modeId === 'TIMETABLE' && renderTimetable()}
+      {modeId === 'MY_ADAPTIVE' && renderAdaptive()}
       {!hasCustomEditor && (schema.length > 0 ? renderGenericSchema() : (
         <InkCard><InkText dimmed>{t('device.modeSettingsNoSchema')}</InkText></InkCard>
       ))}
@@ -581,5 +673,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 14,
     color: theme.colors.ink,
+  },
+  adaptiveGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  adaptiveItem: {
+    width: '30%',
+    aspectRatio: 4 / 3,
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.surface,
+  },
+  adaptiveImg: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  adaptiveRemoveBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adaptiveRemoveText: {
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  adaptiveIndex: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  adaptiveIndexText: {
+    color: '#fff',
+    fontSize: 10,
+  },
+  adaptiveAddBtn: {
+    width: '30%',
+    aspectRatio: 4 / 3,
+    borderRadius: theme.radius.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  adaptiveAddIcon: {
+    fontSize: 22,
+    color: theme.colors.secondary,
+    lineHeight: 26,
   },
 });
