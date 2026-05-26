@@ -229,6 +229,46 @@ static void drainSendQueue(AudioService &as) {
         as.ReleaseSendPacket(pkt);
     }
 }
+
+static void vocabAudioChunkCallback(const uint8_t *data, size_t len, void *userData) {
+    AudioService *audioService = static_cast<AudioService *>(userData);
+    if (audioService) {
+        audioService->PushPcmForPlayback(data, len, 1);
+    }
+}
+
+static void playCurrentVocabWordAudio() {
+#if VOCAB_REVIEW_BUILD
+    Serial.println("[VOCAB] Playing current word audio...");
+    static Inmp441Max98357Codec codec(false);
+    if (!codec.Start()) {
+        Serial.println("[VOCAB] codec start failed");
+        return;
+    }
+
+    static AudioService audioService;
+    if (!audioService.Initialize(&codec)) {
+        Serial.println("[VOCAB] AudioService init failed");
+        codec.Stop();
+        return;
+    }
+    audioService.Start();
+
+    bool ok = fetchVocabAudio(vocabAudioChunkCallback, &audioService);
+    if (!ok) {
+        Serial.println("[VOCAB] audio fetch failed");
+    }
+
+    unsigned long drainStart = millis();
+    while (!audioService.IsPlaybackEmpty() && millis() - drainStart < 5000) {
+        delay(20);
+    }
+    delay(80);
+    audioService.Stop();
+    audioService.ResetPlayback();
+    codec.Stop();
+#endif
+}
 #endif
 
 // ═════════════════════════════════════════════════════════════
@@ -906,6 +946,11 @@ void loop() {
             }
             lastContentChecksum = 0;
             triggerImmediateRefresh(false, true);
+            if (strcmp(action, "enter") == 0 || strcmp(action, "submit_rating") == 0) {
+#if defined(BOARD_HAS_AUDIO)
+                playCurrentVocabWordAudio();
+#endif
+            }
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
             ctx.setupDoneAt = millis();

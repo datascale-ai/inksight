@@ -1,6 +1,25 @@
 # 背单词模式
 
-`VOCAB_REVIEW` 是内置背词模式，使用设备 MAC 独立保存进度。第一版使用项目内置 `core_en` 基础词库，不包含语音读词或自动判答。
+`VOCAB_REVIEW` 是内置背词模式，使用设备 MAC 独立保存进度。词库数据在部署时由脚本从 KyleBing/english-vocabulary 的 `json-sentence` 数据生成，不直接提交大 JSON 文件。
+
+## 词库准备
+
+首次部署或清理本地生成文件后，先运行：
+
+```bash
+cd backend
+python scripts/import_kylebing_vocab.py
+```
+
+脚本会生成以下本地词库文件：
+
+- `primary_en`：小学英语
+- `middle_school_en`：初中英语
+- `high_school_en`：高中英语
+- `cet4_en`：四级词汇
+- `cet6_en`：六级词汇
+- `ielts_en`：雅思词汇
+- `toefl_en`：托福词汇
 
 ## 固件环境
 
@@ -27,9 +46,9 @@ platformio run -e epd_42_wroom32e_vocab_review
 
 ## 模式设置
 
-- `deck_id`：词库 ID，默认 `core_en`。
-- `daily_limit`：每日复习总上限，默认 `30`。
-- `new_cards_per_day`：每日新词上限，默认 `10`。
+- `deck_id`：词库 ID，默认 `primary_en`。
+- `daily_limit`：每日完成个数，默认 `30`。
+- `new_cards_per_day`：每日新词数，默认 `10`。
 
 ## 设备 API
 

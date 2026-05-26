@@ -60,6 +60,8 @@ bool peekPendingMode(String &pendingModeOut);
 // POST runtime mode (active/interval) to backend.
 bool postRuntimeMode(const char *mode);
 bool postVocabEvent(const char *action, const char *rating = nullptr);
+typedef void (*AudioChunkCallback)(const uint8_t *data, size_t len, void *userData);
+bool fetchVocabAudio(AudioChunkCallback onChunk, void *userData = nullptr);
 
 // POST device config JSON to backend /api/config endpoint.
 void postConfigToBackend();

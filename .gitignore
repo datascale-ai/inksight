@@ -258,6 +258,13 @@ backend/md/
 backend/fonts/bitmap/
 backend/fonts/truetype/
 backend/scripts/generate_invite_codes.py
+backend/core/vocab_data/primary_en.json
+backend/core/vocab_data/middle_school_en.json
+backend/core/vocab_data/high_school_en.json
+backend/core/vocab_data/cet4_en.json
+backend/core/vocab_data/cet6_en.json
+backend/core/vocab_data/ielts_en.json
+backend/core/vocab_data/toefl_en.json
 backend/core/modes/custom/
 tmp/*
 paper/*

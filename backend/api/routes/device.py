@@ -35,7 +35,7 @@ from core.config_store import (
     update_device_state,
     validate_alert_token,
 )
-from core.vocab_store import VOCAB_MODE_ID, handle_vocab_event
+from core.vocab_store import VOCAB_MODE_ID, get_vocab_content, handle_vocab_event
 from core.patterns.utils import apply_text_fontmode, load_font
 from core.renderer import image_to_bmp_bytes, image_to_png_bytes
 from core.schemas import DeviceHeartbeatRequest, OkResponse
@@ -161,6 +161,31 @@ async def vocab_review_event(
         return JSONResponse({"error": result.get("error") or "invalid_action"}, status_code=400)
     await update_device_state(mac, pending_refresh=1)
     return result
+
+
+@router.get("/device/{mac}/vocab/audio")
+async def get_vocab_review_audio(
+    mac: str,
+    x_device_token: Optional[str] = Header(default=None),
+):
+    mac = validate_mac_param(mac)
+    await require_device_token(mac, x_device_token)
+    cfg = await get_active_config(mac, log_load=False)
+    content = await get_vocab_content(mac, cfg)
+    word = str(content.get("word") or "").strip()
+    if not word or content.get("state") == "empty":
+        return Response(status_code=204)
+
+    try:
+        from api.routes.voice import _resolve_device_voice_runtime_settings
+        from core.voice_service import synthesize_prompt_pcm
+
+        settings = await _resolve_device_voice_runtime_settings(mac)
+        audio_pcm = await synthesize_prompt_pcm(word, settings=settings)
+    except Exception as exc:
+        logger.exception("[VOCAB] TTS failed for mac=%s word=%s", mac, word)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    return Response(content=audio_pcm, media_type="application/octet-stream")
 
 
 @router.post("/device/{mac}/heartbeat", response_model=OkResponse)

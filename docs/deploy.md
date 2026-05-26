@@ -43,6 +43,7 @@ cd backend
 
 pip install -r requirements.txt
 python scripts/setup_fonts.py
+python scripts/import_kylebing_vocab.py
 
 cp .env.example .env
 # 按需填写环境变量

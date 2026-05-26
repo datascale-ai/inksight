@@ -973,6 +973,64 @@ bool postVocabEvent(const char *action, const char *rating) {
     return false;
 }
 
+bool fetchVocabAudio(AudioChunkCallback onChunk, void *userData) {
+    if (!onChunk) return false;
+    if (!ensureDeviceToken()) return false;
+    String mac = WiFi.macAddress();
+    String url = cfgServer + "/api/device/" + mac + "/vocab/audio";
+    bool useSSL = cfgServer.startsWith("https://");
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.setTimeout(60000);
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
+
+        int code = http.GET();
+        if (code == 204) {
+            Serial.println("[VOCAB] audio -> 204 no content");
+            http.end();
+            return true;
+        }
+        if (code == 200) {
+            WiFiClient *stream = http.getStreamPtr();
+            uint8_t buffer[1024];
+            while (http.connected() || stream->available()) {
+                int available = stream->available();
+                if (available <= 0) {
+                    delay(1);
+                    continue;
+                }
+                int readLen = stream->readBytes(buffer, min(available, (int)sizeof(buffer)));
+                if (readLen > 0) {
+                    onChunk(buffer, (size_t)readLen, userData);
+                }
+            }
+            http.end();
+            return true;
+        }
+        if (code < 0) {
+            Serial.printf("[VOCAB] audio error: %s\n", http.errorToString(code).c_str());
+        } else {
+            String body = http.getString();
+            Serial.printf("[VOCAB] audio -> %d %s\n", code, body.substring(0, 200).c_str());
+        }
+        http.end();
+        if (!recoverDeviceTokenIfUnauthorized(code)) {
+            return false;
+        }
+    }
+    return false;
+}
+
 static bool parseVoiceTurnResponse(const String &body, String &turnId, String &replyText, String &transcript, bool &exitConversation) {
     turnId = extractJsonStringField(body, "turn_id");
     replyText = extractJsonStringField(body, "reply_text");

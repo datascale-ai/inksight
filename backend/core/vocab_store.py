@@ -8,7 +8,7 @@ from typing import Any
 from .db import get_main_db
 
 VOCAB_MODE_ID = "VOCAB_REVIEW"
-DEFAULT_DECK_ID = "core_en"
+DEFAULT_DECK_ID = "primary_en"
 DEFAULT_DAILY_LIMIT = 30
 DEFAULT_NEW_CARDS_PER_DAY = 10
 RATINGS = ("forgot", "fuzzy", "remember")
@@ -18,44 +18,45 @@ RATING_LABELS = {
     "remember": "记住",
 }
 
-_DATA_PATH = Path(__file__).resolve().parent / "vocab_data" / "core_en.json"
+_DATA_DIR = Path(__file__).resolve().parent / "vocab_data"
 
 
 async def seed_builtin_vocab() -> None:
-    if not _DATA_PATH.exists():
-        return
-    try:
-        items = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return
-    if not isinstance(items, list):
+    if not _DATA_DIR.exists():
         return
 
     now = datetime.now().isoformat()
     db = await get_main_db()
-    for item in items:
-        if not isinstance(item, dict):
+    for path in sorted(_DATA_DIR.glob("*.json")):
+        try:
+            items = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
             continue
-        word = str(item.get("word") or "").strip()
-        definition = str(item.get("definition") or "").strip()
-        if not word or not definition:
+        if not isinstance(items, list):
             continue
-        await db.execute(
-            """
-            INSERT OR IGNORE INTO vocab_items
-                (deck_id, word, phonetic, definition, example, difficulty, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(item.get("deck_id") or DEFAULT_DECK_ID),
-                word,
-                str(item.get("phonetic") or ""),
-                definition,
-                str(item.get("example") or ""),
-                int(item.get("difficulty") or 1),
-                now,
-            ),
-        )
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            word = str(item.get("word") or "").strip()
+            definition = str(item.get("definition") or "").strip()
+            if not word or not definition:
+                continue
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO vocab_items
+                    (deck_id, word, phonetic, definition, example, difficulty, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(item.get("deck_id") or DEFAULT_DECK_ID),
+                    word,
+                    str(item.get("phonetic") or ""),
+                    definition,
+                    str(item.get("example") or ""),
+                    int(item.get("difficulty") or 1),
+                    now,
+                ),
+            )
     await db.commit()
 
 
