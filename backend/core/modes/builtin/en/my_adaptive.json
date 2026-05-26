@@ -20,6 +20,7 @@
         "x": 0,
         "y": 36,
         "fit": "cover",
+        "photo_enhance": true,
         "align_x": "center",
         "align_y": "center",
         "margin_bottom": 0
@@ -37,6 +38,7 @@
           "width": 322,
           "height": 99,
           "fit": "contain",
+          "photo_enhance": true,
           "align_x": "center",
           "align_y": "center",
           "margin_bottom": 0
@@ -53,6 +55,7 @@
           "x": 0,
           "y": 57,
           "fit": "cover",
+          "photo_enhance": true,
           "align_x": "center",
           "align_y": "center",
           "margin_bottom": 0

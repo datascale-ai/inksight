@@ -422,7 +422,11 @@
         "x": { "type": "integer", "default": 0 },
         "y": { "type": "integer", "default": 0 },
         "width": { "type": "integer" },
-        "height": { "type": "integer" }
+        "height": { "type": "integer" },
+        "fit": { "type": "string", "enum": ["fill", "stretch", "contain", "cover"], "default": "fill" },
+        "align_x": { "type": "string", "enum": ["left", "center", "right", "start", "end"], "default": "center" },
+        "align_y": { "type": "string", "enum": ["top", "center", "bottom", "start", "end"], "default": "center" },
+        "photo_enhance": { "type": "boolean", "default": false, "description": "Apply conservative photo contrast/sharpness enhancement before quantization." }
       }
     },
     "progress_bar_block": {

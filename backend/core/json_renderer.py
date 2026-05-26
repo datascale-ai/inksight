@@ -37,6 +37,7 @@ from .patterns.utils import (
 )
 from .layout_presets import expand_layout_presets
 from .mode_catalog import builtin_catalog_map
+from .image_processing import convert_image_block
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +54,6 @@ _LARGE_PANEL_MIN_W = int(os.getenv("INKSIGHT_LARGE_PANEL_MIN_WIDTH", "648"))
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _UPLOAD_DIR = _BACKEND_ROOT / "runtime_uploads"
-_PALETTE_RGB = {
-    0: (0, 0, 0),
-    1: (255, 255, 255),
-    2: (232, 176, 0),
-    3: (200, 0, 0),
-}
 
 STATUS_BAR_BOTTOM_DEFAULT = 36  # Used when screen_h unknown (e.g. dataclass default)
 
@@ -156,71 +151,10 @@ def _resolve_template(content: dict, template: str) -> str:
     return re.sub(r"\{(\w+)\}", _replace, template)
 
 
-def _aligned_offset(container: int, content: int, align: str) -> int:
-    if align in ("left", "top", "start"):
-        return 0
-    if align in ("right", "bottom", "end"):
-        return container - content
-    return (container - content) // 2
-
-
 def _resolve_named_color(ctx: RenderContext, color_name: Any, default: int = EINK_FG) -> int:
     if not isinstance(color_name, str) or not color_name:
         return default
     return ctx.color_index(color_name, default)
-
-
-def _convert_image_block(
-    src: Image.Image,
-    width: int,
-    height: int,
-    colors: int,
-    fit: str = "fill",
-    align_x: str = "center",
-    align_y: str = "center",
-) -> Image.Image:
-    src_rgba = src.convert("RGBA")
-    fit_mode = str(fit or "fill").lower()
-    if fit_mode in ("fill", "stretch"):
-        base = Image.new("RGBA", (width, height), (255, 255, 255, 255))
-        base.alpha_composite(src_rgba.resize((width, height), Image.LANCZOS))
-    else:
-        src_w = max(1, src_rgba.size[0])
-        src_h = max(1, src_rgba.size[1])
-        scale_x = width / src_w
-        scale_y = height / src_h
-        scale = min(scale_x, scale_y) if fit_mode == "contain" else max(scale_x, scale_y)
-        resized_w = max(1, int(round(src_w * scale)))
-        resized_h = max(1, int(round(src_h * scale)))
-        resized = src_rgba.resize((resized_w, resized_h), Image.LANCZOS)
-        base = Image.new("RGBA", (width, height), (255, 255, 255, 255))
-        paste_x = _aligned_offset(width, resized_w, align_x)
-        paste_y = _aligned_offset(height, resized_h, align_y)
-        base.alpha_composite(resized, (paste_x, paste_y))
-    rgb = base.convert("RGB")
-    if colors < 3:
-        return rgb.convert("L").convert("1")
-    out = Image.new("P", rgb.size, EINK_BG)
-    pal = EINK_4COLOR_PALETTE + [0] * (768 - len(EINK_4COLOR_PALETTE))
-    out.putpalette(pal)
-    allowed = (0, 1, 3) if colors == 3 else (0, 1, 2, 3)
-    cache: dict[tuple[int, int, int], int] = {}
-    mapped: list[int] = []
-    for pixel in rgb.getdata():
-        idx = cache.get(pixel)
-        if idx is None:
-            idx = min(
-                allowed,
-                key=lambda candidate: (
-                    (pixel[0] - _PALETTE_RGB[candidate][0]) ** 2
-                    + (pixel[1] - _PALETTE_RGB[candidate][1]) ** 2
-                    + (pixel[2] - _PALETTE_RGB[candidate][2]) ** 2
-                ),
-            )
-            cache[pixel] = idx
-        mapped.append(idx)
-    out.putdata(mapped)
-    return out
 
 
 @dataclass
@@ -2521,12 +2455,22 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
     fit = str(block.get("fit", "fill") or "fill")
     align_x = str(block.get("align_x", "center") or "center")
     align_y = str(block.get("align_y", "center") or "center")
+    photo_enhance = bool(block.get("photo_enhance", False))
     margin_bottom = int(block.get("margin_bottom", 6) * ctx.scale)
     # Try pre-fetched data first (async download from json_content.py)
     prefetched = ctx.content.get(f"_prefetched_{field_name}")
     if prefetched:
         from io import BytesIO
-        img = _convert_image_block(Image.open(BytesIO(prefetched)), width, height, ctx.colors, fit=fit, align_x=align_x, align_y=align_y)
+        img = convert_image_block(
+            Image.open(BytesIO(prefetched)),
+            width,
+            height,
+            ctx.colors,
+            fit=fit,
+            align_x=align_x,
+            align_y=align_y,
+            photo_enhance=photo_enhance,
+        )
         if ctx.colors >= 3:
             ctx.img.paste(img, (x, y))
         else:
@@ -2536,7 +2480,16 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
     local_path = _resolve_local_asset(image_url)
     if local_path:
         try:
-            img = _convert_image_block(Image.open(local_path), width, height, ctx.colors, fit=fit, align_x=align_x, align_y=align_y)
+            img = convert_image_block(
+                Image.open(local_path),
+                width,
+                height,
+                ctx.colors,
+                fit=fit,
+                align_x=align_x,
+                align_y=align_y,
+                photo_enhance=photo_enhance,
+            )
             if ctx.colors >= 3:
                 ctx.img.paste(img, (x, y))
             else:
@@ -2569,7 +2522,16 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
         if resp is None:
             raise last_error if last_error else ValueError("image fetch failed")
         from io import BytesIO
-        img = _convert_image_block(Image.open(BytesIO(resp.content)), width, height, ctx.colors, fit=fit, align_x=align_x, align_y=align_y)
+        img = convert_image_block(
+            Image.open(BytesIO(resp.content)),
+            width,
+            height,
+            ctx.colors,
+            fit=fit,
+            align_x=align_x,
+            align_y=align_y,
+            photo_enhance=photo_enhance,
+        )
         if ctx.colors >= 3:
             ctx.img.paste(img, (x, y))
         else:

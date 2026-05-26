@@ -2,16 +2,29 @@
 Shared pytest fixtures for InkSight unit tests.
 """
 import os
+import subprocess
 import sys
+from pathlib import Path
+
 import pytest
 
 # Ensure backend root is on sys.path so `core.*` imports work
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BACKEND_ROOT))
 
 # Set dummy env vars so modules can import without real keys
 os.environ.setdefault("DEEPSEEK_API_KEY", "sk-test-dummy-key-000")
 os.environ.setdefault("DASHSCOPE_API_KEY", "sk-test-dummy-key-001")
 os.environ.setdefault("MOONSHOT_API_KEY", "sk-test-dummy-key-002")
+
+
+def pytest_sessionstart(session):
+    """Build the native dithering library before tests import renderers."""
+    native_lib = BACKEND_ROOT / "core" / "native" / "libeink_dither.so"
+    if native_lib.exists():
+        return
+    script = BACKEND_ROOT / "scripts" / "build_native_dither.py"
+    subprocess.run([sys.executable, str(script)], cwd=BACKEND_ROOT, check=True)
 
 
 @pytest.fixture
