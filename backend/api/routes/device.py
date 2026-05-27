@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import os
+import struct
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -23,6 +24,7 @@ from api.shared import (
 )
 from core.auth import require_admin, require_device_token, require_user, validate_mac_param
 from core.config import SCREEN_HEIGHT, SCREEN_WIDTH
+from core.context import calc_battery_pct, extract_location_settings, get_date_context, get_weather
 from core.config_store import (
     consume_claim_token,
     create_claim_token,
@@ -159,7 +161,7 @@ async def vocab_review_event(
     result = await handle_vocab_event(mac, action, cfg, rating=rating)
     if not result.get("ok"):
         return JSONResponse({"error": result.get("error") or "invalid_action"}, status_code=400)
-    await update_device_state(mac, pending_refresh=1)
+    await update_device_state(mac, pending_mode=VOCAB_MODE_ID, pending_refresh=1)
     return result
 
 
@@ -186,6 +188,120 @@ async def get_vocab_review_audio(
         logger.exception("[VOCAB] TTS failed for mac=%s word=%s", mac, word)
         return JSONResponse({"error": str(exc)}, status_code=500)
     return Response(content=audio_pcm, media_type="application/octet-stream")
+
+
+def _image_to_mono_bytes(img: Image.Image, w: int, h: int) -> bytes:
+    if img.mode != "1":
+        img = img.convert("1")
+    if img.size != (w, h):
+        img = img.resize((w, h)).convert("1")
+    return img.tobytes()
+
+
+def _slice_mono_region(raw: bytes, w: int, y_start: int, y_end: int) -> bytes:
+    row_bytes = w // 8
+    return raw[y_start * row_bytes:y_end * row_bytes]
+
+
+@router.get("/device/{mac}/vocab/review-pack")
+async def get_vocab_review_pack(
+    mac: str,
+    w: int = Query(default=SCREEN_WIDTH, ge=100, le=1600),
+    h: int = Query(default=SCREEN_HEIGHT, ge=100, le=1200),
+    y_start: Optional[int] = Query(default=None, ge=0),
+    y_end: Optional[int] = Query(default=None, ge=1),
+    v: float = Query(default=3.7),
+    x_device_token: Optional[str] = Header(default=None),
+):
+    """Return one vocab card pack: front full image + 3 back-side rating regions.
+
+    Binary format (little endian):
+    - 4 bytes magic: IVP1
+    - uint16 w, h, y_start, y_end
+    - uint32 full_len, part_len
+    - uint8 rating_count, current_cursor, reserved, reserved
+    - front full mono bytes
+    - rating_count partial mono regions, cursor order: forgot, fuzzy, remember
+    """
+    mac = validate_mac_param(mac)
+    await require_device_token(mac, x_device_token)
+    if w % 8 != 0:
+        return JSONResponse({"error": "w must be divisible by 8"}, status_code=400)
+
+    ys = y_start if y_start is not None else ((h * 54 // 100) if h <= 128 else (h * 52 // 100))
+    ye = y_end if y_end is not None else h - max(18, h // 12)
+    ys = max(0, min(h, int(ys)))
+    ye = max(0, min(h, int(ye)))
+    if ye <= ys:
+        return JSONResponse({"error": "invalid region"}, status_code=400)
+
+    cfg = await get_active_config(mac, log_load=False)
+    content = await get_vocab_content(mac, cfg)
+
+    from core.mode_registry import get_registry
+    from core.json_renderer import render_json_mode
+
+    registry = get_registry()
+    jm = registry.get_json_mode(VOCAB_MODE_ID, mac, language=(cfg or {}).get("mode_language") or "zh")
+    if not jm:
+        return JSONResponse({"error": "vocab mode not found"}, status_code=500)
+
+    date_ctx = await get_date_context()
+    weather = await get_weather(**extract_location_settings(cfg or {}))
+    battery_pct = calc_battery_pct(v)
+    language = (cfg or {}).get("mode_language") or "zh"
+
+    base = dict(content)
+    front_content = {**base, "state": "front", "rating_cursor": 0}
+    front_img = render_json_mode(
+        jm.definition,
+        front_content,
+        date_str=date_ctx["date_str"],
+        weather_str=weather["weather_str"],
+        battery_pct=battery_pct,
+        weather_code=weather.get("weather_code", -1),
+        time_str=date_ctx.get("time_str", ""),
+        screen_w=w,
+        screen_h=h,
+        colors=2,
+        language=language,
+    )
+    front_raw = _image_to_mono_bytes(front_img, w, h)
+
+    parts: list[bytes] = []
+    for cursor in range(3):
+        back_content = {**base, "state": "back", "rating_cursor": cursor}
+        back_img = render_json_mode(
+            jm.definition,
+            back_content,
+            date_str=date_ctx["date_str"],
+            weather_str=weather["weather_str"],
+            battery_pct=battery_pct,
+            weather_code=weather.get("weather_code", -1),
+            time_str=date_ctx.get("time_str", ""),
+            screen_w=w,
+            screen_h=h,
+            colors=2,
+            language=language,
+        )
+        parts.append(_slice_mono_region(_image_to_mono_bytes(back_img, w, h), w, ys, ye))
+
+    part_len = len(parts[0]) if parts else 0
+    body = bytearray()
+    body += b"IVP1"
+    body += struct.pack("<HHHHIIBBBB", w, h, ys, ye, len(front_raw), part_len, len(parts), 0, 0, 0)
+    body += front_raw
+    for part in parts:
+        body += part
+
+    await update_device_state(
+        mac,
+        pending_mode="",
+        pending_refresh=0,
+        last_persona=VOCAB_MODE_ID,
+        last_refresh_at=datetime.now().isoformat(),
+    )
+    return Response(content=bytes(body), media_type="application/octet-stream")
 
 
 @router.post("/device/{mac}/heartbeat", response_model=OkResponse)

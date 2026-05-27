@@ -973,6 +973,102 @@ bool postVocabEvent(const char *action, const char *rating) {
     return false;
 }
 
+static uint16_t readLe16(const uint8_t *p) {
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
+static uint32_t readLe32(const uint8_t *p) {
+    return (uint32_t)p[0]
+        | ((uint32_t)p[1] << 8)
+        | ((uint32_t)p[2] << 16)
+        | ((uint32_t)p[3] << 24);
+}
+
+bool fetchVocabReviewPack(uint8_t *ratingParts, size_t partLen, int yStart, int yEnd) {
+    if (!ratingParts || partLen == 0) return false;
+    if (!ensureDeviceToken()) return false;
+
+    float v = readBatteryVoltage();
+    String mac = WiFi.macAddress();
+    String url = cfgServer + "/api/device/" + mac + "/vocab/review-pack"
+               + "?v=" + String(v, 2)
+               + "&w=" + String(W)
+               + "&h=" + String(H)
+               + "&y_start=" + String(yStart)
+               + "&y_end=" + String(yEnd);
+    bool useSSL = cfgServer.startsWith("https://");
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        WiFiClient plainClient;
+        WiFiClientSecure secClient;
+        HTTPClient http;
+        if (useSSL) {
+            secClient.setCACert(ROOT_CA);
+            http.begin(secClient, url);
+        } else {
+            http.begin(plainClient, url);
+        }
+        http.setTimeout(HTTP_TIMEOUT);
+        http.addHeader("Accept-Encoding", "identity");
+        if (cfgDeviceToken.length() > 0) {
+            http.addHeader("X-Device-Token", cfgDeviceToken);
+        }
+
+        int code = http.GET();
+        Serial.printf("[VOCAB] GET review-pack -> %d\n", code);
+        if (code != 200) {
+            if (code < 0) {
+                Serial.printf("[VOCAB] review-pack error: %s\n", http.errorToString(code).c_str());
+            } else {
+                String body = http.getString();
+                Serial.printf("[VOCAB] review-pack response: %s\n", body.substring(0, 200).c_str());
+            }
+            http.end();
+            if (!recoverDeviceTokenIfUnauthorized(code)) return false;
+            continue;
+        }
+
+        WiFiClient *stream = http.getStreamPtr();
+        uint8_t header[24];
+        if (!readExact(stream, header, sizeof(header))) {
+            http.end();
+            return false;
+        }
+        if (memcmp(header, "IVP1", 4) != 0) {
+            Serial.println("[VOCAB] review-pack bad magic");
+            http.end();
+            return false;
+        }
+        uint16_t packW = readLe16(header + 4);
+        uint16_t packH = readLe16(header + 6);
+        uint16_t packYStart = readLe16(header + 8);
+        uint16_t packYEnd = readLe16(header + 10);
+        uint32_t fullLen = readLe32(header + 12);
+        uint32_t packPartLen = readLe32(header + 16);
+        uint8_t ratingCount = header[20];
+        if (packW != W || packH != H || packYStart != yStart || packYEnd != yEnd ||
+            fullLen != IMG_BUF_LEN || packPartLen != partLen || ratingCount != 3) {
+            Serial.printf("[VOCAB] review-pack mismatch w=%u h=%u y=%u-%u full=%u part=%u count=%u\n",
+                          packW, packH, packYStart, packYEnd, fullLen, packPartLen, ratingCount);
+            http.end();
+            return false;
+        }
+        if (!readExact(stream, imgBuf, IMG_BUF_LEN)) {
+            http.end();
+            return false;
+        }
+        if (!readExact(stream, ratingParts, partLen * 3)) {
+            http.end();
+            return false;
+        }
+        http.end();
+        Serial.printf("[VOCAB] review-pack OK front=%d parts=%u\n", IMG_BUF_LEN, (unsigned)(partLen * 3));
+        lastHeartbeatAt = millis();
+        return true;
+    }
+    return false;
+}
+
 bool fetchVocabAudio(AudioChunkCallback onChunk, void *userData) {
     if (!onChunk) return false;
     if (!ensureDeviceToken()) return false;

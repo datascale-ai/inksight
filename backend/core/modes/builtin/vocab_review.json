@@ -29,16 +29,18 @@
       "example": "",
       "progress": "0/30",
       "rating_label": "",
+      "rating_cursor": 0,
       "rating_hint": ""
     }
   },
   "layout": {
+    "body_align": "top",
     "status_bar": {"line_width": 1, "dashed": false},
     "body": [
       {"type": "spacer", "height": 22},
-      {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 52, "align": "center", "margin_x": 38, "max_lines": 1},
-      {"type": "spacer", "height": 8},
-      {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_name": "GentiumPlus-Regular.ttf", "font_size": 13, "align": "center", "margin_x": 24, "max_lines": 1},
+      {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 52, "line_height": 62, "reserve_line_height": true, "align": "center", "margin_x": 38, "max_lines": 1},
+      {"type": "spacer", "height": 10},
+      {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_name": "GentiumPlus-Regular.ttf", "font_size": 13, "line_height": 18, "reserve_line_height": true, "align": "center", "margin_x": 24, "max_lines": 1},
       {"type": "spacer", "height": 8},
       {
         "type": "conditional",
@@ -52,7 +54,7 @@
               {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 16, "align": "center", "margin_x": 32, "max_lines": 2},
               {"type": "text", "field": "example", "font": "noto_serif_light", "font_size": 12, "align": "center", "margin_x": 38, "max_lines": 2},
               {"type": "spacer", "height": 4},
-              {"type": "text", "template": "评分：{rating_label}", "font": "noto_serif_bold", "font_size": 16, "align": "center", "margin_x": 20, "max_lines": 1},
+              {"type": "rating_choices", "selected_field": "rating_cursor", "labels": ["忘了", "模糊", "记住"], "font": "noto_serif_bold", "font_size": 14, "height": 26, "margin_x": 28, "gap": 10, "margin_bottom": 4},
               {"type": "text", "field": "rating_hint", "font": "noto_serif_light", "font_size": 10, "align": "center", "margin_x": 20, "max_lines": 1}
             ]
           },
@@ -77,22 +79,22 @@
     "296x128": {
       "body": [
         {"type": "spacer", "height": 4},
-        {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 22, "align": "center", "margin_x": 8, "max_lines": 1},
-        {"type": "spacer", "height": 4},
-        {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_name": "GentiumPlus-Regular.ttf", "font_size": 16, "align": "center", "margin_x": 8, "max_lines": 1},
+        {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 22, "line_height": 28, "reserve_line_height": true, "align": "center", "margin_x": 8, "max_lines": 1},
+        {"type": "spacer", "height": 3},
+        {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_name": "GentiumPlus-Regular.ttf", "font_size": 13, "line_height": 16, "reserve_line_height": true, "align": "center", "margin_x": 8, "max_lines": 1},
         {"type": "spacer", "height": 2},
-        {"type": "conditional", "field": "state", "conditions": [{"op": "eq", "value": "back", "children": [{"type": "separator", "style": "short", "width": 30, "line_width": 1}, {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 12, "align": "center", "margin_x": 10, "max_lines": 1}, {"type": "text", "template": "{rating_label}", "font": "noto_serif_bold", "font_size": 13, "align": "center", "margin_x": 8, "max_lines": 1}]}], "fallback_children": [{"type": "spacer", "height": 8}]}
+        {"type": "conditional", "field": "state", "conditions": [{"op": "eq", "value": "back", "children": [{"type": "separator", "style": "short", "width": 30, "line_width": 1}, {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 12, "align": "center", "margin_x": 10, "max_lines": 1}, {"type": "rating_choices", "selected_field": "rating_cursor", "labels": ["忘", "糊", "记"], "font": "noto_serif_bold", "font_size": 10, "height": 16, "margin_x": 18, "gap": 5, "margin_bottom": 0}]}], "fallback_children": [{"type": "spacer", "height": 8}]}
       ],
       "footer": {"label": "VOCAB", "height": 18, "attribution_template": "{progress}"}
     },
     "648x480": {
       "body": [
         {"type": "spacer", "height": 42},
-        {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 64, "align": "center", "margin_x": 32, "max_lines": 1},
+        {"type": "text", "field": "word", "font": "noto_serif_bold", "font_size": 64, "line_height": 78, "reserve_line_height": true, "align": "center", "margin_x": 32, "max_lines": 1},
+        {"type": "spacer", "height": 12},
+        {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_name": "GentiumPlus-Regular.ttf", "font_size": 14, "line_height": 20, "reserve_line_height": true, "align": "center", "margin_x": 30, "max_lines": 1},
         {"type": "spacer", "height": 10},
-        {"type": "text", "field": "phonetic", "font": "noto_serif_light", "font_name": "GentiumPlus-Regular.ttf", "font_size": 14, "align": "center", "margin_x": 30, "max_lines": 1},
-        {"type": "spacer", "height": 10},
-        {"type": "conditional", "field": "state", "conditions": [{"op": "eq", "value": "back", "children": [{"type": "separator", "style": "short", "width": 44, "line_width": 1}, {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 20, "align": "center", "margin_x": 52, "max_lines": 2}, {"type": "text", "field": "example", "font": "noto_serif_light", "font_size": 14, "align": "center", "margin_x": 70, "max_lines": 2}, {"type": "text", "template": "评分：{rating_label}", "font": "noto_serif_bold", "font_size": 22, "align": "center", "margin_x": 30, "max_lines": 1}]}], "fallback_children": [{"type": "spacer", "height": 44}]}
+        {"type": "conditional", "field": "state", "conditions": [{"op": "eq", "value": "back", "children": [{"type": "separator", "style": "short", "width": 44, "line_width": 1}, {"type": "text", "field": "definition", "font": "noto_serif_regular", "font_size": 20, "align": "center", "margin_x": 52, "max_lines": 2}, {"type": "text", "field": "example", "font": "noto_serif_light", "font_size": 14, "align": "center", "margin_x": 70, "max_lines": 2}, {"type": "rating_choices", "selected_field": "rating_cursor", "labels": ["忘了", "模糊", "记住"], "font": "noto_serif_bold", "font_size": 20, "height": 34, "margin_x": 74, "gap": 16, "margin_bottom": 0}]}], "fallback_children": [{"type": "spacer", "height": 44}]}
       ]
     }
   }

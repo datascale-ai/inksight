@@ -645,6 +645,50 @@ void updateTimeDisplay() {
     epdPartialDisplay(partBuf, TIME_RGN_X0, TIME_RGN_Y0, TIME_RGN_X1, TIME_RGN_Y1);
 }
 
+// ── Vocab review partial refresh ────────────────────────────
+
+void updateVocabRatingRegion(const uint8_t *oldImage) {
+    const int xStart = 0;
+    const int xEnd = W;
+    const int yStart = (H <= 128) ? (H * 54 / 100) : (H * 52 / 100);
+    const int yEnd = H - max(18, H / 12);
+    if (yEnd <= yStart) {
+        epdDisplayFast(imgBuf);
+        return;
+    }
+
+    const int rowBytes = W / 8;
+    const int regionH = yEnd - yStart;
+    const int partLen = rowBytes * regionH;
+    uint8_t *partBuf = (uint8_t *)malloc(partLen);
+    uint8_t *oldPartBuf = oldImage ? (uint8_t *)malloc(partLen) : nullptr;
+    if (!partBuf || (oldImage && !oldPartBuf)) {
+        Serial.println("[VOCAB] Partial buffer alloc failed, using fast full refresh");
+        if (partBuf) free(partBuf);
+        if (oldPartBuf) free(oldPartBuf);
+        epdDisplayFast(imgBuf);
+        return;
+    }
+
+    for (int row = 0; row < regionH; row++) {
+        memcpy(
+            partBuf + row * rowBytes,
+            imgBuf + (yStart + row) * rowBytes,
+            rowBytes
+        );
+        if (oldPartBuf) {
+            memcpy(
+                oldPartBuf + row * rowBytes,
+                oldImage + (yStart + row) * rowBytes,
+                rowBytes
+            );
+        }
+    }
+    epdPartialDisplayWithOld(partBuf, oldPartBuf, xStart, yStart, xEnd, yEnd);
+    if (oldPartBuf) free(oldPartBuf);
+    free(partBuf);
+}
+
 // ── Mode preview screen (double-click transition) ───────────
 
 void showModePreview(const char *modeName) {

@@ -161,6 +161,13 @@ async def handle_vocab_event(mac: str, action: str, config: dict[str, Any] | Non
     action = str(action or "").strip().lower()
     if action == "enter":
         await ensure_vocab_session(mac, config)
+        now = datetime.now().isoformat()
+        db = await get_main_db()
+        await db.execute(
+            "UPDATE vocab_session_state SET side = 'front', rating_cursor = 0, updated_at = ? WHERE mac = ?",
+            (now, mac),
+        )
+        await db.commit()
         return {"ok": True, "action": action}
 
     session = await ensure_vocab_session(mac, config)
@@ -201,9 +208,11 @@ async def get_vocab_content(mac: str, config: dict[str, Any] | None = None) -> d
             "example": "",
             "progress": f"{reviewed}/{daily_limit}",
             "rating_label": "",
+            "rating_cursor": 0,
             "rating_hint": "明天再来",
         }
     rating = RATINGS[int(session.get("rating_cursor") or 0) % len(RATINGS)]
+    rating_cursor = int(session.get("rating_cursor") or 0) % len(RATINGS)
     return {
         "state": str(session.get("side") or "front"),
         "word": item["word"],
@@ -212,6 +221,7 @@ async def get_vocab_content(mac: str, config: dict[str, Any] | None = None) -> d
         "example": item.get("example") or "",
         "progress": f"{reviewed}/{daily_limit}",
         "rating_label": RATING_LABELS[rating],
+        "rating_cursor": rating_cursor,
         "rating_hint": "短按切换评分，长按提交",
     }
 

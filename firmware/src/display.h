@@ -33,6 +33,9 @@ int currentPeriodIndex();
 
 void updateTimeDisplay();
 
+// Refresh the reveal/control region from the current vocab review imgBuf.
+void updateVocabRatingRegion(const uint8_t *oldImage = nullptr);
+
 // Smart display: uses no-flash partial refresh normally, full refresh every N cycles
 void smartDisplay(const uint8_t *image);
 

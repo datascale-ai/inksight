@@ -60,6 +60,7 @@ bool peekPendingMode(String &pendingModeOut);
 // POST runtime mode (active/interval) to backend.
 bool postRuntimeMode(const char *mode);
 bool postVocabEvent(const char *action, const char *rating = nullptr);
+bool fetchVocabReviewPack(uint8_t *ratingParts, size_t partLen, int yStart, int yEnd);
 typedef void (*AudioChunkCallback)(const uint8_t *data, size_t len, void *userData);
 bool fetchVocabAudio(AudioChunkCallback onChunk, void *userData = nullptr);
 

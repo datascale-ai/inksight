@@ -542,8 +542,21 @@ void epdDisplayFast(const uint8_t *image) {
 // ── EPD partial refresh ─────────────────────────────────────
 
 void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd) {
+    epdPartialDisplayWithOld(data, nullptr, xStart, yStart, xEnd, yEnd);
+}
+
+bool epdSupportsPartialRefresh() {
+#if defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
+    return false;
+#else
+    return true;
+#endif
+}
+
+void epdPartialDisplayWithOld(uint8_t *data, const uint8_t *oldData, int xStart, int yStart, int xEnd, int yEnd) {
 #if defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
     (void)data;
+    (void)oldData;
     (void)xStart;
     (void)yStart;
     (void)xEnd;
@@ -585,6 +598,19 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
     epdSendCommand(0x24);  // Write Black/White RAM
     for (int i = 0; i < count; i++)
         epdSendData(data[i]);
+
+    if (oldData) {
+        epdSendCommand(0x4E);  // Set RAM X address counter
+        epdSendData(xS & 0xFF);
+
+        epdSendCommand(0x4F);  // Set RAM Y address counter
+        epdSendData(yStart & 0xFF);
+        epdSendData((yStart >> 8) & 0xFF);
+
+        epdSendCommand(0x26);  // Write old/secondary RAM for stable partial inversion
+        for (int i = 0; i < count; i++)
+            epdSendData(oldData[i]);
+    }
 
     epdSendCommand(0x22);  // Display Update Control 2
     epdSendData(0xFF);     //   Partial update sequence
@@ -730,6 +756,10 @@ void epdDisplayFast(const uint8_t *image) {
     epdDisplay(image);
 }
 
+bool epdSupportsPartialRefresh() {
+    return false;
+}
+
 // ── Partial display (not supported on LG, fallback to full) ──
 
 void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd) {
@@ -738,6 +768,11 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
 }
 
 // ── Sleep ──
+
+void epdPartialDisplayWithOld(uint8_t *data, const uint8_t *oldData, int xStart, int yStart, int xEnd, int yEnd) {
+    (void)oldData;
+    epdPartialDisplay(data, xStart, yStart, xEnd, yEnd);
+}
 
 void epdSleep() {
     EPD_SendCommand(0x02); // power off
@@ -919,8 +954,26 @@ void epdDisplayDeepClear(const uint8_t *image) {
 }
 
 void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd) {
+    epdPartialDisplayWithOld(data, nullptr, xStart, yStart, xEnd, yEnd);
+}
+
+bool epdSupportsPartialRefresh() {
+#if defined(EPD_PANEL_29)
+    return false;
+#else
+    return true;
+#endif
+}
+
+void epdPartialDisplayWithOld(uint8_t *data, const uint8_t *oldData, int xStart, int yStart, int xEnd, int yEnd) {
     epdInit();
 #if defined(EPD_PANEL_29)
+    (void)data;
+    (void)oldData;
+    (void)xStart;
+    (void)yStart;
+    (void)xEnd;
+    (void)yEnd;
     rotate_landscape_to_panel(imgBuf);
     display.writeImage(
         rotated_buffer,
@@ -936,8 +989,13 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
 #else
     int w = xEnd - xStart;
     int h = yEnd - yStart;
-    display.writeImage(data, xStart, yStart, w, h, false, false, true);
-    display.epd2.writeImageAgain(data, xStart, yStart, w, h, false, false, true);
+    if (oldData) {
+        display.epd2.writeImageAgain(oldData, xStart, yStart, w, h, false, false, true);
+        display.writeImage(data, xStart, yStart, w, h, false, false, true);
+    } else {
+        display.writeImage(data, xStart, yStart, w, h, false, false, true);
+        display.epd2.writeImageAgain(data, xStart, yStart, w, h, false, false, true);
+    }
     display.refresh(xStart, yStart, w, h);
 #endif
     display.powerOff();

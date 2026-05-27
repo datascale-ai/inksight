@@ -1485,10 +1485,15 @@ def _render_text(ctx: RenderContext, block: dict) -> None:
         return
 
     font_size = int(block.get("font_size", 14) * ctx.scale)
+    font_name = block.get("font_name")
     font_key = block.get("font", "noto_serif_regular")
-    if has_cjk(text):
+    if font_name and not has_cjk(text):
+        font = load_font_by_name(font_name, font_size)
+    elif has_cjk(text):
         font_key = _pick_cjk_font(font_key)
-    font = load_font(font_key, font_size)
+        font = load_font(font_key, font_size)
+    else:
+        font = load_font(font_key, font_size)
 
     align = block.get("align", "center")
     margin_x = block.get("margin_x")
@@ -1530,7 +1535,16 @@ def _render_text(ctx: RenderContext, block: dict) -> None:
         ctx.draw.text((x, line_y), line, fill=ctx.resolve_color(block), font=font)
         rendered_lines += 1
     if rendered_lines:
-        ctx.y = start_y + (rendered_lines - 1) * line_height + last_line_h
+        used_h = (rendered_lines - 1) * line_height + last_line_h
+        if block.get("reserve_line_height"):
+            used_h = max(used_h, rendered_lines * line_height)
+        min_height = block.get("min_height")
+        if min_height is not None:
+            used_h = max(used_h, int(min_height * ctx.scale))
+        ctx.y = start_y + used_h
+        margin_bottom = block.get("margin_bottom")
+        if margin_bottom is not None:
+            ctx.y += int(margin_bottom * ctx.scale)
 
 
 def _render_separator(ctx: RenderContext, block: dict) -> None:
@@ -1738,6 +1752,58 @@ def _render_spacer(ctx: RenderContext, block: dict) -> None:
     except (TypeError, ValueError):
         h = 12.0
     ctx.y += max(0, int(round(h * ctx.scale)))
+
+
+def _render_rating_choices(ctx: RenderContext, block: dict) -> None:
+    labels = block.get("labels") or ["忘了", "模糊", "记住"]
+    if not isinstance(labels, list) or not labels:
+        return
+
+    try:
+        selected = int(ctx.get_field(block.get("selected_field", "rating_cursor")) or 0)
+    except (TypeError, ValueError):
+        selected = 0
+    selected %= len(labels)
+
+    font_size = int(block.get("font_size", 14) * ctx.scale)
+    font_key = block.get("font", "noto_serif_regular")
+    if any(has_cjk(str(label)) for label in labels):
+        font_key = _pick_cjk_font(font_key)
+    font = load_font(font_key, font_size)
+
+    margin_x = int(block.get("margin_x", 26) * ctx.scale)
+    gap = int(block.get("gap", 8) * ctx.scale)
+    height = int(block.get("height", 24) * ctx.scale)
+    outline_width = max(1, int(block.get("line_width", 1) * ctx.scale))
+    margin_bottom = int(block.get("margin_bottom", 6) * ctx.scale)
+
+    count = len(labels)
+    total_w = max(20, ctx.available_width - margin_x * 2)
+    chip_w = max(12, (total_w - gap * (count - 1)) // count)
+    y = ctx.y
+    x = ctx.x_offset + margin_x
+
+    for i, raw_label in enumerate(labels):
+        label = str(raw_label)
+        x0 = x + i * (chip_w + gap)
+        x1 = x0 + chip_w
+        y1 = y + height
+        is_selected = i == selected
+        if is_selected:
+            ctx.draw.rectangle([x0, y, x1, y1], fill=EINK_FG)
+            text_fill = EINK_BG
+        else:
+            ctx.draw.rectangle([x0, y, x1, y1], outline=EINK_FG, width=outline_width)
+            text_fill = EINK_FG
+
+        bbox = font.getbbox(label)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        tx = x0 + (chip_w - text_w) // 2 - bbox[0]
+        ty = y + (height - text_h) // 2 - bbox[1]
+        ctx.draw.text((tx, ty), label, fill=text_fill, font=font)
+
+    ctx.y = y + height + margin_bottom
 
 
 def _render_icon_text(ctx: RenderContext, block: dict) -> None:
@@ -3019,6 +3085,7 @@ _BLOCK_RENDERERS["list"] = _render_list
 _BLOCK_RENDERERS["vertical_stack"] = _render_vertical_stack
 _BLOCK_RENDERERS["conditional"] = _render_conditional
 _BLOCK_RENDERERS["spacer"] = _render_spacer
+_BLOCK_RENDERERS["rating_choices"] = _render_rating_choices
 _BLOCK_RENDERERS["icon_text"] = _render_icon_text
 _BLOCK_RENDERERS["weather_icon_text"] = _render_weather_icon_text
 _BLOCK_RENDERERS["two_column"] = _render_two_column
