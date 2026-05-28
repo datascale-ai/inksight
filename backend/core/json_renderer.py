@@ -1776,6 +1776,7 @@ def _render_rating_choices(ctx: RenderContext, block: dict) -> None:
     height = int(block.get("height", 24) * ctx.scale)
     outline_width = max(1, int(block.get("line_width", 1) * ctx.scale))
     margin_bottom = int(block.get("margin_bottom", 6) * ctx.scale)
+    selected_style = str(block.get("selected_style", "fill")).lower()
 
     count = len(labels)
     total_w = max(20, ctx.available_width - margin_x * 2)
@@ -1789,7 +1790,7 @@ def _render_rating_choices(ctx: RenderContext, block: dict) -> None:
         x1 = x0 + chip_w
         y1 = y + height
         is_selected = i == selected
-        if is_selected:
+        if is_selected and selected_style != "cursor":
             ctx.draw.rectangle([x0, y, x1, y1], fill=EINK_FG)
             text_fill = EINK_BG
         else:
@@ -1802,6 +1803,13 @@ def _render_rating_choices(ctx: RenderContext, block: dict) -> None:
         tx = x0 + (chip_w - text_w) // 2 - bbox[0]
         ty = y + (height - text_h) // 2 - bbox[1]
         ctx.draw.text((tx, ty), label, fill=text_fill, font=font)
+        if is_selected and selected_style == "cursor":
+            marker_w = max(6, int(block.get("cursor_width", 12) * ctx.scale))
+            marker_h = max(2, int(block.get("cursor_height", 3) * ctx.scale))
+            marker_gap = max(1, int(block.get("cursor_gap", 2) * ctx.scale))
+            mx0 = x0 + (chip_w - marker_w) // 2
+            my0 = max(y + 1, y1 - marker_h - marker_gap)
+            ctx.draw.rectangle([mx0, my0, mx0 + marker_w, my0 + marker_h], fill=EINK_FG)
 
     ctx.y = y + height + margin_bottom
 

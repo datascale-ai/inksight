@@ -185,6 +185,78 @@ static void copyVocabRegionToImage(const uint8_t *part) {
     }
 }
 
+static bool displayVocabDiffRegion(const uint8_t *newPart, const uint8_t *oldPart) {
+    if (!newPart || !oldPart) return false;
+    int regionH = vocabRegionYEnd - vocabRegionYStart;
+    int minByte = ROW_BYTES;
+    int maxByte = -1;
+    int minRow = regionH;
+    int maxRow = -1;
+
+    for (int row = 0; row < regionH; row++) {
+        const uint8_t *newRow = newPart + row * ROW_BYTES;
+        const uint8_t *oldRow = oldPart + row * ROW_BYTES;
+        for (int byteX = 0; byteX < ROW_BYTES; byteX++) {
+            if (newRow[byteX] == oldRow[byteX]) continue;
+            if (byteX < minByte) minByte = byteX;
+            if (byteX > maxByte) maxByte = byteX;
+            if (row < minRow) minRow = row;
+            if (row > maxRow) maxRow = row;
+        }
+    }
+
+    if (maxByte < minByte || maxRow < minRow) return true;
+
+    int xByte0 = max(0, minByte - 1);
+    int xByte1 = min(ROW_BYTES, maxByte + 2);
+    int y0 = max(0, minRow - 2);
+    int y1 = min(regionH, maxRow + 3);
+    int widthBytes = xByte1 - xByte0;
+    int height = y1 - y0;
+    int refreshX0 = xByte0 * 8;
+    int refreshY0 = vocabRegionYStart + y0;
+    int refreshX1 = xByte1 * 8;
+    int refreshY1 = vocabRegionYStart + y1;
+    int refreshW = refreshX1 - refreshX0;
+    int refreshH = refreshY1 - refreshY0;
+    int areaPctX100 = (refreshW * refreshH * 10000) / max(1, W * H);
+    Serial.printf(
+        "[VOCAB] rating partial rect x=%d y=%d w=%d h=%d area=%d.%02d%% mode=with-old\n",
+        refreshX0,
+        refreshY0,
+        refreshW,
+        refreshH,
+        areaPctX100 / 100,
+        areaPctX100 % 100
+    );
+    size_t patchLen = (size_t)widthBytes * (size_t)height;
+    uint8_t *newPatch = (uint8_t *)malloc(patchLen);
+    uint8_t *oldPatch = (uint8_t *)malloc(patchLen);
+    if (!newPatch || !oldPatch) {
+        if (newPatch) free(newPatch);
+        if (oldPatch) free(oldPatch);
+        epdPartialDisplayWithOld((uint8_t *)newPart, oldPart, 0, vocabRegionYStart, W, vocabRegionYEnd);
+        return true;
+    }
+
+    for (int row = 0; row < height; row++) {
+        memcpy(newPatch + row * widthBytes, newPart + (y0 + row) * ROW_BYTES + xByte0, widthBytes);
+        memcpy(oldPatch + row * widthBytes, oldPart + (y0 + row) * ROW_BYTES + xByte0, widthBytes);
+    }
+
+    epdPartialDisplayWithOld(
+        newPatch,
+        oldPatch,
+        refreshX0,
+        refreshY0,
+        refreshX1,
+        refreshY1
+    );
+    free(newPatch);
+    free(oldPatch);
+    return true;
+}
+
 static bool displayCachedVocabRating(int cursor) {
     if (!vocabRatingParts || vocabRatingPartLen == 0 || !epdSupportsPartialRefresh()) {
         return false;
@@ -204,7 +276,7 @@ static bool displayCachedVocabRating(int cursor) {
 
     uint8_t *newPart = vocabRatingParts + vocabRatingPartLen * cursor;
     copyVocabRegionToImage(newPart);
-    epdPartialDisplayWithOld(newPart, oldPart, 0, vocabRegionYStart, W, vocabRegionYEnd);
+    displayVocabDiffRegion(newPart, oldPart);
     free(oldPart);
     return true;
 }
