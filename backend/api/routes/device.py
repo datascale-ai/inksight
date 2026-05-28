@@ -59,6 +59,22 @@ _device_alerts: dict[str, dict] = {}
 _device_alerts_lock = asyncio.Lock()
 
 
+def _vocab_tts_text(word: str) -> str:
+    text = word.strip()
+    if text and text[-1] not in ".!?;:，。！？；：":
+        return f"{text}."
+    return text
+
+
+def _vocab_tts_fallback_text(word: str) -> str:
+    text = word.strip()
+    if not text:
+        return text
+    if len(text) <= 3 and text.isascii() and any(ch.isalpha() for ch in text):
+        return f"{text}, {text}."
+    return f"The word is {text}."
+
+
 @router.post("/device/{mac}/refresh")
 async def trigger_refresh(
     mac: str,
@@ -178,15 +194,25 @@ async def get_vocab_review_audio(
     if not word or content.get("state") == "empty":
         return Response(status_code=204)
 
+    tts_text = word
     try:
         from api.routes.voice import _resolve_device_voice_runtime_settings
         from core.voice_service import synthesize_prompt_pcm
 
         settings = await _resolve_device_voice_runtime_settings(mac)
-        audio_pcm = await synthesize_prompt_pcm(word, settings=settings)
+        tts_text = _vocab_tts_text(word)
+        audio_pcm = await synthesize_prompt_pcm(tts_text, settings=settings)
+        if not audio_pcm:
+            fallback_tts_text = _vocab_tts_fallback_text(word)
+            if fallback_tts_text and fallback_tts_text != tts_text:
+                tts_text = fallback_tts_text
+                audio_pcm = await synthesize_prompt_pcm(tts_text, settings=settings)
     except Exception as exc:
         logger.exception("[VOCAB] TTS failed for mac=%s word=%s", mac, word)
         return JSONResponse({"error": str(exc)}, status_code=500)
+    if not audio_pcm:
+        logger.warning("[VOCAB] audio TTS returned empty pcm mac=%s word=%s tts_text=%s", mac, word, tts_text)
+        return JSONResponse({"error": "empty_tts_audio", "word": word, "tts_text": tts_text}, status_code=502)
     return Response(content=audio_pcm, media_type="application/octet-stream")
 
 

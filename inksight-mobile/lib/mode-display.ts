@@ -113,6 +113,10 @@ const BUILTIN: Record<string, CatalogRow> = {
     zh: { name: '课程表', tip: '展示今日或本周课程安排' },
     en: { name: 'Timetable', tip: 'Show today or weekly class schedule' },
   },
+  VOCAB_REVIEW: {
+    zh: { name: '背单词', tip: '按词库和每日目标进行单词复习' },
+    en: { name: 'Vocab Review', tip: 'Review vocabulary by deck and daily goal' },
+  },
 };
 
 export function modeDisplayName(modeId: string, locale: 'zh' | 'en', apiFallback: string) {

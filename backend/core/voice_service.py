@@ -89,6 +89,7 @@ VOICE_STREAMING_TTS_SAMPLE_RATE = _env_int("VOICE_STREAMING_TTS_SAMPLE_RATE", 16
 VOICE_STREAMING_TTS_VOLUME = _env_int("VOICE_STREAMING_TTS_VOLUME", 50)
 VOICE_STREAMING_TTS_PITCH = _env_float("VOICE_STREAMING_TTS_PITCH", 1.0)
 VOICE_STREAMING_TTS_MAX_EVENT_BYTES = _env_int("VOICE_STREAMING_TTS_MAX_EVENT_BYTES", 4 * 1024 * 1024)
+VOICE_PROMPT_TTS_FINISH_DELAY_MS = _env_int("VOICE_PROMPT_TTS_FINISH_DELAY_MS", 350)
 
 VOICE_DASHSCOPE_API_KEY = _env_str("VOICE_DASHSCOPE_API_KEY", "")
 VOICE_STT_API_KEY = _env_str("VOICE_STT_API_KEY", "")
@@ -909,7 +910,7 @@ def _split_delta_tts_segments(buffer: str, *, final: bool, idle_break: bool) -> 
 
 async def _synthesize_reply_pcm(reply_text: str, *, settings: VoiceRuntimeSettings) -> bytes:
     started_at = time.perf_counter()
-    bridge = _StreamingTtsBridge(settings=settings)
+    bridge = _StreamingTtsBridge(settings=settings, finish_delay_ms=VOICE_PROMPT_TTS_FINISH_DELAY_MS)
     bridge.start()
     bridge.feed_text(reply_text)
     bridge.finish()
@@ -920,14 +921,17 @@ async def _synthesize_reply_pcm(reply_text: str, *, settings: VoiceRuntimeSettin
             audio_parts.append(chunk)
     pcm = b"".join(audio_parts)
     logger.info("[VOICE_TTS] text=%s pcm_bytes=%d elapsed_ms=%d", _preview_text(reply_text), len(pcm), _ms_since(started_at))
+    if not pcm:
+        logger.warning("[VOICE_TTS] empty pcm text=%s elapsed_ms=%d", _preview_text(reply_text), _ms_since(started_at))
     return pcm
 
 
 class _StreamingTtsBridge:
     """Bridge direct DashScope WebSocket TTS to async."""
 
-    def __init__(self, *, settings: VoiceRuntimeSettings) -> None:
+    def __init__(self, *, settings: VoiceRuntimeSettings, finish_delay_ms: int = 0) -> None:
         self._settings = settings
+        self._finish_delay_ms = max(0, finish_delay_ms)
         self._loop = asyncio.get_running_loop()
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
         self._text_queue: queue.Queue[str | None] = queue.Queue()
@@ -1034,6 +1038,8 @@ class _StreamingTtsBridge:
                 while True:
                     text = await asyncio.to_thread(self._text_queue.get)
                     if text is None:
+                        if send_started and self._finish_delay_ms > 0:
+                            await asyncio.sleep(self._finish_delay_ms / 1000)
                         await ws.send(
                             json.dumps(
                                 {
@@ -1103,7 +1109,9 @@ class _StreamingTtsBridge:
                     if event == "task-failed":
                         finished_event.set()
                         message = json.dumps(payload, ensure_ascii=False)
-                        logger.warning("[VOICE_TTS_STREAM] task-failed (non-fatal): %s", message)
+                        logger.warning("[VOICE_TTS_STREAM] task_failed: %s", message)
+                        if self._first_audio_at <= 0:
+                            raise RuntimeError(f"DashScope TTS task failed before audio: {message}")
                         return
 
             sender_task = asyncio.create_task(_sender())
@@ -1144,9 +1152,16 @@ async def synthesize_prompt_pcm(text: str, settings: VoiceRuntimeSettings | None
     )
     cached = _voice_prompt_cache.get(cache_key)
     if cached is not None:
-        return cached
+        if not cached:
+            logger.warning("[VOICE_TTS] evict empty prompt cache text=%s", _preview_text(text))
+            _voice_prompt_cache.pop(cache_key, None)
+        else:
+            return cached
     audio_pcm = await _synthesize_reply_pcm(text, settings=effective_settings)
-    _voice_prompt_cache[cache_key] = audio_pcm
+    if audio_pcm:
+        _voice_prompt_cache[cache_key] = audio_pcm
+    else:
+        logger.warning("[VOICE_TTS] prompt cache skip empty text=%s", _preview_text(text))
     return audio_pcm
 
 

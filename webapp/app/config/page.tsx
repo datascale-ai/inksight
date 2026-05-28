@@ -465,7 +465,7 @@ interface PendingPreviewConfirm {
   usageSource?: string;
 }
 
-type ParamModalType = "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar" | "calendar" | "timetable";
+type ParamModalType = "quote" | "weather" | "memo" | "countdown" | "habit" | "lifebar" | "calendar" | "timetable" | "vocab";
 interface ParamModalState {
   type: ParamModalType;
   mode: string;
@@ -814,6 +814,8 @@ function ConfigPageInner() {
   );
   const [userAge, setUserAge] = useState(30);
   const [lifeExpectancy, setLifeExpectancy] = useState<100 | 120>(100);
+  const [vocabDeckId, setVocabDeckId] = useState("primary_en");
+  const [vocabDailyLimit, setVocabDailyLimit] = useState(30);
   const [timetableData, setTimetableData] = useState<TimetableData>({
     style: "weekly",
     periods: ["08:00-09:30", "10:00-11:30", "14:00-15:30", "16:00-17:30"],
@@ -1186,7 +1188,7 @@ function ConfigPageInner() {
 
   const requiresParamModal = useCallback((modeId: string) => {
     const m = (modeId || "").toUpperCase();
-    return m === "WEATHER" || m === "MEMO" || m === "MY_QUOTE" || m === "COUNTDOWN" || m === "HABIT" || m === "LIFEBAR" || m === "CALENDAR" || m === "TIMETABLE";
+    return m === "WEATHER" || m === "MEMO" || m === "MY_QUOTE" || m === "COUNTDOWN" || m === "HABIT" || m === "LIFEBAR" || m === "CALENDAR" || m === "TIMETABLE" || m === "VOCAB_REVIEW";
   }, []);
 
   const openParamModal = useCallback((modeId: string, action: "preview" | "apply") => {
@@ -1248,7 +1250,14 @@ function ConfigPageInner() {
       setParamModal({ type: "timetable", mode: m, action });
       return;
     }
-  }, [memoText, modeOverrides]);
+    if (m === "VOCAB_REVIEW") {
+      const ov = modeOverrides[m] || {};
+      setVocabDeckId(String(ov.deck_id || "primary_en"));
+      setVocabDailyLimit(Number(ov.daily_limit || 30));
+      setParamModal({ type: "vocab", mode: m, action });
+      return;
+    }
+  }, [modeOverrides]);
 
   const clearModeOverride = useCallback((modeId: string) => {
     setModeOverrides((prev) => {
@@ -2179,6 +2188,81 @@ function ConfigPageInner() {
       }
     }
   }, [clearModeOverride, handlePreview, selectedModes, showToast, toggleMode, tr, updateModeOverride]);
+
+  const saveVocabReviewSettings = useCallback(async (modeId: string, override: ModeOverride) => {
+    if (!mac) {
+      showToast(tr("请先完成刷机和配网以获取设备 MAC", "Please flash and provision to get device MAC"), "error");
+      return;
+    }
+    if (macAccessDenied) {
+      showToast(tr("你无权配置该设备", "No permission to configure this device"), "error");
+      return;
+    }
+
+    const normalizedModeId = modeId.toUpperCase();
+    const nextModeOverrides = {
+      ...modeOverrides,
+      [normalizedModeId]: sanitizeModeOverride({
+        ...(modeOverrides[normalizedModeId] || {}),
+        ...override,
+      }),
+    };
+    const normalizedModeOverrides: Record<string, ModeOverride> = Object.fromEntries(
+      Object.entries(nextModeOverrides)
+        .map(([id, ov]) => [id.toUpperCase(), sanitizeModeOverride(ov)] as const)
+        .filter(([, ov]) => Object.keys(ov).length > 0),
+    );
+
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        mac,
+        modes: Array.from(selectedModes),
+        refreshStrategy: strategy,
+        refreshInterval: refreshMin,
+        ...currentLocation,
+        modeLanguage,
+        contentTone,
+        characterTones,
+        modeOverrides: normalizedModeOverrides,
+        memoText,
+        is_focus_listening: isFocusListening,
+        always_active: alwaysActive,
+        timeSlotRules,
+      };
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setModeOverrides(normalizedModeOverrides);
+      setParamModal(null);
+      showToast(tr("背单词设置已保存", "Vocab review settings saved"), "success");
+    } catch {
+      showToast(tr("保存失败", "Save failed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    alwaysActive,
+    characterTones,
+    contentTone,
+    currentLocation,
+    isFocusListening,
+    mac,
+    macAccessDenied,
+    memoText,
+    modeLanguage,
+    modeOverrides,
+    refreshMin,
+    sanitizeModeOverride,
+    selectedModes,
+    showToast,
+    strategy,
+    timeSlotRules,
+    tr,
+  ]);
 
   const handlePreviewFromSettings = (addToCarousel: boolean) => {
     if (!settingsMode) return;
@@ -3629,6 +3713,8 @@ function ConfigPageInner() {
                   ? tr("日历提醒", "Calendar Reminders")
                   : paramModal.type === "timetable"
                   ? tr("课程表设置", "Timetable Settings")
+                  : paramModal.type === "vocab"
+                  ? tr("背单词设置", "Vocab Review Settings")
                   : tr("人生进度条", "Life Progress")}
               </div>
               <button className="text-ink-light hover:text-ink" onClick={() => setParamModal(null)}>
@@ -4056,6 +4142,73 @@ function ConfigPageInner() {
                       variant="outline"
                     >
                       {tr("预览课程表", "Preview Timetable")}
+                    </Button>
+                  </div>
+                </>
+              ) : paramModal.type === "vocab" ? (
+                <>
+                  <div className="text-xs text-ink-light mb-3">
+                    {tr(
+                      "选择词库并设置每日目标。保存后，下次进入背词模式会使用新的设置。",
+                      "Choose a deck and set the daily goal. The next vocab review session will use the saved settings.",
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-ink-light mb-1">{tr("词库", "Deck")}</label>
+                      <select
+                        value={vocabDeckId}
+                        onChange={(e) => setVocabDeckId(e.target.value)}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      >
+                        <option value="primary_en">{tr("小学英语", "Primary English")}</option>
+                        <option value="middle_school_en">{tr("初中英语", "Middle School English")}</option>
+                        <option value="high_school_en">{tr("高中英语", "High School English")}</option>
+                        <option value="cet4_en">{tr("四级词汇", "CET-4")}</option>
+                        <option value="cet6_en">{tr("六级词汇", "CET-6")}</option>
+                        <option value="ielts_en">{tr("雅思词汇", "IELTS")}</option>
+                        <option value="toefl_en">{tr("托福词汇", "TOEFL")}</option>
+                        <option value="core_en">{tr("核心英语", "Core English")}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-ink-light mb-1">{tr("每日目标", "Daily Goal")}</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={vocabDailyLimit}
+                        onChange={(e) => setVocabDailyLimit(Math.max(1, Math.min(200, Number(e.target.value) || 30)))}
+                        className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-3">
+                    <Button
+                      onClick={() =>
+                        saveVocabReviewSettings(paramModal.mode, {
+                          deck_id: "primary_en",
+                          daily_limit: 30,
+                          new_cards_per_day: 30,
+                        } as ModeOverride)
+                      }
+                      disabled={saving}
+                      variant="outline"
+                    >
+                      {tr("保存默认", "Save Default")}
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        saveVocabReviewSettings(paramModal.mode, {
+                          deck_id: vocabDeckId,
+                          daily_limit: vocabDailyLimit,
+                          new_cards_per_day: vocabDailyLimit,
+                        } as ModeOverride)
+                      }
+                      disabled={saving}
+                      variant="outline"
+                    >
+                      {saving ? tr("保存中...", "Saving...") : tr("保存设置", "Save Settings")}
                     </Button>
                   </div>
                 </>

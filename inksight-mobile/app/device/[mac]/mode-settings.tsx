@@ -17,6 +17,7 @@ import { theme } from '@/lib/theme';
 
 type CountdownEvent = { name: string; date: string; type?: string };
 type Reminder = { month: string; day: string; text: string };
+type VocabDeck = { id: string; labelKey: string; fallback: string };
 
 const DEFAULT_PERIODS = ['08:00-09:30', '10:00-11:30', '14:00-15:30', '16:00-17:30'];
 const DEFAULT_COURSES: Record<string, string> = {
@@ -27,6 +28,24 @@ const DEFAULT_COURSES: Record<string, string> = {
   '4-0': '操作系统/C102',
 };
 const WEEKDAYS = 5;
+const DEFAULT_VOCAB_DECK_ID = 'primary_en';
+const DEFAULT_VOCAB_DAILY_LIMIT = 30;
+const VOCAB_DECKS: VocabDeck[] = [
+  { id: 'primary_en', labelKey: 'ms.vocabDeckPrimary', fallback: 'Primary English' },
+  { id: 'middle_school_en', labelKey: 'ms.vocabDeckMiddle', fallback: 'Middle School English' },
+  { id: 'high_school_en', labelKey: 'ms.vocabDeckHigh', fallback: 'High School English' },
+  { id: 'cet4_en', labelKey: 'ms.vocabDeckCet4', fallback: 'CET-4' },
+  { id: 'cet6_en', labelKey: 'ms.vocabDeckCet6', fallback: 'CET-6' },
+  { id: 'ielts_en', labelKey: 'ms.vocabDeckIelts', fallback: 'IELTS' },
+  { id: 'toefl_en', labelKey: 'ms.vocabDeckToefl', fallback: 'TOEFL' },
+  { id: 'core_en', labelKey: 'ms.vocabDeckCore', fallback: 'Core English' },
+];
+
+function clampVocabDailyLimit(raw: string) {
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return DEFAULT_VOCAB_DAILY_LIMIT;
+  return Math.max(1, Math.min(200, parsed));
+}
 
 export default function ModeSettingsScreen() {
   const { locale, t } = useI18n();
@@ -44,7 +63,7 @@ export default function ModeSettingsScreen() {
   });
   const modesQuery = useQuery({
     queryKey: ['mode-catalog-ms'],
-    queryFn: listModes,
+    queryFn: () => listModes({ token: token || undefined, mac: mac || undefined }),
   });
 
   const existing = configQuery.data?.modeOverrides?.[modeId] ?? {};
@@ -73,6 +92,10 @@ export default function ModeSettingsScreen() {
   // --- MY_ADAPTIVE ---
   const [adaptiveImageUrls, setAdaptiveImageUrls] = useState<string[]>([]);
   const [adaptiveUploading, setAdaptiveUploading] = useState(false);
+
+  // --- VOCAB_REVIEW ---
+  const [vocabDeckId, setVocabDeckId] = useState(DEFAULT_VOCAB_DECK_ID);
+  const [vocabDailyLimit, setVocabDailyLimit] = useState(String(DEFAULT_VOCAB_DAILY_LIMIT));
 
   useEffect(() => {
     if (!configQuery.data) return;
@@ -117,6 +140,9 @@ export default function ModeSettingsScreen() {
       } else {
         setAdaptiveImageUrls([]);
       }
+    } else if (modeId === 'VOCAB_REVIEW') {
+      setVocabDeckId(String(ov.deck_id || DEFAULT_VOCAB_DECK_ID));
+      setVocabDailyLimit(String(ov.daily_limit || DEFAULT_VOCAB_DAILY_LIMIT));
     } else {
       const sv: Record<string, string> = {};
       for (const [k, v] of Object.entries(ov)) {
@@ -155,6 +181,11 @@ export default function ModeSettingsScreen() {
     } else if (modeId === 'MY_ADAPTIVE') {
       base.image_urls = [...adaptiveImageUrls];
       base.image_url = adaptiveImageUrls[0] || '';
+    } else if (modeId === 'VOCAB_REVIEW') {
+      const dailyLimit = clampVocabDailyLimit(vocabDailyLimit);
+      base.deck_id = VOCAB_DECKS.some((deck) => deck.id === vocabDeckId) ? vocabDeckId : DEFAULT_VOCAB_DECK_ID;
+      base.daily_limit = dailyLimit;
+      base.new_cards_per_day = dailyLimit;
     } else {
       for (const [k, v] of Object.entries(schemaValues)) {
         if (v.trim()) base[k] = v.trim();
@@ -542,7 +573,52 @@ export default function ModeSettingsScreen() {
     );
   }
 
-  const hasCustomEditor = ['WEATHER', 'MEMO', 'COUNTDOWN', 'CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE'].includes(modeId);
+  function renderVocabReview() {
+    return (
+      <InkCard>
+        <InkText style={styles.label}>{t('ms.vocabDeck')}</InkText>
+        <InkText dimmed style={styles.helpText}>{t('ms.vocabHint')}</InkText>
+        <View style={styles.deckGrid}>
+          {VOCAB_DECKS.map((deck) => {
+            const active = vocabDeckId === deck.id;
+            return (
+              <InkButton
+                key={deck.id}
+                label={t(deck.labelKey) === deck.labelKey ? deck.fallback : t(deck.labelKey)}
+                variant={active ? 'primary' : 'secondary'}
+                onPress={() => setVocabDeckId(deck.id)}
+                style={styles.deckButton}
+              />
+            );
+          })}
+        </View>
+
+        <View style={styles.fieldGap}>
+          <InkText style={styles.label}>{t('ms.vocabDailyGoal')}</InkText>
+          <TextInput
+            style={styles.input}
+            value={vocabDailyLimit}
+            onChangeText={(v) => setVocabDailyLimit(v.replace(/\D/g, '').slice(0, 3))}
+            onBlur={() => setVocabDailyLimit(String(clampVocabDailyLimit(vocabDailyLimit)))}
+            keyboardType="number-pad"
+            placeholder="30"
+            placeholderTextColor={theme.colors.tertiary}
+          />
+        </View>
+
+        <InkButton
+          label={t('ms.vocabSaveDefault')}
+          variant="ghost"
+          onPress={() => {
+            setVocabDeckId(DEFAULT_VOCAB_DECK_ID);
+            setVocabDailyLimit(String(DEFAULT_VOCAB_DAILY_LIMIT));
+          }}
+        />
+      </InkCard>
+    );
+  }
+
+  const hasCustomEditor = ['WEATHER', 'MEMO', 'COUNTDOWN', 'CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE', 'VOCAB_REVIEW'].includes(modeId);
 
   return (
     <AppScreen>
@@ -555,6 +631,7 @@ export default function ModeSettingsScreen() {
       {modeId === 'CALENDAR' && renderCalendar()}
       {modeId === 'TIMETABLE' && renderTimetable()}
       {modeId === 'MY_ADAPTIVE' && renderAdaptive()}
+      {modeId === 'VOCAB_REVIEW' && renderVocabReview()}
       {!hasCustomEditor && (schema.length > 0 ? renderGenericSchema() : (
         <InkCard><InkText dimmed>{t('device.modeSettingsNoSchema')}</InkText></InkCard>
       ))}
@@ -594,6 +671,22 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 10,
+  },
+  fieldGap: {
+    marginTop: 14,
+  },
+  helpText: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  deckGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  deckButton: {
+    marginBottom: 0,
   },
   rowBetween: {
     flexDirection: 'row',

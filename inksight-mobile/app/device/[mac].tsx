@@ -101,8 +101,8 @@ export default function DeviceDetailScreen() {
     enabled: Boolean(mac && token),
   });
   const modesQuery = useQuery({
-    queryKey: ['mode-catalog-detail'],
-    queryFn: listModes,
+    queryKey: ['mode-catalog-detail', mac, token],
+    queryFn: () => listModes({ token: token || undefined, mac: mac || undefined }),
   });
   const widgetQuery = useQuery({
     queryKey: ['device-widget', mac, token, selectedWidgetMode],
@@ -248,7 +248,7 @@ export default function DeviceDetailScreen() {
     return t('device.widgetEmpty');
   }
 
-  const HARDCODED_CONFIGURABLE = ['CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE'];
+  const HARDCODED_CONFIGURABLE = ['CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE', 'VOCAB_REVIEW'];
 
   function isModeConfigurable(modeId: string): boolean {
     if (HARDCODED_CONFIGURABLE.includes(modeId.toUpperCase())) return true;

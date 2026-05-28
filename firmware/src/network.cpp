@@ -193,12 +193,15 @@ static bool readExact(WiFiClient *s, uint8_t *buf, int len) {
     int got = 0;
     unsigned long t0 = millis();
     while (got < len) {
-        if (!s->connected() && !s->available()) {
-            Serial.printf("readExact: disconnected %d/%d\n", got, len);
-            return false;
-        }
         if (millis() - t0 > 10000) {
-            Serial.printf("readExact: timeout %d/%d\n", got, len);
+            Serial.printf(
+                "readExact: timeout %d/%d connected=%d available=%d wifi=%d\n",
+                got,
+                len,
+                s->connected() ? 1 : 0,
+                s->available(),
+                WiFi.status()
+            );
             return false;
         }
         int avail = s->available();
@@ -206,6 +209,8 @@ static bool readExact(WiFiClient *s, uint8_t *buf, int len) {
             int r = s->readBytes(buf + got, min(avail, len - got));
             got += r;
             t0 = millis();  // Reset timeout on progress
+        } else {
+            delay(1);
         }
     }
     return true;
@@ -589,22 +594,33 @@ bool fetchBMP(bool nextMode, bool *isFallback, String *renderedModeIdOut) {
 
     bool useSSL = cfgServer.startsWith("https://");
     for (int attempt = 0; attempt < 2; attempt++) {
-        if (checkAbort()) return false;
+        if (checkAbort()) {
+            Serial.println("[RENDER] fetchBMP aborted before HTTP");
+            return false;
+        }
         WiFiClient plainClient;
         WiFiClientSecure secClient;
         HTTPClient http;
+        bool begun = false;
         if (useSSL) {
             secClient.setCACert(ROOT_CA);
-            http.begin(secClient, url);
+            begun = http.begin(secClient, url);
         } else {
-            http.begin(plainClient, url);
+            begun = http.begin(plainClient, url);
         }
+        if (!begun) {
+            Serial.println("[RENDER] http.begin failed");
+            http.end();
+            return false;
+        }
+        http.setReuse(false);
         http.setTimeout(HTTP_TIMEOUT);
         http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
         const char *headerKeys[] = {"X-Content-Fallback", "X-Refresh-Minutes", "X-Mode-Id"};
         http.collectHeaders(headerKeys, 3);
 
         http.addHeader("Accept-Encoding", "identity");
+        http.addHeader("Connection", "close");
         if (cfgDeviceToken.length() > 0) {
             http.addHeader("X-Device-Token", cfgDeviceToken);
         }
@@ -1091,6 +1107,7 @@ bool fetchVocabAudio(AudioChunkCallback onChunk, void *userData) {
         }
 
         int code = http.GET();
+        int contentLen = http.getSize();
         if (code == 204) {
             Serial.println("[VOCAB] audio -> 204 no content");
             http.end();
@@ -1099,15 +1116,30 @@ bool fetchVocabAudio(AudioChunkCallback onChunk, void *userData) {
         if (code == 200) {
             WiFiClient *stream = http.getStreamPtr();
             uint8_t buffer[1024];
+            size_t totalRead = 0;
+            unsigned long lastDataAt = millis();
             while (http.connected() || stream->available()) {
                 int available = stream->available();
                 if (available <= 0) {
+                    if (contentLen >= 0 && totalRead >= (size_t)contentLen) {
+                        break;
+                    }
+                    if (millis() - lastDataAt > 3000) {
+                        Serial.printf("[VOCAB] audio read timeout total=%u expected=%d connected=%d\n",
+                                      (unsigned int)totalRead, contentLen, http.connected() ? 1 : 0);
+                        break;
+                    }
                     delay(1);
                     continue;
                 }
                 int readLen = stream->readBytes(buffer, min(available, (int)sizeof(buffer)));
                 if (readLen > 0) {
+                    totalRead += (size_t)readLen;
+                    lastDataAt = millis();
                     onChunk(buffer, (size_t)readLen, userData);
+                }
+                if (contentLen >= 0 && totalRead >= (size_t)contentLen) {
+                    break;
                 }
             }
             http.end();

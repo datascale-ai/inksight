@@ -264,7 +264,7 @@ async def _select_next_item(db, mac: str, deck_id: str, daily_limit: int, new_ca
         FROM vocab_items vi
         LEFT JOIN vocab_progress vp ON vp.vocab_item_id = vi.id AND vp.mac = ?
         WHERE vi.deck_id = ? AND vp.vocab_item_id IS NULL
-        ORDER BY vi.difficulty ASC, vi.id ASC
+        ORDER BY RANDOM()
         LIMIT 1
         """,
         (mac, deck_id),
