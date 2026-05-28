@@ -2870,10 +2870,10 @@ def _render_timetable_daily(ctx: RenderContext, block: dict) -> None:
         is_current = slot.get(current_field, False)
         loc = str(slot.get(location_field, ""))
 
-        if is_current and ctx.colors >= 3:
+        if is_current:
             ctx.draw.rectangle(
                 [x0, ctx.y, x0 + grid_w, ctx.y + row_h - 1],
-                fill=highlight_color,
+                fill=highlight_color if ctx.colors >= 3 else EINK_FG,
             )
             text_color = current_text_color
         else:
@@ -2991,7 +2991,8 @@ def _render_timetable_weekly(ctx: RenderContext, block: dict) -> None:
         row_h = max(int(16 * ctx.scale), avail_h // max(n_periods, 1))
 
     time_col_w = int(grid_w * time_col_ratio)
-    day_col_w = (grid_w - time_col_w) // 5
+    day_count = max(1, len(weekdays))
+    day_col_w = (grid_w - time_col_w) // day_count
 
     highlight_color = _resolve_named_color(ctx, block.get("highlight_color", "red"), EINK_FG)
     accent_color = _resolve_named_color(ctx, block.get("accent_color", "yellow"), EINK_FG)
@@ -2999,12 +3000,24 @@ def _render_timetable_weekly(ctx: RenderContext, block: dict) -> None:
     show_location = bool(block.get("show_location", True))
 
     hx = x0 + time_col_w
-    for di, wd_label in enumerate(weekdays[:5]):
-        cx = hx + di * day_col_w + day_col_w // 2
+    for di, wd_label in enumerate(weekdays[:day_count]):
+        cell_x = hx + di * day_col_w
+        cx = cell_x + day_col_w // 2
         bb = header_font.getbbox(wd_label)
         tw = bb[2] - bb[0]
         tx = cx - tw // 2
         color = highlight_color if di == current_day else EINK_FG
+        if di == current_day and ctx.colors < 3:
+            ctx.draw.rectangle(
+                [
+                    cell_x + 1,
+                    ctx.y,
+                    cell_x + day_col_w - 2,
+                    ctx.y + header_h - 1,
+                ],
+                fill=EINK_FG,
+            )
+            color = EINK_BG
         ctx.draw.text((tx, ctx.y), wd_label, fill=color, font=header_font)
     ctx.y += header_h
     ctx.draw.line([(x0, ctx.y), (x0 + grid_w, ctx.y)], fill=EINK_FG, width=1)
@@ -3044,23 +3057,24 @@ def _render_timetable_weekly(ctx: RenderContext, block: dict) -> None:
 
         row_data = grid[pi] if pi < len(grid) else []
 
-        for di in range(5):
+        for di in range(day_count):
             cell_x = x0 + time_col_w + di * day_col_w
             cell_text = str(row_data[di]) if di < len(row_data) else ""
 
             is_current_cell = (di == current_day and pi == current_period)
             highlight_col = (not has_time_range and di == current_day)
+            highlight_today_course_bw = (ctx.colors < 3 and di == current_day and bool(cell_text))
 
-            if is_current_cell and ctx.colors >= 3:
+            if is_current_cell or highlight_today_course_bw:
                 ctx.draw.rectangle(
                     [cell_x + 1, ctx.y, cell_x + day_col_w - 1, ctx.y + row_h - 1],
-                    fill=highlight_color,
+                    fill=highlight_color if ctx.colors >= 3 else EINK_FG,
                 )
                 text_color = current_text_color
-            elif highlight_col and ctx.colors >= 3:
+            elif highlight_col:
                 ctx.draw.rectangle(
                     [cell_x + 1, ctx.y, cell_x + day_col_w - 1, ctx.y + row_h - 1],
-                    fill=highlight_color,
+                    fill=highlight_color if ctx.colors >= 3 else EINK_FG,
                 )
                 text_color = current_text_color
             else:

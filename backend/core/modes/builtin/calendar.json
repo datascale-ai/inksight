@@ -66,7 +66,7 @@
         "type": "calendar_grid",
         "font_size": 16,
         "header_font_size": 11,
-        "sub_font_size": 7,
+        "sub_font_size": 9,
         "reminder_font": "noto_serif_light",
         "reminder_font_size": 9,
         "header_gap": 5,

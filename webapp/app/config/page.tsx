@@ -1243,6 +1243,7 @@ function ConfigPageInner() {
       if (existing.periods && existing.courses) {
         setTimetableData({
           style: (existing.style as "daily" | "weekly") || "daily",
+          weekdays: Array.isArray(existing.weekdays) ? existing.weekdays as string[] : undefined,
           periods: existing.periods as string[],
           courses: existing.courses as Record<string, string>,
         });
@@ -4134,6 +4135,7 @@ function ConfigPageInner() {
                       onClick={() => {
                         commitModalAction(paramModal.mode, paramModal.action, {
                           style: timetableData.style,
+                          weekdays: timetableData.weekdays,
                           periods: timetableData.periods,
                           courses: timetableData.courses,
                         } as ModeOverride);

@@ -6,6 +6,7 @@ import { Plus, Minus, RotateCcw } from "lucide-react";
 
 export interface TimetableData {
   style: "daily" | "weekly";
+  weekdays?: string[];
   periods: string[];
   courses: Record<string, string>;
 }
@@ -89,7 +90,8 @@ export function TimetableEditor({ data, onChange, tr }: TimetableEditorProps) {
   const [draft, setDraft] = useState("");
 
   const isEn = tr("zh", "en") === "en";
-  const weekdays = isEn ? WEEKDAYS_EN : WEEKDAYS_ZH;
+  const defaultWeekdays = isEn ? WEEKDAYS_EN : WEEKDAYS_ZH;
+  const weekdays = (data.weekdays && data.weekdays.length > 0) ? data.weekdays : defaultWeekdays;
   const templateType = useMemo(() => detectTemplate(data), [data]);
 
   const getTemplate = useCallback((t: TemplateType) => {
@@ -117,6 +119,12 @@ export function TimetableEditor({ data, onChange, tr }: TimetableEditorProps) {
     onChange({ ...data, periods: next });
   }, [data, onChange]);
 
+  const setWeekdayLabel = useCallback((idx: number, value: string) => {
+    const next = [...weekdays];
+    next[idx] = value;
+    onChange({ ...data, weekdays: next });
+  }, [data, onChange, weekdays]);
+
   const addPeriod = useCallback(() => {
     const n = data.periods.length + 1;
     const label = templateType === "k12" ? (isEn ? `P${n}` : `第${n}节`) : `${8 + (n - 1) * 2}:00`;
@@ -127,11 +135,27 @@ export function TimetableEditor({ data, onChange, tr }: TimetableEditorProps) {
     if (data.periods.length <= 1) return;
     const pi = data.periods.length - 1;
     const next = { ...data.courses };
-    for (let di = 0; di < 5; di++) {
+    for (let di = 0; di < weekdays.length; di++) {
       delete next[`${di}-${pi}`];
     }
     onChange({ ...data, periods: data.periods.slice(0, -1), courses: next });
-  }, [data, onChange]);
+  }, [data, onChange, weekdays.length]);
+
+  const addWeekday = useCallback(() => {
+    const n = weekdays.length;
+    const label = defaultWeekdays[n] || (isEn ? `Day ${n + 1}` : `列${n + 1}`);
+    onChange({ ...data, weekdays: [...weekdays, label] });
+  }, [data, defaultWeekdays, isEn, onChange, weekdays]);
+
+  const removeWeekday = useCallback(() => {
+    if (weekdays.length <= 1) return;
+    const di = weekdays.length - 1;
+    const next = { ...data.courses };
+    for (let pi = 0; pi < data.periods.length; pi++) {
+      delete next[`${di}-${pi}`];
+    }
+    onChange({ ...data, weekdays: weekdays.slice(0, -1), courses: next });
+  }, [data, onChange, weekdays]);
 
   const resetTemplate = useCallback(() => {
     onChange(getTemplate(templateType));
@@ -189,7 +213,11 @@ export function TimetableEditor({ data, onChange, tr }: TimetableEditorProps) {
               </th>
               {weekdays.map((wd, i) => (
                 <th key={i} className="border border-ink/20 px-1 py-1 text-center">
-                  {wd}
+                  <input
+                    value={wd}
+                    onChange={(e) => setWeekdayLabel(i, e.target.value)}
+                    className="w-full min-w-[42px] bg-transparent text-center text-xs font-semibold outline-none"
+                  />
                 </th>
               ))}
             </tr>
@@ -265,10 +293,14 @@ export function TimetableEditor({ data, onChange, tr }: TimetableEditorProps) {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={addPeriod} className="h-7 px-2 text-xs">
           <Plus className="w-3 h-3 mr-1" />
           {tr("添加节次", "Add Period")}
+        </Button>
+        <Button variant="outline" size="sm" onClick={addWeekday} className="h-7 px-2 text-xs">
+          <Plus className="w-3 h-3 mr-1" />
+          {tr("添加列", "Add Column")}
         </Button>
         <Button
           variant="outline"
@@ -279,6 +311,16 @@ export function TimetableEditor({ data, onChange, tr }: TimetableEditorProps) {
         >
           <Minus className="w-3 h-3 mr-1" />
           {tr("删除末行", "Remove Last")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={removeWeekday}
+          disabled={weekdays.length <= 1}
+          className="h-7 px-2 text-xs"
+        >
+          <Minus className="w-3 h-3 mr-1" />
+          {tr("删除末列", "Remove Column")}
         </Button>
         <Button variant="ghost" size="sm" onClick={resetTemplate} className="h-7 px-2 text-xs ml-auto">
           <RotateCcw className="w-3 h-3 mr-1" />

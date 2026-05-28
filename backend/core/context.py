@@ -1181,6 +1181,15 @@ async def get_weather_forecast(
     params = {
         "latitude": lat,
         "longitude": lon,
+        "current": ",".join(
+            [
+                "temperature_2m",
+                "weather_code",
+                "relative_humidity_2m",
+                "wind_direction_10m",
+                "wind_speed_10m",
+            ]
+        ),
         # 预报字段：温度、天气代码、湿度、主导风向、风速、日出日落时间
         "daily": ",".join(
             [
@@ -1204,6 +1213,7 @@ async def get_weather_forecast(
             else OPEN_METEO_URL
         )
         data = await _fetch_weather_data(forecast_url, params)
+        current = data.get("current", {}) if isinstance(data.get("current"), dict) else {}
         daily = data.get("daily", {})
         dates = daily.get("time", [])
         t_max = daily.get("temperature_2m_max", [])
@@ -1268,9 +1278,11 @@ async def get_weather_forecast(
         today = full_forecast[0] if full_forecast else {}
         today_high = today.get("temp_max", "--")
         today_low = today.get("temp_min", "--")
-        today_temp = today_high  # 大号数字使用最高温
-        today_desc = today.get("desc", "")
-        today_code = today.get("code", -1)
+        current_temp = _safe_int(current.get("temperature_2m"))
+        current_code = _safe_int(current.get("weather_code"))
+        today_temp = str(current_temp) if current_temp is not None else today_high
+        today_code = current_code if current_code is not None else today.get("code", -1)
+        today_desc = _weather_code_to_desc(today_code, language=language)
 
         if today_low != "--" and today_high != "--":
             today_range = f"{today_low}°C / {today_high}°C"
@@ -1279,7 +1291,10 @@ async def get_weather_forecast(
 
         # 今天的湿度
         today_humidity = "--"
-        if humidities:
+        current_humidity = _safe_int(current.get("relative_humidity_2m"))
+        if current_humidity is not None:
+            today_humidity = str(current_humidity)
+        elif humidities:
             try:
                 today_humidity = str(int(round(humidities[0])))
             except (TypeError, ValueError):
@@ -1300,17 +1315,25 @@ async def get_weather_forecast(
                 return ""
 
         today_wind_dir = ""
-        if wind_dirs:
+        current_wind_dir = current.get("wind_direction_10m")
+        if current_wind_dir is not None:
+            try:
+                today_wind_dir = _deg_to_wind_dir(float(current_wind_dir))
+            except (TypeError, ValueError):
+                today_wind_dir = ""
+        elif wind_dirs:
             try:
                 today_wind_dir = _deg_to_wind_dir(float(wind_dirs[0]))
             except (TypeError, ValueError):
                 today_wind_dir = ""
 
         today_wind_level = ""
-        if wind_speeds:
+        current_wind_speed = current.get("wind_speed_10m")
+        wind_speed_for_level = current_wind_speed if current_wind_speed is not None else (wind_speeds[0] if wind_speeds else None)
+        if wind_speed_for_level is not None:
             try:
                 # 这里使用风速近似为等级（粗略）：m/s 四舍五入作为“几级”
-                level = max(1, min(12, int(round(float(wind_speeds[0]) / 2))))  # 简单映射
+                level = max(1, min(12, int(round(float(wind_speed_for_level) / 2))))  # 简单映射
                 today_wind_level = f"Lv {level}" if language == "en" else f"{level}级"
             except (TypeError, ValueError):
                 today_wind_level = ""

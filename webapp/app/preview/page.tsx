@@ -346,6 +346,7 @@ export default function ExperiencePage() {
       }
       if (targetMode.toUpperCase() === "TIMETABLE" && !override) {
         mergedOverride.style = timetableData.style;
+        mergedOverride.weekdays = timetableData.weekdays;
         mergedOverride.periods = timetableData.periods;
         mergedOverride.courses = timetableData.courses;
       }
@@ -1278,6 +1279,7 @@ export default function ExperiencePage() {
                         setModal(null);
                         await handlePreview(modal.modeId, {
                           style: timetableData.style,
+                          weekdays: timetableData.weekdays,
                           periods: timetableData.periods,
                           courses: timetableData.courses,
                         });

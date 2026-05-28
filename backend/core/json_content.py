@@ -1383,8 +1383,14 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
             weekdays_short = ["一", "二", "三", "四", "五"]
 
+        custom_weekdays = mode_settings.get("weekdays")
+        if isinstance(custom_weekdays, list):
+            cleaned_weekdays = [str(item).strip() for item in custom_weekdays if str(item).strip()]
+            if cleaned_weekdays:
+                weekdays_short = cleaned_weekdays[:7]
+
         wd = now.weekday()
-        current_day = wd if wd < 5 else -1
+        current_day = wd if wd < len(weekdays_short) else -1
 
         current_period = -1
         for pi, p_label in enumerate(periods):
@@ -1401,7 +1407,7 @@ async def _generate_computed_content(mode_def: dict, content_cfg: dict, fallback
             grid: list[list[str]] = []
             for pi in range(len(periods)):
                 row = []
-                for di in range(5):
+                for di in range(len(weekdays_short)):
                     row.append(str(courses.get(f"{di}-{pi}", "")))
                 grid.append(row)
             if is_en:

@@ -17,6 +17,7 @@ import { theme } from '@/lib/theme';
 
 type CountdownEvent = { name: string; date: string; type?: string };
 type Reminder = { month: string; day: string; text: string };
+type TimetableTemplate = 'university' | 'k12' | null;
 type VocabDeck = { id: string; labelKey: string; fallback: string };
 
 const DEFAULT_PERIODS = ['08:00-09:30', '10:00-11:30', '14:00-15:30', '16:00-17:30'];
@@ -27,7 +28,20 @@ const DEFAULT_COURSES: Record<string, string> = {
   '3-1': '概率论/A201', '3-3': '毛概/D405',
   '4-0': '操作系统/C102',
 };
-const WEEKDAYS = 5;
+const K12_PERIODS = ['第1节', '第2节', '第3节', '第4节', '第5节', '第6节', '第7节', '第8节'];
+const K12_COURSES: Record<string, string> = {
+  '0-0': '语文', '0-1': '数学', '0-2': '英语', '0-3': '物理',
+  '0-4': '化学', '0-5': '生物', '0-6': '历史', '0-7': '数学',
+  '1-0': '数学', '1-1': '语文', '1-2': '物理', '1-3': '化学',
+  '1-4': '英语', '1-5': '政治', '1-6': '地理', '1-7': '语文',
+  '2-0': '英语', '2-1': '物理', '2-2': '数学', '2-3': '语文',
+  '2-4': '生物', '2-5': '化学', '2-6': '政治', '2-7': '物理',
+  '3-0': '物理', '3-1': '化学', '3-2': '语文', '3-3': '数学',
+  '3-4': '历史', '3-5': '地理', '3-6': '英语', '3-7': '化学',
+  '4-0': '化学', '4-1': '英语', '4-2': '生物', '4-3': '历史',
+  '4-4': '语文', '4-5': '数学', '4-6': '地理', '4-7': '英语',
+};
+const DEFAULT_WEEKDAY_COUNT = 5;
 const DEFAULT_VOCAB_DECK_ID = 'primary_en';
 const DEFAULT_VOCAB_DAILY_LIMIT = 30;
 const VOCAB_DECKS: VocabDeck[] = [
@@ -45,6 +59,16 @@ function clampVocabDailyLimit(raw: string) {
   const parsed = parseInt(raw, 10);
   if (Number.isNaN(parsed)) return DEFAULT_VOCAB_DAILY_LIMIT;
   return Math.max(1, Math.min(200, parsed));
+}
+
+function detectTimetableTemplate(periods: string[]): TimetableTemplate {
+  if (periods.length === K12_PERIODS.length && periods.every((p, i) => p === K12_PERIODS[i])) {
+    return 'k12';
+  }
+  if (periods.length === DEFAULT_PERIODS.length && periods.every((p, i) => p === DEFAULT_PERIODS[i])) {
+    return 'university';
+  }
+  return null;
 }
 
 export default function ModeSettingsScreen() {
@@ -83,6 +107,8 @@ export default function ModeSettingsScreen() {
 
   // --- TIMETABLE ---
   const [ttStyle, setTtStyle] = useState<'daily' | 'weekly'>('weekly');
+  const [timetableTemplate, setTimetableTemplate] = useState<TimetableTemplate>('university');
+  const [weekdays, setWeekdays] = useState<string[]>([]);
   const [periods, setPeriods] = useState<string[]>([...DEFAULT_PERIODS]);
   const [courseGrid, setCourseGrid] = useState<Record<string, string>>({ ...DEFAULT_COURSES });
 
@@ -126,8 +152,11 @@ export default function ModeSettingsScreen() {
       const c = (ov.courses && typeof ov.courses === 'object' && !Array.isArray(ov.courses))
         ? ov.courses as Record<string, string>
         : {};
-      if (p.length > 0 || Object.keys(c).length > 0) {
+      const wd = Array.isArray(ov.weekdays) ? ov.weekdays.map(String).filter((d) => d.trim()) : [];
+      if (p.length > 0 || Object.keys(c).length > 0 || wd.length > 0) {
         setTtStyle(ov.style === 'weekly' ? 'weekly' : 'daily');
+        setTimetableTemplate(detectTimetableTemplate(p));
+        setWeekdays(wd);
         setPeriods(p);
         setCourseGrid(c);
       }
@@ -152,6 +181,15 @@ export default function ModeSettingsScreen() {
     }
   }, [configQuery.data, modeId]);
 
+  function getDefaultWeekdays() {
+    return Array.from({ length: DEFAULT_WEEKDAY_COUNT }, (_, i) => t(`ms.day${i}`));
+  }
+
+  function getEffectiveWeekdays() {
+    const trimmed = weekdays.map((d) => d.trim()).filter(Boolean);
+    return trimmed.length > 0 ? trimmed : getDefaultWeekdays();
+  }
+
   function buildOverride(): Record<string, unknown> {
     const base: Record<string, unknown> = {};
     if (modeId === 'WEATHER') {
@@ -172,6 +210,7 @@ export default function ModeSettingsScreen() {
       base.reminders = rem;
     } else if (modeId === 'TIMETABLE') {
       base.style = ttStyle;
+      base.weekdays = getEffectiveWeekdays();
       base.periods = periods.filter((p) => p.trim());
       const c: Record<string, string> = {};
       for (const [k, v] of Object.entries(courseGrid)) {
@@ -408,26 +447,52 @@ export default function ModeSettingsScreen() {
     );
   }
 
-  function loadTimetableTemplate() {
-    setPeriods([...DEFAULT_PERIODS]);
-    setCourseGrid({ ...DEFAULT_COURSES });
+  function loadTimetableTemplate(template: 'university' | 'k12') {
+    setTimetableTemplate(template);
+    setWeekdays([]);
+    setPeriods(template === 'k12' ? [...K12_PERIODS] : [...DEFAULT_PERIODS]);
+    setCourseGrid(template === 'k12' ? { ...K12_COURSES } : { ...DEFAULT_COURSES });
     setTtStyle('weekly');
   }
 
   function renderTimetable() {
-    const allDayLabels = Array.from({ length: WEEKDAYS }, (_, i) => t(`ms.day${i}`));
+    const allDayLabels = getEffectiveWeekdays();
     const todayIdx = new Date().getDay();
     const todayDayIdx = todayIdx === 0 ? 6 : todayIdx - 1;
     const visibleDays = ttStyle === 'weekly'
-      ? Array.from({ length: WEEKDAYS }, (_, i) => i)
-      : [Math.min(todayDayIdx, WEEKDAYS - 1)];
+      ? allDayLabels.map((_, i) => i)
+      : [Math.min(todayDayIdx, allDayLabels.length - 1)];
+
+    const addWeekday = () => {
+      const next = getEffectiveWeekdays();
+      const n = next.length;
+      const label = n < 7 ? t(`ms.day${n}`) : `${t('ms.weekdays')} ${n + 1}`;
+      setWeekdays([...next, label]);
+    };
+
+    const removeWeekday = (idx: number) => {
+      if (allDayLabels.length <= 1) return;
+      const nextLabels = allDayLabels.filter((_, i) => i !== idx);
+      setWeekdays(nextLabels);
+      setCourseGrid((prev) => {
+        const next: Record<string, string> = {};
+        for (const [key, value] of Object.entries(prev)) {
+          const [diRaw, piRaw] = key.split('-');
+          const di = parseInt(diRaw ?? '', 10);
+          const pi = parseInt(piRaw ?? '', 10);
+          if (Number.isNaN(di) || Number.isNaN(pi) || di === idx) continue;
+          const newDi = di > idx ? di - 1 : di;
+          next[`${newDi}-${pi}`] = value;
+        }
+        return next;
+      });
+    };
 
     return (
       <>
         <InkCard>
           <View style={styles.rowBetween}>
             <InkText style={styles.label}>{t('ms.timetableStyle')}</InkText>
-            <InkButton label={t('ms.loadTemplate')} variant="ghost" onPress={loadTimetableTemplate} />
           </View>
           <View style={styles.row}>
             <InkButton
@@ -441,6 +506,48 @@ export default function ModeSettingsScreen() {
               onPress={() => setTtStyle('weekly')}
             />
           </View>
+          <View style={styles.fieldGap}>
+            <InkText style={styles.label}>{t('ms.loadTemplate')}</InkText>
+            <View style={styles.row}>
+              <InkButton
+                label={t('ms.templateUniversity')}
+                variant={timetableTemplate === 'university' ? 'primary' : 'secondary'}
+                onPress={() => loadTimetableTemplate('university')}
+              />
+              <InkButton
+                label={t('ms.templateK12')}
+                variant={timetableTemplate === 'k12' ? 'primary' : 'secondary'}
+                onPress={() => loadTimetableTemplate('k12')}
+              />
+            </View>
+          </View>
+        </InkCard>
+
+        <InkCard>
+          <InkText style={styles.label}>{t('ms.weekdays')}</InkText>
+          {allDayLabels.map((day, i) => (
+            <View key={i} style={styles.listRow}>
+              <TextInput
+                style={[styles.input, styles.flex1]}
+                value={day}
+                onChangeText={(v) => {
+                  const copy = [...allDayLabels];
+                  copy[i] = v;
+                  setWeekdays(copy);
+                }}
+                placeholder={t(`ms.day${Math.min(i, 6)}`)}
+                placeholderTextColor={theme.colors.tertiary}
+              />
+              <Pressable onPress={() => removeWeekday(i)} disabled={allDayLabels.length <= 1}>
+                <InkText style={styles.removeBtn}>{t('ms.remove')}</InkText>
+              </Pressable>
+            </View>
+          ))}
+          <InkButton
+            label={t('ms.addColumn')}
+            variant="ghost"
+            onPress={addWeekday}
+          />
         </InkCard>
 
         <InkCard>
