@@ -8,7 +8,7 @@ from typing import Any
 from .db import get_main_db
 
 VOCAB_MODE_ID = "VOCAB_REVIEW"
-DEFAULT_DECK_ID = "primary_en"
+DEFAULT_DECK_ID = "core_en"
 DEFAULT_DAILY_LIMIT = 30
 DEFAULT_NEW_CARDS_PER_DAY = 10
 RATINGS = ("forgot", "fuzzy", "remember")

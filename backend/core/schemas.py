@@ -43,9 +43,9 @@ class ConfigRequest(BaseModel):
     mac: str = Field(..., description="设备 MAC 地址 (AA:BB:CC:DD:EE:FF)")
     nickname: str = Field(default="", max_length=32, description="设备昵称")
     modes: list[str] = Field(
-        default=["STOIC"],
+        default=["DAILY"],
         min_length=1,
-        max_length=10,
+        max_length=50,
         description="启用的内容模式列表",
     )
     refreshStrategy: str = Field(

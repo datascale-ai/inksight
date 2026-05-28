@@ -83,7 +83,7 @@ class TestConfigRequest:
     def test_defaults(self):
         body = ConfigRequest(mac="AA:BB:CC:DD:EE:FF")
         assert body.nickname == ""
-        assert body.modes == ["STOIC"]
+        assert body.modes == ["DAILY"]
         assert body.refreshStrategy == "random"
         assert body.refreshInterval == 60
         assert body.always_active is False

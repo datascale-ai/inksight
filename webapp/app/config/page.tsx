@@ -813,8 +813,8 @@ function ConfigPageInner() {
       : [{ name: "早起", done: false }, { name: "运动", done: false }, { name: "阅读", done: false }],
   );
   const [userAge, setUserAge] = useState(30);
-  const [lifeExpectancy, setLifeExpectancy] = useState<100 | 120>(100);
-  const [vocabDeckId, setVocabDeckId] = useState("primary_en");
+  const [lifeExpectancy, setLifeExpectancy] = useState(80);
+  const [vocabDeckId, setVocabDeckId] = useState("core_en");
   const [vocabDailyLimit, setVocabDailyLimit] = useState(30);
   const [timetableData, setTimetableData] = useState<TimetableData>({
     style: "weekly",
@@ -1199,7 +1199,12 @@ function ConfigPageInner() {
       return;
     }
     if (m === "MEMO") {
-      const ms = (modeOverrides[m]?.mode_settings || {}) as Record<string, string>;
+      const savedMemo = (modeOverrides[m] || {}) as Record<string, unknown>;
+      const ms = (
+        savedMemo.mode_settings && typeof savedMemo.mode_settings === "object" && !Array.isArray(savedMemo.mode_settings)
+          ? savedMemo.mode_settings
+          : savedMemo
+      ) as Record<string, string>;
       setMemoDraft({
         title1: ms.memo_title_1 || "",
         text1: ms.memo_text_1 || "",
@@ -1212,8 +1217,9 @@ function ConfigPageInner() {
       return;
     }
     if (m === "MY_QUOTE") {
-      setQuoteDraft("");
-      setAuthorDraft("");
+      const savedOv = (modeOverrides[m] || {}) as Record<string, unknown>;
+      setQuoteDraft(typeof savedOv.quote === "string" ? savedOv.quote : "");
+      setAuthorDraft(typeof savedOv.author === "string" ? savedOv.author : "");
       setParamModal({ type: "quote", mode: m, action });
       return;
     }
@@ -1231,6 +1237,15 @@ function ConfigPageInner() {
       return;
     }
     if (m === "LIFEBAR") {
+      const savedOv = (modeOverrides[m] || {}) as Record<string, unknown>;
+      const savedAge = Number(savedOv.age);
+      const savedExpect = Number(savedOv.life_expect);
+      if (Number.isFinite(savedAge) && savedAge > 0) {
+        setUserAge(savedAge);
+      }
+      if ([80, 90, 100, 120].includes(savedExpect)) {
+        setLifeExpectancy(savedExpect);
+      }
       setParamModal({ type: "lifebar", mode: m, action });
       return;
     }
@@ -1253,7 +1268,7 @@ function ConfigPageInner() {
     }
     if (m === "VOCAB_REVIEW") {
       const ov = modeOverrides[m] || {};
-      setVocabDeckId(String(ov.deck_id || "primary_en"));
+      setVocabDeckId(String(ov.deck_id || "core_en"));
       setVocabDailyLimit(Number(ov.daily_limit || 30));
       setParamModal({ type: "vocab", mode: m, action });
       return;
@@ -4018,27 +4033,20 @@ function ConfigPageInner() {
                       <label className="block text-xs text-ink mb-1.5">
                         {tr("退休金领到？", "Life Expectancy")}
                       </label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setLifeExpectancy(100)}
-                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
-                            lifeExpectancy === 100
-                              ? "bg-ink text-white"
-                              : "bg-paper-dark text-ink hover:bg-ink/10"
-                          }`}
-                        >
-                          100 {tr("岁", "years")}
-                        </button>
-                        <button
-                          onClick={() => setLifeExpectancy(120)}
-                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
-                            lifeExpectancy === 120
-                              ? "bg-ink text-white"
-                              : "bg-paper-dark text-ink hover:bg-ink/10"
-                          }`}
-                        >
-                          120 {tr("岁", "years")}
-                        </button>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[80, 90, 100, 120].map((years) => (
+                          <button
+                            key={years}
+                            onClick={() => setLifeExpectancy(years)}
+                            className={`px-3 py-2 rounded-sm text-sm transition-colors ${
+                              lifeExpectancy === years
+                                ? "bg-ink text-white"
+                                : "bg-paper-dark text-ink hover:bg-ink/10"
+                            }`}
+                          >
+                            {years} {tr("岁", "years")}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -4189,7 +4197,7 @@ function ConfigPageInner() {
                     <Button
                       onClick={() =>
                         saveVocabReviewSettings(paramModal.mode, {
-                          deck_id: "primary_en",
+                          deck_id: "core_en",
                           daily_limit: 30,
                           new_cards_per_day: 30,
                         } as ModeOverride)

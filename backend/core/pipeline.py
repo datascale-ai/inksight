@@ -71,7 +71,12 @@ def get_effective_mode_config(cfg: dict | None, persona: str) -> dict:
         "llmProvider",
         "llmModel",
     }
-    mode_settings = {k: v for k, v in override.items() if k not in reserved}
+    explicit_mode_settings = override.get("mode_settings")
+    mode_settings = dict(explicit_mode_settings) if isinstance(explicit_mode_settings, dict) else {}
+    for k, v in override.items():
+        if k in reserved or k == "mode_settings":
+            continue
+        mode_settings[k] = v
     if mode_settings:
         base["mode_settings"] = mode_settings
     return base

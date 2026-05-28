@@ -248,7 +248,7 @@ export default function DeviceDetailScreen() {
     return t('device.widgetEmpty');
   }
 
-  const HARDCODED_CONFIGURABLE = ['CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE', 'VOCAB_REVIEW'];
+  const HARDCODED_CONFIGURABLE = ['MY_QUOTE', 'HABIT', 'LIFEBAR', 'CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE', 'VOCAB_REVIEW'];
 
   function isModeConfigurable(modeId: string): boolean {
     if (HARDCODED_CONFIGURABLE.includes(modeId.toUpperCase())) return true;

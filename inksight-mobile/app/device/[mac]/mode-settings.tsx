@@ -19,6 +19,14 @@ type CountdownEvent = { name: string; date: string; type?: string };
 type Reminder = { month: string; day: string; text: string };
 type TimetableTemplate = 'university' | 'k12' | null;
 type VocabDeck = { id: string; labelKey: string; fallback: string };
+type MemoDraft = {
+  title1: string;
+  text1: string;
+  title2: string;
+  text2: string;
+  title3: string;
+  text3: string;
+};
 
 const DEFAULT_PERIODS = ['08:00-09:30', '10:00-11:30', '14:00-15:30', '16:00-17:30'];
 const DEFAULT_COURSES: Record<string, string> = {
@@ -42,7 +50,7 @@ const K12_COURSES: Record<string, string> = {
   '4-4': '语文', '4-5': '数学', '4-6': '地理', '4-7': '英语',
 };
 const DEFAULT_WEEKDAY_COUNT = 5;
-const DEFAULT_VOCAB_DECK_ID = 'primary_en';
+const DEFAULT_VOCAB_DECK_ID = 'core_en';
 const DEFAULT_VOCAB_DAILY_LIMIT = 30;
 const VOCAB_DECKS: VocabDeck[] = [
   { id: 'primary_en', labelKey: 'ms.vocabDeckPrimary', fallback: 'Primary English' },
@@ -97,7 +105,14 @@ export default function ModeSettingsScreen() {
   const [forecastDays, setForecastDays] = useState('3');
 
   // --- MEMO ---
-  const [memoText, setMemoText] = useState('');
+  const [memoDraft, setMemoDraft] = useState<MemoDraft>({
+    title1: '',
+    text1: '',
+    title2: '',
+    text2: '',
+    title3: '',
+    text3: '',
+  });
 
   // --- COUNTDOWN ---
   const [countdownEvents, setCountdownEvents] = useState<CountdownEvent[]>([]);
@@ -123,6 +138,17 @@ export default function ModeSettingsScreen() {
   const [vocabDeckId, setVocabDeckId] = useState(DEFAULT_VOCAB_DECK_ID);
   const [vocabDailyLimit, setVocabDailyLimit] = useState(String(DEFAULT_VOCAB_DAILY_LIMIT));
 
+  // --- MY_QUOTE ---
+  const [quoteText, setQuoteText] = useState('');
+  const [quoteAuthor, setQuoteAuthor] = useState('');
+
+  // --- HABIT ---
+  const [habitItems, setHabitItems] = useState<{ name: string; done: boolean }[]>([]);
+
+  // --- LIFEBAR ---
+  const [userAge, setUserAge] = useState('25');
+  const [lifeExpectancy, setLifeExpectancy] = useState('80');
+
   useEffect(() => {
     if (!configQuery.data) return;
     const ov = configQuery.data.modeOverrides?.[modeId] ?? {};
@@ -131,7 +157,17 @@ export default function ModeSettingsScreen() {
       setCity(String(ov.city ?? ''));
       setForecastDays(String(ov.forecast_days ?? 3));
     } else if (modeId === 'MEMO') {
-      setMemoText(String(ov.memo_text ?? ''));
+      const ms = (ov.mode_settings && typeof ov.mode_settings === 'object' && !Array.isArray(ov.mode_settings))
+        ? ov.mode_settings as Record<string, unknown>
+        : {};
+      setMemoDraft({
+        title1: String(ms.memo_title_1 ?? ov.memo_title_1 ?? ''),
+        text1: String(ms.memo_text_1 ?? ov.memo_text_1 ?? ov.memo_text ?? ''),
+        title2: String(ms.memo_title_2 ?? ov.memo_title_2 ?? ''),
+        text2: String(ms.memo_text_2 ?? ov.memo_text_2 ?? ''),
+        title3: String(ms.memo_title_3 ?? ov.memo_title_3 ?? ''),
+        text3: String(ms.memo_text_3 ?? ov.memo_text_3 ?? ''),
+      });
     } else if (modeId === 'COUNTDOWN') {
       const evts = Array.isArray(ov.countdownEvents) ? ov.countdownEvents : [];
       setCountdownEvents(evts.map((e: Record<string, unknown>) => ({
@@ -172,6 +208,18 @@ export default function ModeSettingsScreen() {
     } else if (modeId === 'VOCAB_REVIEW') {
       setVocabDeckId(String(ov.deck_id || DEFAULT_VOCAB_DECK_ID));
       setVocabDailyLimit(String(ov.daily_limit || DEFAULT_VOCAB_DAILY_LIMIT));
+    } else if (modeId === 'MY_QUOTE') {
+      setQuoteText(String(ov.quote ?? ''));
+      setQuoteAuthor(String(ov.author ?? ''));
+    } else if (modeId === 'HABIT') {
+      const items = Array.isArray(ov.habitItems) ? ov.habitItems : [];
+      setHabitItems(items.map((item: Record<string, unknown>) => ({
+        name: String(item.name ?? ''),
+        done: Boolean(item.done),
+      })));
+    } else if (modeId === 'LIFEBAR') {
+      setUserAge(String(ov.age ?? '25'));
+      setLifeExpectancy(String(ov.life_expect ?? '80'));
     } else {
       const sv: Record<string, string> = {};
       for (const [k, v] of Object.entries(ov)) {
@@ -197,7 +245,12 @@ export default function ModeSettingsScreen() {
       const fd = parseInt(forecastDays, 10);
       if (!isNaN(fd) && fd >= 1 && fd <= 7) base.forecast_days = fd;
     } else if (modeId === 'MEMO') {
-      base.memo_text = memoText;
+      for (const i of [1, 2, 3] as const) {
+        const titleKey = `title${i}` as keyof MemoDraft;
+        const textKey = `text${i}` as keyof MemoDraft;
+        base[`memo_title_${i}`] = memoDraft[titleKey].trim();
+        base[`memo_text_${i}`] = memoDraft[textKey].trim();
+      }
     } else if (modeId === 'COUNTDOWN') {
       base.countdownEvents = countdownEvents.filter((e) => e.name.trim() && e.date.trim());
     } else if (modeId === 'CALENDAR') {
@@ -225,6 +278,20 @@ export default function ModeSettingsScreen() {
       base.deck_id = VOCAB_DECKS.some((deck) => deck.id === vocabDeckId) ? vocabDeckId : DEFAULT_VOCAB_DECK_ID;
       base.daily_limit = dailyLimit;
       base.new_cards_per_day = dailyLimit;
+    } else if (modeId === 'MY_QUOTE') {
+      if (quoteText.trim()) base.quote = quoteText.trim();
+      if (quoteAuthor.trim()) base.author = quoteAuthor.trim();
+    } else if (modeId === 'HABIT') {
+      base.habitItems = habitItems.filter((item) => item.name.trim());
+    } else if (modeId === 'LIFEBAR') {
+      const age = parseInt(userAge, 10);
+      const expect = parseInt(lifeExpectancy, 10);
+      if (!isNaN(age) && age > 0) base.age = age;
+      if (!isNaN(expect) && expect > 0) base.life_expect = expect;
+      if (!isNaN(age) && !isNaN(expect) && age > 0 && expect > 0) {
+        base.life_pct = Math.min(Math.round(age / expect * 1000) / 10, 100);
+        base.life_label = locale === 'en' ? 'Life' : '人生';
+      }
     } else {
       for (const [k, v] of Object.entries(schemaValues)) {
         if (v.trim()) base[k] = v.trim();
@@ -331,15 +398,35 @@ export default function ModeSettingsScreen() {
     return (
       <InkCard>
         <InkText style={styles.label}>{t('ms.memoText')}</InkText>
-        <TextInput
-          style={[styles.input, styles.textarea]}
-          value={memoText}
-          onChangeText={setMemoText}
-          multiline
-          numberOfLines={6}
-          placeholder={t('ms.memoTextPlaceholder')}
-          placeholderTextColor={theme.colors.tertiary}
-        />
+        <InkText dimmed style={styles.helpText}>{t('ms.memoHint')}</InkText>
+        {([1, 2, 3] as const).map((i) => {
+          const titleKey = `title${i}` as keyof MemoDraft;
+          const textKey = `text${i}` as keyof MemoDraft;
+          return (
+            <View key={i} style={styles.memoGroup}>
+              <InkText dimmed style={styles.smallLabel}>
+                {t('ms.memoTitle').replace('{n}', String(i))}
+                {i > 1 ? ` (${t('ms.optional')})` : ''}
+              </InkText>
+              <TextInput
+                style={styles.input}
+                value={memoDraft[titleKey]}
+                onChangeText={(v) => setMemoDraft((prev) => ({ ...prev, [titleKey]: v }))}
+                placeholder={i === 1 ? t('ms.memoTitlePlaceholder') : t('ms.memoOptionalTitlePlaceholder')}
+                placeholderTextColor={theme.colors.tertiary}
+              />
+              <TextInput
+                style={[styles.input, styles.memoTextarea]}
+                value={memoDraft[textKey]}
+                onChangeText={(v) => setMemoDraft((prev) => ({ ...prev, [textKey]: v }))}
+                multiline
+                numberOfLines={4}
+                placeholder={t('ms.memoTextPlaceholder')}
+                placeholderTextColor={theme.colors.tertiary}
+              />
+            </View>
+          );
+        })}
       </InkCard>
     );
   }
@@ -725,7 +812,121 @@ export default function ModeSettingsScreen() {
     );
   }
 
-  const hasCustomEditor = ['WEATHER', 'MEMO', 'COUNTDOWN', 'CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE', 'VOCAB_REVIEW'].includes(modeId);
+  function renderMyQuote() {
+    return (
+      <InkCard>
+        <InkText dimmed style={styles.helpText}>{t('ms.quoteHint')}</InkText>
+        <InkText style={styles.label}>{t('ms.quoteText')}</InkText>
+        <TextInput
+          style={[styles.input, styles.textarea]}
+          value={quoteText}
+          onChangeText={setQuoteText}
+          multiline
+          numberOfLines={4}
+          placeholder={t('ms.quoteTextPlaceholder')}
+          placeholderTextColor={theme.colors.tertiary}
+        />
+        <InkText style={styles.label}>{t('ms.quoteAuthor')}</InkText>
+        <TextInput
+          style={styles.input}
+          value={quoteAuthor}
+          onChangeText={setQuoteAuthor}
+          placeholder={t('ms.quoteAuthorPlaceholder')}
+          placeholderTextColor={theme.colors.tertiary}
+        />
+      </InkCard>
+    );
+  }
+
+  function renderHabit() {
+    return (
+      <InkCard>
+        <InkText style={styles.label}>{t('ms.habitTitle')}</InkText>
+        <InkText dimmed style={styles.helpText}>{t('ms.habitHint')}</InkText>
+        {habitItems.map((item, i) => (
+          <View key={i} style={styles.listRow}>
+            <Pressable
+              onPress={() => {
+                const copy = [...habitItems];
+                copy[i] = { ...item, done: !item.done };
+                setHabitItems(copy);
+              }}
+              style={[
+                styles.habitDoneBtn,
+                item.done ? styles.habitDoneActive : styles.habitDoneInactive,
+              ]}
+            >
+              <InkText style={item.done ? styles.habitDoneTextActive : styles.habitDoneTextInactive}>
+                {item.done ? '✓' : '○'}
+              </InkText>
+            </Pressable>
+            <TextInput
+              style={[styles.input, styles.flex1]}
+              value={item.name}
+              onChangeText={(v) => {
+                const copy = [...habitItems];
+                copy[i] = { ...item, name: v };
+                setHabitItems(copy);
+              }}
+              placeholder={t('ms.habitNamePlaceholder')}
+              placeholderTextColor={theme.colors.tertiary}
+            />
+            <Pressable onPress={() => setHabitItems(habitItems.filter((_, idx) => idx !== i))}>
+              <InkText style={styles.removeBtn}>{t('ms.remove')}</InkText>
+            </Pressable>
+          </View>
+        ))}
+        <InkButton
+          label={t('ms.addHabit')}
+          variant="ghost"
+          onPress={() => setHabitItems([...habitItems, { name: '', done: false }])}
+        />
+      </InkCard>
+    );
+  }
+
+  function renderLifebar() {
+    const age = parseInt(userAge, 10);
+    const expect = parseInt(lifeExpectancy, 10);
+    const pct = (!isNaN(age) && !isNaN(expect) && expect > 0)
+      ? Math.min(Math.round(age / expect * 1000) / 10, 100)
+      : null;
+
+    return (
+      <InkCard>
+        <InkText style={styles.label}>{t('ms.lifebarAge')}</InkText>
+        <TextInput
+          style={styles.input}
+          value={userAge}
+          onChangeText={(v) => setUserAge(v.replace(/\D/g, '').slice(0, 3))}
+          keyboardType="number-pad"
+          placeholder={t('ms.lifebarAgePlaceholder')}
+          placeholderTextColor={theme.colors.tertiary}
+          maxLength={3}
+        />
+        <InkText style={styles.label}>{t('ms.lifebarLifeExpect')}</InkText>
+        <View style={styles.row}>
+          {['80', '90', '100', '120'].map((val) => (
+            <InkButton
+              key={val}
+              label={val}
+              variant={lifeExpectancy === val ? 'primary' : 'secondary'}
+              onPress={() => setLifeExpectancy(val)}
+            />
+          ))}
+        </View>
+        {pct !== null && (
+          <View style={styles.fieldGap}>
+            <InkText dimmed style={{ fontSize: 13 }}>
+              {t('ms.lifebarPreview')}: {age}/{expect} · {pct}%
+            </InkText>
+          </View>
+        )}
+      </InkCard>
+    );
+  }
+
+  const hasCustomEditor = ['WEATHER', 'MEMO', 'COUNTDOWN', 'CALENDAR', 'TIMETABLE', 'MY_ADAPTIVE', 'VOCAB_REVIEW', 'MY_QUOTE', 'HABIT', 'LIFEBAR'].includes(modeId);
 
   return (
     <AppScreen>
@@ -739,6 +940,9 @@ export default function ModeSettingsScreen() {
       {modeId === 'TIMETABLE' && renderTimetable()}
       {modeId === 'MY_ADAPTIVE' && renderAdaptive()}
       {modeId === 'VOCAB_REVIEW' && renderVocabReview()}
+      {modeId === 'MY_QUOTE' && renderMyQuote()}
+      {modeId === 'HABIT' && renderHabit()}
+      {modeId === 'LIFEBAR' && renderLifebar()}
       {!hasCustomEditor && (schema.length > 0 ? renderGenericSchema() : (
         <InkCard><InkText dimmed>{t('device.modeSettingsNoSchema')}</InkText></InkCard>
       ))}
@@ -774,6 +978,18 @@ const styles = StyleSheet.create({
     height: 120,
     textAlignVertical: 'top',
     paddingTop: 12,
+  },
+  memoTextarea: {
+    height: 88,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
+  memoGroup: {
+    marginTop: 10,
+  },
+  smallLabel: {
+    fontSize: 12,
+    marginBottom: 6,
   },
   row: {
     flexDirection: 'row',
@@ -935,5 +1151,29 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: theme.colors.secondary,
     lineHeight: 26,
+  },
+  habitDoneBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  habitDoneActive: {
+    backgroundColor: theme.colors.ink,
+  },
+  habitDoneInactive: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+  },
+  habitDoneTextActive: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  habitDoneTextInactive: {
+    color: theme.colors.tertiary,
+    fontSize: 14,
   },
 });

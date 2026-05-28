@@ -165,7 +165,7 @@ export default function ExperiencePage() {
   
   // 人生进度条状态
   const [userAge, setUserAge] = useState(30);
-  const [lifeExpectancy, setLifeExpectancy] = useState<100 | 120>(100);
+  const [lifeExpectancy, setLifeExpectancy] = useState(80);
   
   const [showCustomModeModal, setShowCustomModeModal] = useState(false);
   const [customDesc, setCustomDesc] = useState("");
@@ -1159,27 +1159,20 @@ export default function ExperiencePage() {
                       <label className="block text-xs text-ink mb-1.5">
                         {locale === "zh" ? "退休金领到？" : "Life Expectancy"}
                       </label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setLifeExpectancy(100)}
-                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
-                            lifeExpectancy === 100
-                              ? "bg-ink text-white"
-                              : "bg-paper-dark text-ink hover:bg-ink/10"
-                          }`}
-                        >
-                          100 {locale === "zh" ? "岁" : "years"}
-                        </button>
-                        <button
-                          onClick={() => setLifeExpectancy(120)}
-                          className={`flex-1 px-3 py-2 rounded-sm text-sm transition-colors ${
-                            lifeExpectancy === 120
-                              ? "bg-ink text-white"
-                              : "bg-paper-dark text-ink hover:bg-ink/10"
-                          }`}
-                        >
-                          120 {locale === "zh" ? "岁" : "years"}
-                        </button>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[80, 90, 100, 120].map((years) => (
+                          <button
+                            key={years}
+                            onClick={() => setLifeExpectancy(years)}
+                            className={`px-3 py-2 rounded-sm text-sm transition-colors ${
+                              lifeExpectancy === years
+                                ? "bg-ink text-white"
+                                : "bg-paper-dark text-ink hover:bg-ink/10"
+                            }`}
+                          >
+                            {years} {locale === "zh" ? "岁" : "years"}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>
