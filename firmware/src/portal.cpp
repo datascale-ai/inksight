@@ -69,6 +69,34 @@ static bool isValidUrl(const String &url) {
     return url.startsWith("http://") || url.startsWith("https://");
 }
 
+// Escape a string for safe embedding in a JSON string literal.
+static String jsonEscape(const String &s) {
+    String out;
+    for (unsigned int i = 0; i < s.length(); i++) {
+        char c = s.charAt(i);
+        if (c == '"' || c == '\\') { out += '\\'; out += c; }
+        else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
+        else if (c == '\t') out += "\\t";
+        else out += c;
+    }
+    return out;
+}
+
+// Build {"networks":["a","b"],"max":N} from the saved WiFi list.
+static String buildWiFiListJson() {
+    String names[MAX_WIFI_NETWORKS];
+    int count = 0;
+    getWiFiSSIDList(names, count);
+    String json = "{\"networks\":[";
+    for (int i = 0; i < count; i++) {
+        if (i > 0) json += ",";
+        json += "\"" + jsonEscape(names[i]) + "\"";
+    }
+    json += "],\"max\":" + String(MAX_WIFI_NETWORKS) + "}";
+    return json;
+}
+
 static String generatePairCode() {
     char buf[7];
     snprintf(buf, sizeof(buf), "%06u", (unsigned)(esp_random() % 1000000));
@@ -292,6 +320,44 @@ void startCaptivePortal() {
         pendingRestart  = true;
         restartAtMillis = millis() + 30000;
         Serial.println("Restart scheduled in 30 seconds (or earlier via /restart)");
+    });
+
+    // ── Route: List saved WiFi networks (names only) ────────
+    webServer.on("/wifi_list", HTTP_GET, []() {
+        webServer.sendHeader("Access-Control-Allow-Origin", "*");
+        webServer.send(200, "application/json", buildWiFiListJson());
+    });
+
+    // ── Route: Add a network to the saved list (no connect) ──
+    // Used to pre-register secondary networks (office / phone hotspot) that
+    // are not reachable from the current location. No restart is triggered.
+    webServer.on("/add_wifi", HTTP_POST, []() {
+        String ssid = sanitizeSSID(webServer.arg("ssid"));
+        String pass = sanitizeTextInput(webServer.arg("pass"), PORTAL_MAX_PASS);
+        webServer.sendHeader("Access-Control-Allow-Origin", "*");
+        if (ssid.length() == 0) {
+            webServer.send(200, "application/json", "{\"ok\":false,\"msg\":\"SSID empty\"}");
+            return;
+        }
+        if (addWiFiConfig(ssid, pass)) {
+            Serial.printf("[PORTAL] Added saved network: %s\n", ssid.c_str());
+            webServer.send(200, "application/json",
+                           "{\"ok\":true,\"list\":" + buildWiFiListJson() + "}");
+        } else {
+            webServer.send(200, "application/json",
+                           "{\"ok\":false,\"msg\":\"FULL\"}");
+        }
+    });
+
+    // ── Route: Delete a saved network by SSID ───────────────
+    webServer.on("/delete_wifi", HTTP_POST, []() {
+        String ssid = sanitizeSSID(webServer.arg("ssid"));
+        bool ok = deleteWiFiBySSID(ssid);
+        Serial.printf("[PORTAL] Delete network '%s' -> %s\n", ssid.c_str(), ok ? "ok" : "not found");
+        webServer.sendHeader("Access-Control-Allow-Origin", "*");
+        webServer.send(200, "application/json",
+                       String("{\"ok\":") + (ok ? "true" : "false") +
+                       ",\"list\":" + buildWiFiListJson() + "}");
     });
 
     // ── Route: Manual restart ───────────────────────────────

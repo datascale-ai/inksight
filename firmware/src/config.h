@@ -108,6 +108,7 @@ static const int FULL_REFRESH_INTERVAL = 10;  // Full refresh every N updates to
 // ── Config defaults ─────────────────────────────────────────
 static const char *DEFAULT_SERVER  = "";  // Must be set via captive portal
 static const int   WIFI_TIMEOUT    = 15000;   // ms
+static const int   MAX_WIFI_NETWORKS = 5;     // Max saved WiFi credentials (tried in order on boot)
 static const int   HTTP_TIMEOUT    = 30000;   // ms
 static const int   CFG_BTN_HOLD_MS = 2000;    // Long press duration to trigger config mode
 static const int   AI_CHAT_BTN_HOLD_MS = 3000; // Long press duration to enter AI chat mode
@@ -119,6 +120,12 @@ static const int   LIVE_POLL_MS = 5000;       // Poll interval for pending remot
 static const int   LIVE_WIFI_RETRY_MS = 5000; // Retry interval when WiFi is disconnected
 static const unsigned long HEARTBEAT_INTERVAL_MS = 10UL * 60UL * 1000UL;
 static const int   MAX_RETRY_COUNT = 5;       // Max retries before deep sleep
+// WiFi -> captive portal fallback: when ALL saved networks fail to connect,
+// do this many quick in-place retry sweeps (no reboot) before opening the AP.
+// Keeps the portal fast to appear (user is likely waiting to reconfigure)
+// while still riding out a brief blip such as a router rebooting.
+static const int           WIFI_PORTAL_RETRY_SWEEPS   = 1;
+static const unsigned long WIFI_PORTAL_RETRY_DELAY_MS = 3000;
 // Progressive retry delays in seconds: 5s, 15s, 30s, 60s, 120s
 static const int   RETRY_DELAYS[] = {5, 15, 30, 60, 120};
 

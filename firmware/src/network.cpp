@@ -57,11 +57,13 @@ static QueueHandle_t gVoiceWsEventQueue = nullptr;
 
 // ── WiFi connection ─────────────────────────────────────────
 
-bool connectWiFi() {
-    g_userAborted = false;
-    Serial.printf("WiFi: %s ", cfgSSID.c_str());
+// Associate with a single AP and wait up to WIFI_TIMEOUT. Returns true on
+// success. Returns false on timeout/abort (g_userAborted set on abort).
+static bool tryAssociate(const String &ssid, const String &pass) {
+    Serial.printf("WiFi: %s ", ssid.c_str());
     WiFi.mode(WIFI_STA);
-    WiFi.begin(cfgSSID.c_str(), cfgPass.c_str());
+    WiFi.disconnect();
+    WiFi.begin(ssid.c_str(), pass.c_str());
 
     unsigned long t0 = millis();
     while (WiFi.status() != WL_CONNECTED) {
@@ -74,6 +76,42 @@ bool connectWiFi() {
         Serial.print(".");
     }
     Serial.printf(" OK  IP=%s\n", WiFi.localIP().toString().c_str());
+    return true;
+}
+
+bool connectWiFi() {
+    g_userAborted = false;
+
+    // Try each saved network in order; first success wins.
+    int count = getWiFiCount();
+    if (count <= 0) {
+        // No saved list (shouldn't normally happen post-loadConfig); fall back
+        // to the legacy primary credentials.
+        if (cfgSSID.length() == 0) return false;
+        if (!tryAssociate(cfgSSID, cfgPass)) return false;
+    } else {
+        bool associated = false;
+        for (int i = 0; i < count; i++) {
+            String ssid, pass;
+            if (!getWiFiAt(i, ssid, pass)) continue;
+            if (g_userAborted) return false;
+            Serial.printf("[WIFI] Trying network %d/%d\n", i + 1, count);
+            if (tryAssociate(ssid, pass)) {
+                // Promote the connected network to primary so cfgSSID/cfgPass
+                // (used for display, pairing, heartbeat) reflect it.
+                cfgSSID = ssid;
+                cfgPass = pass;
+                associated = true;
+                break;
+            }
+            if (g_userAborted) return false;
+        }
+        if (!associated) {
+            Serial.println("[WIFI] All saved networks failed");
+            return false;
+        }
+    }
+
     if (!ensureDeviceToken()) return false;
     if (cfgPendingPairCode.length() > 0) {
         String mac = WiFi.macAddress();

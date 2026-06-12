@@ -46,6 +46,9 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 .wi:hover{border-color:var(--bk);background:var(--bg)}
 .wi.sel{border-color:var(--bk);background:var(--bg)}
 .wn{font-size:.85rem;font-weight:500;display:flex;align-items:center;gap:6px}
+.wx{background:none;border:none;cursor:pointer;color:var(--gy);padding:4px 6px;border-radius:6px;font-size:1.1rem;line-height:1;flex-shrink:0}
+.wx:hover{color:#dc2626;background:#fef2f2}
+.si-ord{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--bg);border:1px solid var(--bd);font-size:.66rem;color:var(--gy);flex-shrink:0}
 .ws{display:flex;align-items:flex-end;gap:1.5px;height:14px}
 .ws .b{width:3px;background:#e0e0dc;border-radius:1px}
 .ws .b.a{background:var(--bk)}
@@ -88,6 +91,13 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 
 <!-- Step 1: WiFi + Server -->
 <div id="s1">
+<div id="savedWrap" class="hidden" style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+<span class="lbl" id="savedTitle" style="margin-bottom:0">已保存网络</span>
+<span id="savedCount" style="font-size:.72rem;color:var(--gy)">0/5</span>
+</div>
+<ul class="wl" id="savedList" style="margin-bottom:0"></ul>
+</div>
 <div class="wtabs">
 <div class="wtab" id="wtScan" onclick="switchWTab('scan')">选择网络</div>
 <div class="wtab act" id="wtMan" onclick="switchWTab('manual')">手动输入</div>
@@ -135,6 +145,8 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 </div>
 </div>
 <button class="btn btn-ghost" id="cBtn" onclick="doConnect()"><span class="bt" id="btnConnText">连接并保存</span><div class="sp"></div></button>
+<button class="btn" id="addBtn" onclick="doAddOnly()" style="margin-top:8px;background:var(--bg);color:var(--bk);border:1px solid var(--bd);font-size:.82rem;padding:10px"><span class="bt" id="btnAddText">仅保存到列表</span><div class="sp"></div></button>
+<div id="addHint" style="font-size:.68rem;color:var(--gy);margin-top:5px;text-align:center">连不上的网络（如办公室/手机热点）可仅保存，开机会按顺序尝试</div>
 </div>
 
 <!-- Step 2: Success -->
@@ -192,6 +204,12 @@ srvCusTip2:"前端配置页端口，用于重启后跳转到 localhost:端口/co
 srvUrlPh:"例如: http://192.168.1.100:8080",
 srvPortPh:"例如: 3000",
 btnConn:"连接并保存",
+btnAdd:"仅保存到列表",
+savedTitle:"已保存网络",
+addHint:"连不上的网络（如办公室/手机热点）可仅保存，开机会按顺序尝试",
+msgAddOk:"已保存到列表",
+msgFull:"最多保存 5 个网络",
+msgDelOk:"已删除",
 s2Title:"配网完成",
 s2Next:"下一步：",
 s2Auto:"设备将自动重启并联网，请使用配对码继续完成认领与配置。",
@@ -244,6 +262,12 @@ srvCusTip2:"Frontend port, used for redirecting to localhost:port/config",
 srvUrlPh:"e.g. http://192.168.1.100:8080",
 srvPortPh:"e.g. 3000",
 btnConn:"Connect & Save",
+btnAdd:"Save to List",
+savedTitle:"Saved Networks",
+addHint:"Networks not reachable here (office / phone hotspot) can be saved only; tried in order on boot",
+msgAddOk:"Saved to list",
+msgFull:"Up to 5 networks allowed",
+msgDelOk:"Removed",
 s2Title:"Setup Complete",
 s2Next:"Next Step: ",
 s2Auto:"Device will restart and connect. Use the pairing code to bind.",
@@ -302,6 +326,9 @@ document.getElementById('srvCusTip2').textContent=t('srvCusTip2');
 document.getElementById('srvIn').placeholder=t('srvUrlPh');
 document.getElementById('frontendPortIn').placeholder=t('srvPortPh');
 document.getElementById('btnConnText').textContent=t('btnConn');
+document.getElementById('btnAddText').textContent=t('btnAdd');
+document.getElementById('savedTitle').textContent=t('savedTitle');
+document.getElementById('addHint').textContent=t('addHint');
 document.getElementById('s2Title').textContent=t('s2Title');
 document.getElementById('s2Next').textContent=t('s2Next');
 document.getElementById('s2Auto').textContent=t('s2Auto');
@@ -330,6 +357,7 @@ var LOCAL_DEFAULT_SERVER='http://本地服务IP:8080';
 var LOCAL_DEFAULT_FRONTEND_PORT='3000';
 var ssid='',ctm=null,devMac='',srvUrl='',srvMode='official',pairCode='',frontendPort=LOCAL_DEFAULT_FRONTEND_PORT;
 var hiddenSsids=[];
+var savedMax=5;
 
 function setStep(n){
 var d1=document.getElementById('d1'),d2=document.getElementById('d2');
@@ -499,11 +527,76 @@ pairCode='';
 document.getElementById('pairWrap').classList.add('hidden');
 document.getElementById('pairCode').textContent='--------';
 document.getElementById('cdN').textContent='10';
+loadSaved();
+}
+
+// ── Saved networks (multi-WiFi) ─────────────────────────────
+function renderSaved(d){
+if(d&&typeof d.max==='number')savedMax=d.max;
+var names=(d&&d.networks)||[];
+var wrap=document.getElementById('savedWrap');
+var ul=document.getElementById('savedList');
+var cnt=document.getElementById('savedCount');
+var addBtn=document.getElementById('addBtn');
+ul.innerHTML='';
+names.forEach(function(name,idx){
+var li=document.createElement('li');li.className='wi';li.style.cursor='default';
+var left=document.createElement('span');left.className='wn';
+var ord=document.createElement('span');ord.className='si-ord';ord.textContent=(idx+1);
+var nm=document.createElement('span');nm.textContent=name;
+left.appendChild(ord);left.appendChild(nm);
+var del=document.createElement('button');del.className='wx';del.type='button';del.innerHTML='&times;';
+del.onclick=function(){delNet(name)};
+li.appendChild(left);li.appendChild(del);
+ul.appendChild(li);
+});
+cnt.textContent=names.length+'/'+savedMax;
+if(names.length>0)wrap.classList.remove('hidden');else wrap.classList.add('hidden');
+var full=names.length>=savedMax;
+addBtn.disabled=full;
+}
+
+function loadSaved(){
+fetch('/wifi_list').then(function(r){return r.json()}).then(renderSaved).catch(function(){});
+}
+
+function delNet(name){
+var st=document.getElementById('pSt');
+var fd=new FormData();fd.append('ssid',name);
+fetch('/delete_wifi',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
+if(d&&d.list){renderSaved(d.list);}else{loadSaved();}
+st.className='st w';st.textContent=t('msgDelOk');
+}).catch(function(){st.className='st e';st.textContent=t('msgReqFail');});
+}
+
+function doAddOnly(){
+var s=ssid||document.getElementById('ssidIn').value.trim();
+var p=document.getElementById('pwIn').value;
+var st=document.getElementById('pSt'),btn=document.getElementById('addBtn');
+if(!s){st.className='st e';st.textContent=t('errSsid');return;}
+if(p.length>0&&p.length<8){st.className='st e';st.textContent=t('errPwLen');return;}
+btn.classList.add('ld');btn.disabled=true;
+var fd=new FormData();fd.append('ssid',s);fd.append('pass',p);
+fetch('/add_wifi',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
+btn.classList.remove('ld');btn.disabled=false;
+if(d.ok){
+st.className='st s';st.textContent=t('msgAddOk');
+document.getElementById('ssidIn').value='';document.getElementById('pwIn').value='';
+ssid='';reShowList();
+renderSaved(d.list);
+}else{
+st.className='st e';st.textContent=d.msg==='FULL'?t('msgFull'):(d.msg||t('msgReqFail'));
+}
+}).catch(function(){
+btn.classList.remove('ld');btn.disabled=false;
+st.className='st e';st.textContent=t('msgReqFail');
+});
 }
 
 (function(){
 applyLang();
 switchWTab('manual');
+loadSaved();
 fetch('/scan').then(function(r){return r.json()}).then(function(d){
 document.getElementById('wScanLoading').style.display='none';
 var ul=document.getElementById('wifiList');

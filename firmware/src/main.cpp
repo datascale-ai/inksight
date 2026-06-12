@@ -835,11 +835,24 @@ void setup() {
 
     ledFeedback("connecting");
     if (!connectWiFi()) {
-        Serial.println("[VOICE] WiFi failed, restarting in 5s");
-        ledFeedback("fail");
-        delay(5000);
-        ESP.restart();
+        // Quick in-place retry sweeps, then fall back to the captive portal.
+        for (int i = 0; i < WIFI_PORTAL_RETRY_SWEEPS; i++) {
+            Serial.printf("[VOICE] WiFi unreachable, quick retry sweep %d/%d in %lus\n",
+                          i + 1, WIFI_PORTAL_RETRY_SWEEPS, WIFI_PORTAL_RETRY_DELAY_MS / 1000);
+            ledFeedback("fail");
+            delay(WIFI_PORTAL_RETRY_DELAY_MS);
+            if (connectWiFi()) break;
+        }
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[VOICE] WiFi still unreachable -> captive portal");
+            resetRetryCount();
+            ledFeedback("portal");
+            startCaptivePortal();
+            gPortalMode = true;
+            return;
+        }
     }
+    resetRetryCount();
     Serial.println("[VOICE] WiFi connected");
 
     static Inmp441Max98357Codec codec(true);
@@ -904,6 +917,7 @@ static void triggerImmediateRefresh(bool nextMode, bool keepWiFi, bool partialVo
 static void handleLiveMode();
 static bool waitForContentReady();
 static void handleFailure(const char *reason);
+static void handleWiFiFailure();
 static void enterDeepSleep(int minutes);
 static bool runAiChatConversation();
 static void runSingleVoiceTurn();
@@ -979,7 +993,7 @@ void setup() {
             return;
         }
         ledFeedback("fail");
-        handleFailure("WiFi failed");
+        handleWiFiFailure();
         return;
     }
 
@@ -1468,6 +1482,29 @@ static void handleFailure(const char *reason) {
         esp_sleep_enable_timer_wakeup((uint64_t)cfgSleepMin * 60ULL * 1000000ULL);
         esp_deep_sleep_start();
     }
+}
+
+// ── WiFi failure handler ────────────────────────────────────
+// All saved WiFi networks failed to associate (connectWiFi already swept the
+// full list once). Do a few quick in-place retry sweeps to ride out a brief
+// blip (e.g. router rebooting), then fall back to the captive portal so the
+// user can fix or add credentials. No multi-minute deep-sleep delays here —
+// the user is typically standing by waiting to reconfigure.
+static void handleWiFiFailure() {
+    for (int i = 0; i < WIFI_PORTAL_RETRY_SWEEPS; i++) {
+        Serial.printf("[DIAG] WiFi unreachable, quick retry sweep %d/%d in %lus\n",
+                      i + 1, WIFI_PORTAL_RETRY_SWEEPS, WIFI_PORTAL_RETRY_DELAY_MS / 1000);
+        delay(WIFI_PORTAL_RETRY_DELAY_MS);
+        if (connectWiFi()) {
+            Serial.println("[DIAG] WiFi recovered -> reboot to resume normal flow");
+            resetRetryCount();
+            ESP.restart();
+        }
+        if (g_userAborted) break;
+    }
+    Serial.println("[DIAG] WiFi still unreachable -> captive portal");
+    resetRetryCount();
+    enterPortalMode();
 }
 
 // ── Live mode ───────────────────────────────────────────────
