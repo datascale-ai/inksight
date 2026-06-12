@@ -36,9 +36,18 @@ In the InkSight firmware, the BOOT button is defined as the primary interaction 
   - Rescuing a device that cannot connect to its saved network.
 - **Note**: If the device is freshly flashed and has no saved Wi-Fi credentials, it will enter the captive portal automatically on boot without needing to hold the button.
 
-## 3. Source of truth
+## 3. Multi-Wi-Fi & Automatic Fallback
+
+- **Up to 5 saved networks**: In the captive portal (default `192.168.4.1`) you can view, delete, and add saved networks. Besides "Connect & Save" for the network you're currently near, use "Save to List" to pre-register networks you can't reach right now (e.g. office / phone hotspot).
+- **Tried in order on boot**: The device tries saved networks one by one in order; if the first fails it automatically moves on to the next, and proceeds as soon as any one connects.
+- **Auto captive portal when all fail**: If none of the saved networks can be reached, the device does one quick retry sweep and then **automatically enters the captive portal**, broadcasting an `InkSight-xxxxx` hotspot (within about a minute) so you can reconfigure or edit networks without pressing any button.
+
+## 4. Source of truth
 
 - Force-portal check during boot: `firmware/src/main.cpp`
+- Multi-Wi-Fi ordered connect & fallback: `firmware/src/network.cpp` (`connectWiFi`), `firmware/src/main.cpp` (`handleWiFiFailure`)
+- Saved Wi-Fi list storage (up to 5): `firmware/src/storage.cpp`
+- Captive portal and `/wifi_list`, `/add_wifi`, `/delete_wifi` routes: `firmware/src/portal.cpp`, `firmware/data/portal_html.h`
 - Short-press / long-press handler: `firmware/src/main.cpp`
 - Long-press and debounce thresholds: `firmware/src/config.h`
 - Recommended board button pin definitions: `firmware/src/config.h`

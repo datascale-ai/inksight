@@ -147,8 +147,10 @@ PlatformIO / Arduino project for ESP32-C3. Main files:
 - `src/network.cpp` — WiFi connection, HTTP fetch from backend, NTP time sync, RSSI reporting
 - `src/display.cpp` — GxEPD2 e-ink display driver
 - `src/epd_driver.cpp` — raw e-ink display control (low-level SPI commands)
-- `src/portal.cpp` — Captive Portal for WiFi provisioning
-- `src/storage.cpp` — NVS (flash) storage for persisting device state across deep sleep
+- `src/portal.cpp` — Captive Portal for WiFi provisioning + saved-network management (`/wifi_list`, `/add_wifi`, `/delete_wifi`)
+- `src/storage.cpp` — NVS (flash) storage for persisting device state across deep sleep; holds the saved WiFi list (up to `MAX_WIFI_NETWORKS`, default 5)
+
+**Multi-WiFi & fallback** — the device stores up to 5 WiFi networks and tries them in order on boot (`connectWiFi` in `network.cpp`), failing over to the next on each failure. If all saved networks fail, `handleWiFiFailure` (`main.cpp`) does one quick retry sweep and then enters the captive portal (`enterPortalMode`). The portal lets users view/add/delete saved networks. Legacy single-SSID configs are auto-migrated into the list by `loadConfig` (no `CONFIG_VERSION` bump, so existing credentials survive an upgrade).
 
 ## Testing
 
