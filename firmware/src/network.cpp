@@ -158,7 +158,24 @@ float readBatteryVoltage() {
         sum += readings[i];
 
     float avgRaw = (float)sum / (SAMPLES - 2 * DISCARD);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02)
+#if defined(BOARD_PROFILE_JCALENDAR_ESP32)
+    uint32_t pinMv = analogReadMilliVolts(PIN_BAT_ADC);
+    float realBatteryVoltage = (pinMv / 1000.0f) * 2.0f;
+
+    const float measuredLow  = 2.95f;
+    const float measuredHigh = 4.17f;
+    const float targetLow    = 0.0f;
+    const float targetHigh   = 3.3f;
+
+    if (realBatteryVoltage <= measuredLow) return targetLow;
+    if (realBatteryVoltage >= measuredHigh) return targetHigh;
+
+    float mappedVoltage = targetLow + (realBatteryVoltage - measuredLow) *
+                          (targetHigh - targetLow) / (measuredHigh - measuredLow);
+    if (mappedVoltage > targetHigh) mappedVoltage = targetHigh;
+    if (mappedVoltage < targetLow) mappedVoltage = targetLow;
+    return mappedVoltage;
+#elif defined(BOARD_PROFILE_ESP32_C3_WROOM02)
     static esp_adc_cal_characteristics_t adcChars;
     static bool calibrated = false;
     if (!calibrated) {

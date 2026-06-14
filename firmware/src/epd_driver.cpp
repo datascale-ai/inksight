@@ -785,6 +785,7 @@ void epdSleep() {
 
 #include <SPI.h>
 #include <GxEPD2_BW.h>
+#include <GxEPD2_3C.h>
 
 #ifndef EPD_GXEPD2_SPI_HZ
 #define EPD_GXEPD2_SPI_HZ 4000000
@@ -794,6 +795,10 @@ void epdSleep() {
   #include <gdey/GxEPD2_420_GDEY042T81.h>
   GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT / 4> display(
       GxEPD2_420_GDEY042T81(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
+#elif defined(EPD_PANEL_42_Z21_BWR)
+  #include <epd3c/GxEPD2_420c_Z21.h>
+  GxEPD2_3C<GxEPD2_420c_Z21, GxEPD2_420c_Z21::HEIGHT> display(
+      GxEPD2_420c_Z21(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 #elif defined(EPD_PANEL_42_GXEPD2_GYE042A87)
   #include <other/GxEPD2_420_GYE042A87.h>
   GxEPD2_BW<GxEPD2_420_GYE042A87, GxEPD2_420_GYE042A87::HEIGHT> display(
@@ -846,7 +851,7 @@ void epdSleep() {
   GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 4> display(
       GxEPD2_750_T7(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 #else
-  #error "No EPD panel type defined. Use -DEPD_PANEL_42_SSD1683_BW, -DEPD_PANEL_42_DKE_RY683, -DEPD_PANEL_42_GDEM042F52, -DEPD_PANEL_42_GXEPD2_T81, -DEPD_PANEL_42_GXEPD2_GYE042A87, -DEPD_PANEL_42_GXEPD2_420, -DEPD_PANEL_42_GXEPD2_M01, -DEPD_PANEL_29, -DEPD_PANEL_583_UC8179, -DEPD_PANEL_583, or -DEPD_PANEL_75"
+  #error "No EPD panel type defined. Use -DEPD_PANEL_42_SSD1683_BW, -DEPD_PANEL_42_DKE_RY683, -DEPD_PANEL_42_GDEM042F52, -DEPD_PANEL_42_Z21_BWR, -DEPD_PANEL_42_GXEPD2_T81, -DEPD_PANEL_42_GXEPD2_GYE042A87, -DEPD_PANEL_42_GXEPD2_420, -DEPD_PANEL_42_GXEPD2_M01, -DEPD_PANEL_29, -DEPD_PANEL_583_UC8179, -DEPD_PANEL_583, or -DEPD_PANEL_75"
 #endif
 
 static bool _initialized = false;
@@ -854,7 +859,7 @@ static bool _initialized = false;
 static bool _needs_full_refresh_write = true;
 #endif
 static const uint8_t DISPLAY_ROTATION =
-#if defined(EPD_PANEL_42_GXEPD2_T81) || defined(EPD_PANEL_42_GXEPD2_GYE042A87) || defined(EPD_PANEL_42_GXEPD2_420) || defined(EPD_PANEL_42_GXEPD2_M01)
+#if defined(EPD_PANEL_42_Z21_BWR) || defined(EPD_PANEL_42_GXEPD2_T81) || defined(EPD_PANEL_42_GXEPD2_GYE042A87) || defined(EPD_PANEL_42_GXEPD2_420) || defined(EPD_PANEL_42_GXEPD2_M01)
     0;
 #else
     1;
@@ -878,9 +883,79 @@ void epdInitFast() {
     epdInit();
 }
 
+#if defined(EPD_PANEL_42_Z21_BWR)
+static void z21SetPixel(uint8_t *buffer, int x, int y, bool active) {
+    int index = y * ROW_BYTES + x / 8;
+    uint8_t mask = 0x80 >> (x % 8);
+    if (active) {
+        buffer[index] &= ~mask;
+    } else {
+        buffer[index] |= mask;
+    }
+}
+
+static bool z21IsRed2bppColor(uint8_t color) {
+    return color == 0x03 || color == 0x02;
+}
+
+static void writeZ21FullImage(const uint8_t *blackBuf, const uint8_t *redBuf) {
+    epdInit();
+    display.writeImage(blackBuf, redBuf, 0, 0, W, H, false, false, false);
+    display.refresh(false);
+    display.powerOff();
+}
+
+static void writeZ21TricolorImage(const uint8_t *image2bpp) {
+    uint8_t *blackBuf = (uint8_t *)malloc(IMG_BUF_LEN);
+    uint8_t *redBuf = (uint8_t *)malloc(IMG_BUF_LEN);
+    if (!blackBuf || !redBuf) {
+        Serial.println("[EPD] Z21 2bpp buffer alloc failed");
+        free(blackBuf);
+        free(redBuf);
+        return;
+    }
+
+    memset(blackBuf, 0xFF, IMG_BUF_LEN);
+    memset(redBuf, 0xFF, IMG_BUF_LEN);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            int index = (y * W + x) / 4;
+            int shift = 6 - (((y * W + x) % 4) * 2);
+            uint8_t color = (image2bpp[index] >> shift) & 0x03;
+
+            if (color == 0x00) {
+                z21SetPixel(blackBuf, x, y, true);
+            } else if (z21IsRed2bppColor(color)) {
+                z21SetPixel(redBuf, x, y, true);
+            }
+        }
+    }
+
+    writeZ21FullImage(blackBuf, redBuf);
+    free(blackBuf);
+    free(redBuf);
+}
+
+static void writeZ21MonoImage(const uint8_t *image) {
+    uint8_t *redBuf = (uint8_t *)malloc(IMG_BUF_LEN);
+    if (!redBuf) {
+        Serial.println("[EPD] Z21 red buffer alloc failed");
+        return;
+    }
+
+    memset(redBuf, 0xFF, IMG_BUF_LEN);
+    writeZ21FullImage(image, redBuf);
+    free(redBuf);
+}
+#endif
+
 void epdDisplay(const uint8_t *image) {
     epdInit();
-#if defined(EPD_PANEL_29)
+#if defined(EPD_PANEL_42_Z21_BWR)
+    writeZ21MonoImage(image);
+    return;
+#elif defined(EPD_PANEL_29)
     rotate_landscape_to_panel(image);
     display.writeImage(
         rotated_buffer,
@@ -906,9 +981,22 @@ void epdDisplay(const uint8_t *image) {
     display.powerOff();
 }
 
+void epdDisplay2bpp(const uint8_t *image2bpp) {
+#if defined(EPD_PANEL_42_Z21_BWR)
+    writeZ21TricolorImage(image2bpp);
+#else
+    (void)image2bpp;
+    epdDisplay(imgBuf);
+#endif
+}
+
 void epdDisplayFast(const uint8_t *image) {
 #if defined(EPD_PANEL_583_UC8179)
     // 583 UC8179: always full refresh (GxEPD2 refresh(false)); avoids partial LUT ghosting.
+    epdDisplay(image);
+    return;
+#endif
+#if defined(EPD_PANEL_42_Z21_BWR)
     epdDisplay(image);
     return;
 #endif
@@ -937,6 +1025,10 @@ void epdDisplayFast(const uint8_t *image) {
 }
 
 void epdDisplayDeepClear(const uint8_t *image) {
+#if defined(EPD_PANEL_42_Z21_BWR)
+    epdDisplay(image);
+    return;
+#endif
     epdInit();
 
     uint8_t *clearBuf = (uint8_t *)malloc(IMG_BUF_LEN);
@@ -958,7 +1050,7 @@ void epdPartialDisplay(uint8_t *data, int xStart, int yStart, int xEnd, int yEnd
 }
 
 bool epdSupportsPartialRefresh() {
-#if defined(EPD_PANEL_29)
+#if defined(EPD_PANEL_42_Z21_BWR) || defined(EPD_PANEL_29)
     return false;
 #else
     return true;
@@ -967,7 +1059,16 @@ bool epdSupportsPartialRefresh() {
 
 void epdPartialDisplayWithOld(uint8_t *data, const uint8_t *oldData, int xStart, int yStart, int xEnd, int yEnd) {
     epdInit();
-#if defined(EPD_PANEL_29)
+#if defined(EPD_PANEL_42_Z21_BWR)
+    (void)data;
+    (void)oldData;
+    (void)xStart;
+    (void)yStart;
+    (void)xEnd;
+    (void)yEnd;
+    epdDisplay(imgBuf);
+    return;
+#elif defined(EPD_PANEL_29)
     (void)data;
     (void)oldData;
     (void)xStart;

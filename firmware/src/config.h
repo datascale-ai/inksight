@@ -25,6 +25,17 @@
 #define PIN_CFG_BTN    9
 #define PIN_LED        5
 #define PIN_AI_CHAT_SW -1
+#elif defined(BOARD_PROFILE_JCALENDAR_ESP32)
+#define PIN_EPD_MOSI   23
+#define PIN_EPD_SCK    18
+#define PIN_EPD_CS     5
+#define PIN_EPD_DC     17
+#define PIN_EPD_RST    16
+#define PIN_EPD_BUSY   4
+#define PIN_BAT_ADC    32
+#define PIN_CFG_BTN    14
+#define PIN_LED        22
+#define PIN_AI_CHAT_SW -1
 #elif defined(BOARD_PROFILE_ESP32_WROOM32E)
 #define PIN_EPD_MOSI   14
 #define PIN_EPD_SCK    13
