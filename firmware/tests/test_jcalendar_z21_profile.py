@@ -132,6 +132,27 @@ class JCalendarZ21ProfileTest(unittest.TestCase):
             r"#if defined\(BOARD_PROFILE_JCALENDAR_ESP32\)\s*readBatteryVoltage\(\);\s*#endif",
         )
 
+    def test_config_button_short_press_requests_next_content(self):
+        main_cpp = read_text("src/main.cpp")
+
+        self.assertIn("bool wantRefreshNext = false;", main_cpp)
+        self.assertIn("ctx.wantRefreshNext = true;", main_cpp)
+        self.assertIn("[BTN] Single click -> next content", main_cpp)
+        self.assertIn("if (ctx.wantRefreshNext)", main_cpp)
+        self.assertIn("triggerImmediateRefresh(true, true)", main_cpp)
+        self.assertNotIn("[BTN] Single click -> toggle live mode", main_cpp)
+        self.assertNotRegex(
+            main_cpp,
+            r"pressDuration[\s\S]*?ctx\.wantEnterLiveMode\s*=\s*true;",
+        )
+
+    def test_config_button_long_press_still_restarts_for_portal_entry(self):
+        main_cpp = read_text("src/main.cpp")
+
+        self.assertIn("holdTime >= (unsigned long)CFG_BTN_HOLD_MS", main_cpp)
+        self.assertIn("ESP.restart();", main_cpp)
+        self.assertIn("Config button held -> portal", main_cpp)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -104,6 +104,7 @@ struct DeviceContext {
 
     // Pending actions (set by button handler, consumed by loop)
     bool wantRefresh = false;
+    bool wantRefreshNext = false;
     bool wantEnterLiveMode = false;
     bool wantEnterAiChatMode = false;
     bool wantSingleVoiceTurn = false;
@@ -1111,7 +1112,11 @@ void loop() {
     checkConfigButton();
     checkAiChatButton();
 
-    if (ctx.wantEnterLiveMode) {
+    if (ctx.wantRefreshNext) {
+        ctx.wantRefreshNext = false;
+        triggerImmediateRefresh(true, true);
+        ctx.setupDoneAt = millis();
+    } else if (ctx.wantEnterLiveMode) {
         ctx.wantEnterLiveMode = false;
         if (ctx.liveMode) {
             ctx.liveMode = false;
@@ -2209,8 +2214,8 @@ static void checkConfigButton() {
 
             if (pressDuration >= (unsigned long)SHORT_PRESS_MIN_MS &&
                 pressDuration < (unsigned long)CFG_BTN_HOLD_MS) {
-                Serial.println("[BTN] Single click -> toggle live mode");
-                ctx.wantEnterLiveMode = true;
+                Serial.println("[BTN] Single click -> next content");
+                ctx.wantRefreshNext = true;
             }
         }
     }
