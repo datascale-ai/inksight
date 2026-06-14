@@ -105,6 +105,33 @@ class JCalendarZ21ProfileTest(unittest.TestCase):
         for row in expected_rows:
             self.assertIn(row, partitions)
 
+    def test_jcalendar_battery_voltage_uses_calibrated_lipo_mapping(self):
+        network_cpp = read_text("src/network.cpp")
+        match = re.search(
+            r"#if defined\(BOARD_PROFILE_JCALENDAR_ESP32\)(.*?)#elif defined\(BOARD_PROFILE_ESP32_C3_WROOM02\)",
+            network_cpp,
+            flags=re.S,
+        )
+        self.assertIsNotNone(match)
+        block = match.group(1)
+
+        self.assertIn("analogReadMilliVolts(PIN_BAT_ADC)", block)
+        self.assertIn("realBatteryVoltage", block)
+        self.assertRegex(block, r"\*\s*2\.0f")
+        self.assertIn("measuredLow  = 2.95f", block)
+        self.assertIn("measuredHigh = 4.17f", block)
+        self.assertIn("targetHigh   = 3.3f", block)
+        self.assertNotIn("[BAT]", network_cpp)
+        self.assertNotIn("report=%.2fV", network_cpp)
+        self.assertNotIn("avgRaw * (3.3f / 4095.0f) * 2.0f", block)
+
+    def test_jcalendar_setup_does_not_force_debug_battery_read(self):
+        main_cpp = read_text("src/main.cpp")
+        self.assertNotRegex(
+            main_cpp,
+            r"#if defined\(BOARD_PROFILE_JCALENDAR_ESP32\)\s*readBatteryVoltage\(\);\s*#endif",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
