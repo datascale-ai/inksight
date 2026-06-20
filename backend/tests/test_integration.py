@@ -396,6 +396,39 @@ async def test_config_save_preserves_active_runtime_mode(client):
 
 
 @pytest.mark.asyncio
+async def test_stale_active_runtime_mode_reports_interval_for_web_state(client):
+    mac = "AA:BB:CC:DD:EE:13"
+    headers = await provision_device_headers(client, mac)
+    from core.config_store import update_device_state
+
+    claim_resp = await client.post(f"/api/device/{mac}/claim-token", headers=headers)
+    assert claim_resp.status_code == 200
+
+    await register_user(client, "stale_runtime")
+    consume_resp = await client.post("/api/claim/consume", json={"token": claim_resp.json()["token"]})
+    assert consume_resp.status_code == 200
+
+    heartbeat_resp = await client.post(
+        f"/api/v1/device/{mac}/heartbeat",
+        json={"battery_voltage": 3.91, "wifi_rssi": -42},
+        headers=headers,
+    )
+    assert heartbeat_resp.status_code == 200
+
+    await update_device_state(
+        mac,
+        runtime_mode="active",
+        last_state_poll_at="2000-01-01T00:00:00",
+    )
+
+    state_resp = await client.get(f"/api/device/{mac}/state")
+    assert state_resp.status_code == 200
+    state = state_resp.json()
+    assert state["is_online"] is True
+    assert state["runtime_mode"] == "interval"
+
+
+@pytest.mark.asyncio
 async def test_config_save_persists_always_active_flag(client):
     mac = "AA:BB:CC:DD:EE:12"
     headers = await provision_device_headers(client, mac)

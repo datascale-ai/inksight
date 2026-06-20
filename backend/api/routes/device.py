@@ -124,20 +124,25 @@ async def device_state(
     if ota_url and "/firmware/download" in ota_url and "/api/firmware/download" not in ota_url:
         state["ota_url"] = ota_url.replace("/firmware/download", "/api/firmware/download")
 
-    explicit_mode = str(state.get("runtime_mode") or "").lower()
-    if explicit_mode in ("active", "interval"):
-        state["runtime_mode"] = explicit_mode
-        return state
-
     runtime_mode = "interval"
     last_poll = state.get("last_state_poll_at", "")
+    recent_poll = False
     if isinstance(last_poll, str) and last_poll:
         try:
             delta = (datetime.now() - datetime.fromisoformat(last_poll)).total_seconds()
-            runtime_mode = "active" if delta <= 8 else "interval"
+            recent_poll = delta <= 8
         except ValueError:
             logger.warning("[DEVICE] Invalid last_state_poll_at for %s: %s", mac, last_poll, exc_info=True)
-            runtime_mode = "interval"
+            recent_poll = False
+
+    explicit_mode = str(state.get("runtime_mode") or "").lower()
+    if explicit_mode == "active":
+        runtime_mode = "active" if recent_poll else "interval"
+    elif explicit_mode == "interval":
+        runtime_mode = "interval"
+    elif recent_poll:
+        runtime_mode = "active"
+
     state["runtime_mode"] = runtime_mode
     return state
 

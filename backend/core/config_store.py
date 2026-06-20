@@ -1473,8 +1473,13 @@ async def revoke_device_member(owner_user_id: int, mac: str, target_user_id: int
 async def save_config(mac: str, data: dict) -> int:
     now = datetime.now().isoformat()
     refresh_strategy = data.get("refreshStrategy", "random")
+    always_active = 1 if bool(data.get("always_active", False)) else 0
     logger.info(
-        f"[CONFIG SAVE] mac={mac}, refreshStrategy={refresh_strategy}, modes={data.get('modes')}"
+        "[CONFIG SAVE] mac=%s, refreshStrategy=%s, always_active=%s, modes=%s",
+        mac,
+        refresh_strategy,
+        always_active,
+        data.get("modes"),
     )
 
     db = await get_main_db()
@@ -1525,7 +1530,7 @@ async def save_config(mac: str, data: dict) -> int:
             memo_text,
             mode_overrides_json,
             1 if bool(data.get("is_focus_listening", False)) else 0,
-            1 if bool(data.get("always_active", False)) else 0,
+            always_active,
             now,
         ),
     )
@@ -1544,7 +1549,7 @@ async def save_config(mac: str, data: dict) -> int:
     )
 
     await db.commit()
-    logger.info(f"[CONFIG SAVE] ✓ Saved as id={config_id}, is_active=1")
+    logger.info("[CONFIG SAVE] Saved as id=%s, is_active=1, always_active=%s", config_id, always_active)
     return config_id
 
 

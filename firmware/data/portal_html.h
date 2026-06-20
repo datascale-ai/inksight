@@ -46,6 +46,10 @@ body{font-family:var(--f);background:linear-gradient(135deg,#f5f5f0,#e8e8e0);col
 .wi:hover{border-color:var(--bk);background:var(--bg)}
 .wi.sel{border-color:var(--bk);background:var(--bg)}
 .wn{font-size:.85rem;font-weight:500;display:flex;align-items:center;gap:6px}
+.wa{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.wc{background:var(--bk);border:none;cursor:pointer;color:#fff;padding:5px 8px;border-radius:6px;font-size:.72rem;font-weight:600;line-height:1;flex-shrink:0}
+.wc:hover{background:#333}
+.wc:disabled,.wx:disabled{opacity:.6;cursor:not-allowed}
 .wx{background:none;border:none;cursor:pointer;color:var(--gy);padding:4px 6px;border-radius:6px;font-size:1.1rem;line-height:1;flex-shrink:0}
 .wx:hover{color:#dc2626;background:#fef2f2}
 .si-ord{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--bg);border:1px solid var(--bd);font-size:.66rem;color:var(--gy);flex-shrink:0}
@@ -205,11 +209,14 @@ srvUrlPh:"例如: http://192.168.1.100:8080",
 srvPortPh:"例如: 3000",
 btnConn:"连接并保存",
 btnAdd:"仅保存到列表",
+btnSavedConn:"连接",
 savedTitle:"已保存网络",
 addHint:"连不上的网络（如办公室/手机热点）可仅保存，开机会按顺序尝试",
 msgAddOk:"已保存到列表",
 msgFull:"最多保存 5 个网络",
 msgDelOk:"已删除",
+msgSavedConnFail:"连接失败，密码可能已变更，请重新输入密码后连接并保存",
+msgSavedNotFound:"未找到该已保存网络",
 s2Title:"配网完成",
 s2Next:"下一步：",
 s2Auto:"设备将自动重启并联网，请使用配对码继续完成认领与配置。",
@@ -263,11 +270,14 @@ srvUrlPh:"e.g. http://192.168.1.100:8080",
 srvPortPh:"e.g. 3000",
 btnConn:"Connect & Save",
 btnAdd:"Save to List",
+btnSavedConn:"Connect",
 savedTitle:"Saved Networks",
 addHint:"Networks not reachable here (office / phone hotspot) can be saved only; tried in order on boot",
 msgAddOk:"Saved to list",
 msgFull:"Up to 5 networks allowed",
 msgDelOk:"Removed",
+msgSavedConnFail:"Connection failed. The password may have changed; enter it again and use Connect & Save.",
+msgSavedNotFound:"Saved network not found",
 s2Title:"Setup Complete",
 s2Next:"Next Step: ",
 s2Auto:"Device will restart and connect. Use the pairing code to bind.",
@@ -440,21 +450,26 @@ if(i.type==='password'){i.type='text';b.innerHTML='<svg width="14" height="14" v
 else{i.type='password';b.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';}
 }
 
+function setServerForConnect(st){
+var sv=srvMode==='official'?OFFICIAL_SERVER:document.getElementById('srvIn').value.trim();
+var fp=srvMode==='official'?LOCAL_DEFAULT_FRONTEND_PORT:document.getElementById('frontendPortIn').value.trim();
+if(sv&&!sv.match(/^https?:\/\//)){st.className='st e';st.textContent=t('errUrl');return false;}
+if(srvMode==='custom'&&!/^\d{2,5}$/.test(fp)){st.className='st e';st.textContent=t('errPort');return false;}
+srvUrl=normalizeServerUrl(sv);
+frontendPort=fp;
+return true;
+}
+
 function doConnect(){
 var s=ssid||document.getElementById('ssidIn').value.trim();
 var p=document.getElementById('pwIn').value;
-var sv=srvMode==='official'?OFFICIAL_SERVER:document.getElementById('srvIn').value.trim();
-var fp=srvMode==='official'?LOCAL_DEFAULT_FRONTEND_PORT:document.getElementById('frontendPortIn').value.trim();
 var st=document.getElementById('pSt'),btn=document.getElementById('cBtn');
 if(!s){st.className='st e';st.textContent=t('errSsid');return;}
 if(!p){st.className='st e';st.textContent=t('errPw');return;}
 if(p.length<8){st.className='st e';st.textContent=t('errPwLen');return;}
-if(sv&&!sv.match(/^https?:\/\//)){st.className='st e';st.textContent=t('errUrl');return;}
-if(srvMode==='custom'&&!/^\d{2,5}$/.test(fp)){st.className='st e';st.textContent=t('errPort');return;}
+if(!setServerForConnect(st))return;
 btn.classList.add('ld');btn.disabled=true;
 st.className='st c';st.textContent=t('msgConn')+s+' ...';
-srvUrl=normalizeServerUrl(sv);
-frontendPort=fp;
 
 var fd=new FormData();fd.append('ssid',s);fd.append('pass',p);if(srvUrl)fd.append('server',srvUrl);
 fetch('/save_wifi',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
@@ -545,9 +560,13 @@ var left=document.createElement('span');left.className='wn';
 var ord=document.createElement('span');ord.className='si-ord';ord.textContent=(idx+1);
 var nm=document.createElement('span');nm.textContent=name;
 left.appendChild(ord);left.appendChild(nm);
+var actions=document.createElement('span');actions.className='wa';
+var conn=document.createElement('button');conn.className='wc';conn.type='button';conn.textContent=t('btnSavedConn');
+conn.onclick=function(){connectSaved(name,conn)};
 var del=document.createElement('button');del.className='wx';del.type='button';del.innerHTML='&times;';
 del.onclick=function(){delNet(name)};
-li.appendChild(left);li.appendChild(del);
+actions.appendChild(conn);actions.appendChild(del);
+li.appendChild(left);li.appendChild(actions);
 ul.appendChild(li);
 });
 cnt.textContent=names.length+'/'+savedMax;
@@ -567,6 +586,33 @@ fetch('/delete_wifi',{method:'POST',body:fd}).then(function(r){return r.json()})
 if(d&&d.list){renderSaved(d.list);}else{loadSaved();}
 st.className='st w';st.textContent=t('msgDelOk');
 }).catch(function(){st.className='st e';st.textContent=t('msgReqFail');});
+}
+
+function connectSaved(name,btn){
+var st=document.getElementById('pSt');
+if(!setServerForConnect(st))return;
+btn.disabled=true;
+st.className='st c';st.textContent=t('msgConn')+name+' ...';
+var fd=new FormData();fd.append('ssid',name);if(srvUrl)fd.append('server',srvUrl);
+fetch('/connect_saved',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
+btn.disabled=false;
+if(d&&d.list){renderSaved(d.list);}
+if(d.ok){
+st.className='st s';st.textContent=t('msgConnOk');
+document.getElementById('cSSID').textContent=name;
+pairCode=(d.pair_code||'').toUpperCase();
+showSuccess();
+}else if(d.msg==='SAVED_CONNECT_FAILED'){
+st.className='st e';st.textContent=t('msgSavedConnFail');
+}else if(d.msg==='NOT_FOUND'){
+st.className='st e';st.textContent=t('msgSavedNotFound');
+}else{
+st.className='st e';st.textContent=d.msg||t('msgConnFail');
+}
+}).catch(function(){
+btn.disabled=false;
+st.className='st e';st.textContent=t('msgReqFail');
+});
 }
 
 function doAddOnly(){

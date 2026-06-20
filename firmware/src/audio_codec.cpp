@@ -9,6 +9,16 @@
 #define I2S_MIC_PORT         I2S_NUM_1
 #define I2S_SPK_PORT         I2S_NUM_0
 
+#if defined(BOARD_PROFILE_SMT_WROOM32E)
+#define I2S_MIC_CHANNEL_FORMAT I2S_CHANNEL_FMT_ONLY_LEFT
+#else
+#define I2S_MIC_CHANNEL_FORMAT I2S_CHANNEL_FMT_ONLY_RIGHT
+#endif
+
+#ifndef I2S_MIC_SAMPLE_SHIFT
+#define I2S_MIC_SAMPLE_SHIFT 16
+#endif
+
 // ── Inmp441Max98357Codec ─────────────────────────────────────
 
 Inmp441Max98357Codec::Inmp441Max98357Codec(bool duplex) {
@@ -26,7 +36,7 @@ static bool installHalfDuplexInputDriver() {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = CODEC_SAMPLE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
-        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+        .channel_format = I2S_MIC_CHANNEL_FORMAT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 4,
@@ -102,7 +112,7 @@ static bool installDuplexMicDriver() {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = CODEC_SAMPLE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
-        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+        .channel_format = I2S_MIC_CHANNEL_FORMAT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 6,
@@ -242,8 +252,9 @@ int Inmp441Max98357Codec::Read(int16_t* dest, int maxSamples) {
 
     int samplesRead = bytesRead / sizeof(int32_t);
     if (samplesRead > maxSamples) samplesRead = maxSamples;
+
     for (int i = 0; i < samplesRead; i++) {
-        dest[i] = (int16_t)(read_buf_[i] >> 16);
+        dest[i] = (int16_t)(read_buf_[i] >> I2S_MIC_SAMPLE_SHIFT);
     }
     return samplesRead;
 }

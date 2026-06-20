@@ -11,7 +11,7 @@
 #include <LittleFS.h>
 #include <mbedtls/base64.h>
 #include <time.h>
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
 #include <esp_adc_cal.h>
 #endif
 
@@ -196,7 +196,7 @@ float readBatteryVoltage() {
         sum += readings[i];
 
     float avgRaw = (float)sum / (SAMPLES - 2 * DISCARD);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
     static esp_adc_cal_characteristics_t adcChars;
     static bool calibrated = false;
     if (!calibrated) {
@@ -206,22 +206,12 @@ float readBatteryVoltage() {
 
     uint32_t mv = esp_adc_cal_raw_to_voltage((uint32_t)avgRaw, &adcChars);
     float realBatteryVoltage = (mv / 1000.0f) * 2.0f; // R1=10k, R2=10k
-
-    const float measuredLow  = 2.95f;
-    const float measuredHigh = 4.17f;
-    const float targetLow    = 0.0f;
-    const float targetHigh   = 3.3f;
-
-    if (realBatteryVoltage <= measuredLow) return targetLow;
-    if (realBatteryVoltage >= measuredHigh) return targetHigh;
-
-    float mappedVoltage = targetLow + (realBatteryVoltage - measuredLow) *
-                          (targetHigh - targetLow) / (measuredHigh - measuredLow);
-    if (mappedVoltage > targetHigh) mappedVoltage = targetHigh;
-    if (mappedVoltage < targetLow) mappedVoltage = targetLow;
-    return mappedVoltage;
+    Serial.printf("[BAT] raw=%.1f adc=%umV vbat=%.2fV\n", avgRaw, (unsigned int)mv, realBatteryVoltage);
+    return realBatteryVoltage;
 #else
-    return avgRaw * (3.3f / 4095.0f) * 2.0f;
+    float realBatteryVoltage = avgRaw * (3.3f / 4095.0f) * 2.0f;
+    Serial.printf("[BAT] raw=%.1f vbat=%.2fV\n", avgRaw, realBatteryVoltage);
+    return realBatteryVoltage;
 #endif
 }
 
@@ -489,9 +479,10 @@ bool ensureDeviceToken() {
     return false;
 }
 
-bool fetchFocusListeningFlag(bool *outEnabled) {
+bool fetchFocusListeningFlag(bool *outEnabled, bool *outAlwaysActive) {
     if (!outEnabled) return false;
     *outEnabled = false;
+    if (outAlwaysActive) *outAlwaysActive = false;
     if (WiFi.status() != WL_CONNECTED) return false;
     if (!ensureDeviceToken()) return false;
 
@@ -528,8 +519,18 @@ bool fetchFocusListeningFlag(bool *outEnabled) {
             body.indexOf("\"is_focus_listening\": true") >= 0 ||
             body.indexOf("\"focus_listening\":1") >= 0 ||
             body.indexOf("\"focus_listening\": 1") >= 0;
+        bool alwaysActive =
+            body.indexOf("\"is_always_active\":true") >= 0 ||
+            body.indexOf("\"is_always_active\": true") >= 0 ||
+            body.indexOf("\"always_active\":1") >= 0 ||
+            body.indexOf("\"always_active\": 1") >= 0 ||
+            body.indexOf("\"always_active\":true") >= 0 ||
+            body.indexOf("\"always_active\": true") >= 0;
         *outEnabled = enabled;
-        Serial.printf("[FOCUS] is_focus_listening=%s\n", enabled ? "true" : "false");
+        if (outAlwaysActive) *outAlwaysActive = alwaysActive;
+        Serial.printf("[CONFIG] is_focus_listening=%s always_active=%s\n",
+                      enabled ? "true" : "false",
+                      alwaysActive ? "true" : "false");
         return true;
     }
     return false;

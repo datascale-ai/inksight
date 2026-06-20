@@ -90,7 +90,7 @@ bool ensureDeviceToken();
 bool postHeartbeat(bool force = false);
 
 // ── Focus listening helpers ─────────────────────────────────
-bool fetchFocusListeningFlag(bool *outEnabled);
+bool fetchFocusListeningFlag(bool *outEnabled, bool *outAlwaysActive = nullptr);
 bool fetchFocusAlertBMP();
 
 // ── Battery ─────────────────────────────────────────────────

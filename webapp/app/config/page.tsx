@@ -100,7 +100,7 @@ const TONE_OPTIONS = [
 ] as const;
 const PERSONA_PRESETS = ["鲁迅", "王小波", "JARVIS", "苏格拉底", "村上春树"] as const;
 
-import { queueImmediateRefreshIfOnline } from "@/lib/device-utils";
+import { calculateBatteryPct, queueImmediateRefreshIfOnline } from "@/lib/device-utils";
 
 function normalizeTone(v: unknown): string {
   if (typeof v !== "string") return "neutral";
@@ -1382,9 +1382,9 @@ function ConfigPageInner() {
           ? tr("配置已保存，暂时无法确认设备状态", "Settings saved, but device status is currently unavailable")
           : onlineNow
             ? (refreshQueued
-                ? tr("配置已保存，已通知设备立即刷新", "Settings saved, device notified to refresh now")
-                : tr("配置已保存，设备在线，但立即刷新通知失败", "Settings saved, device is online, but immediate refresh notification failed"))
-            : tr("配置已保存，设备当前离线，将在设备上线后生效", "Settings saved. Device is offline and will update when it comes online"),
+                ? tr("配置已保存，已通知在线设备尽快同步", "Settings saved, online device notified to sync soon")
+                : tr("配置已保存，设备在线，但同步通知失败", "Settings saved, device is online, but sync notification failed"))
+            : tr("配置已保存，设备当前不在活跃同步状态，将在设备下次上线后生效", "Settings saved. Device is not actively syncing and will update when it comes online"),
         syncResult.onlineNow === null || !refreshQueued ? "info" : "success",
       );
       setPreviewNoCacheOnce(true);
@@ -2402,9 +2402,7 @@ function ConfigPageInner() {
   );
   const activeModeSchema = settingsMode ? (modeSchemaMap[settingsMode] || []) : [];
 
-  const batteryPct = stats?.last_battery_voltage
-    ? Math.min(100, Math.max(0, Math.round((stats.last_battery_voltage / 3.3) * 100)))
-    : null;
+  const batteryPct = calculateBatteryPct(stats?.last_battery_voltage);
   const currentDeviceMembership = userDevices.find((d) => d.mac.toUpperCase() === mac.toUpperCase()) || null;
   const denyByMembership = Boolean(mac && currentUser && !devicesLoading && !currentDeviceMembership);
   const currentUserRole = currentDeviceMembership?.role || "";

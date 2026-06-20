@@ -44,11 +44,12 @@ async def post_config(
         )
     modes = data.get("modes", [])
     logger.info(
-        "[CONFIG SAVE REQUEST] source=%s mac=%s modes=%s refresh_strategy=%s",
+        "[CONFIG SAVE REQUEST] source=%s mac=%s modes=%s refresh_strategy=%s always_active=%s",
         x_inksight_client or "unknown",
         mac,
         len(modes) if isinstance(modes, list) else 0,
         data.get("refresh_strategy"),
+        data.get("always_active"),
     )
     config_id = await save_config(mac, data)
     await set_pending_refresh(mac, True)
@@ -63,9 +64,11 @@ async def post_config(
     saved_config = await get_active_config(mac)
     if saved_config:
         logger.info(
-            "[CONFIG VERIFY] Saved config id=%s refresh_strategy=%s",
+            "[CONFIG VERIFY] Saved config id=%s refresh_strategy=%s always_active=%s is_always_active=%s",
             saved_config.get("id"),
             saved_config.get("refresh_strategy"),
+            saved_config.get("always_active"),
+            saved_config.get("is_always_active"),
         )
 
     return ConfigSaveResponse(ok=True, config_id=config_id)

@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
+#include <esp_sleep.h>
 #include <new>
 #include <WiFi.h>
 
@@ -48,12 +49,8 @@ static const char *VOCAB_REVIEW_MODE_ID = "VOCAB_REVIEW";
 static const int VOICE_SILENCE_COMMIT_MS = 600;
 static const float VOICE_STREAM_VAD_THRESHOLD = 150.0f;
 static const unsigned long VOICE_MAX_CAPTURE_MS = 8000;
+static const unsigned long VOICE_PLAYBACK_TAIL_CLEAR_MS = 300;
 static const int VOICE_DEEP_CLEAR_INTERVAL = 5;  // deep-clear every N turns to remove ghosting
-
-#if VOICE_ONLY_BUILD
-static const float BARGE_IN_THRESHOLD = 2000.0f;
-static const int BARGE_IN_CONFIRM_FRAMES = 3;
-#endif
 
 struct VoiceTurnPerf {
     int turnIndex = 0;
@@ -86,8 +83,16 @@ enum class DeviceState : uint8_t {
     ERROR,
 };
 
+enum class WakeupReason : uint8_t {
+    POWER_ON,
+    TIMER,
+    BUTTON,
+    UNKNOWN,
+};
+
 struct DeviceContext {
     DeviceState state = DeviceState::BOOT;
+    WakeupReason wakeupReason = WakeupReason::POWER_ON;
 
     // Button state
     unsigned long btnPressStart = 0;
@@ -106,7 +111,6 @@ struct DeviceContext {
     bool wantRefresh = false;
     bool wantEnterLiveMode = false;
     bool wantEnterAiChatMode = false;
-    bool wantSingleVoiceTurn = false;
     bool wantEnterVocabReview = false;
     bool wantVocabFlip = false;
     bool wantVocabNextRating = false;
@@ -119,6 +123,52 @@ struct DeviceContext {
 
 static DeviceContext ctx;
 static bool focusListening = false;
+static bool alwaysActive = false;
+
+static WakeupReason detectWakeupReason() {
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    switch (cause) {
+        case ESP_SLEEP_WAKEUP_TIMER:
+            Serial.println("[WAKE] Wakeup from timer");
+            return WakeupReason::TIMER;
+        case ESP_SLEEP_WAKEUP_EXT0:
+        case ESP_SLEEP_WAKEUP_EXT1:
+        case ESP_SLEEP_WAKEUP_GPIO:
+            Serial.println("[WAKE] Wakeup from button/GPIO");
+            return WakeupReason::BUTTON;
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+            Serial.println("[WAKE] Power on or reset");
+            return WakeupReason::POWER_ON;
+        default:
+            Serial.printf("[WAKE] Unknown wakeup cause: %d\n", (int)cause);
+            return WakeupReason::UNKNOWN;
+    }
+}
+
+static int effectiveSleepMinutes() {
+#if DEBUG_MODE
+    return DEBUG_REFRESH_MIN;
+#else
+    return cfgSleepMin;
+#endif
+}
+
+static bool refreshActivityFlags() {
+    bool focusFlag = false;
+    bool alwaysActiveFlag = false;
+    if (!fetchFocusListeningFlag(&focusFlag, &alwaysActiveFlag)) {
+        return false;
+    }
+    bool changed = (focusListening != focusFlag) || (alwaysActive != alwaysActiveFlag);
+    focusListening = focusFlag;
+    alwaysActive = alwaysActiveFlag;
+    if (changed) {
+        Serial.printf("[CONFIG] activity flags updated focus=%s always_active=%s\n",
+                      focusListening ? "true" : "false",
+                      alwaysActive ? "true" : "false");
+    }
+    return true;
+}
 
 // Content dedup — skip display refresh when content unchanged
 static uint32_t lastContentChecksum = 0;
@@ -636,34 +686,7 @@ static void runVoiceLoop(AudioService &audioService) {
                     }
 
                 } else if (state == VoiceState::SPEAKING && cap->sampleCount > 0) {
-                    float rms = audioCalculateRMS(cap->samples, cap->sampleCount);
-                    if (rms >= BARGE_IN_THRESHOLD) {
-                        bargeInFrames++;
-                        if (bargeInFrames >= BARGE_IN_CONFIRM_FRAMES) {
-                            Serial.printf("[VOICE] Barge-in detected (RMS=%.0f, frames=%d)\n", rms, bargeInFrames);
-                            voiceWsInterrupt();
-                            audioService.ResetPlayback();
-                            audioService.SetGenerationId(audioService.GetGenerationId() + 1);
-                            bargeInFrames = 0;
-
-                            speechDetected = true;
-                            turnCounter++;
-                            resetVoiceTurnPerf(turnPerf);
-                            turnPerf.turnIndex = turnCounter;
-                            turnPerf.speechStartAt = millis();
-                            lastVoiceAt = millis();
-
-                            audioService.PushForEncoding(cap->samples, cap->sampleCount);
-                            turnPerf.sentAudioChunks++;
-                            turnPerf.sentAudioBytes += cap->sampleCount * sizeof(int16_t);
-                            turnPerf.firstChunkSentAt = millis();
-
-                            state = VoiceState::LISTENING;
-                            voiceSetLed(state);
-                        }
-                    } else {
-                        bargeInFrames = 0;
-                    }
+                    bargeInFrames = 0;
                 } else {
                     bargeInFrames = 0;
                 }
@@ -676,6 +699,7 @@ static void runVoiceLoop(AudioService &audioService) {
                     Serial.println("[VOICE] Button interrupt");
                     voiceWsInterrupt();
                     audioService.ResetPlayback();
+                    audioService.FlushCaptureQueue();
                     audioService.SetGenerationId(audioService.GetGenerationId() + 1);
                     speechDetected = false;
                     lastVoiceAt = 0;
@@ -738,6 +762,7 @@ static void runVoiceLoop(AudioService &audioService) {
                 } else if (event.type == VoiceWsEventType::TurnInterrupted) {
                     Serial.printf("[VOICE] Turn %d: interrupted by server\n", turnPerf.turnIndex);
                     audioService.ResetPlayback();
+                    audioService.FlushCaptureQueue();
 
                 } else if (event.type == VoiceWsEventType::TurnDone) {
                     turnPerf.turnDoneAt = millis();
@@ -754,7 +779,7 @@ static void runVoiceLoop(AudioService &audioService) {
                         voiceWsLoop();
                         delay(20);
                     }
-                    delay(300);
+                    delay(VOICE_PLAYBACK_TAIL_CLEAR_MS);
                     audioService.ResetPlayback();
 
                     if (exitConversation) {
@@ -805,7 +830,7 @@ static void runVoiceLoop(AudioService &audioService) {
 void setup() {
     Serial.begin(115200);
     delay(3000);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 #endif
@@ -920,7 +945,6 @@ static void handleFailure(const char *reason);
 static void handleWiFiFailure();
 static void enterDeepSleep(int minutes);
 static bool runAiChatConversation();
-static void runSingleVoiceTurn();
 static bool decodeVoiceBmpToFrameBuffer(const uint8_t *bmpBytes, size_t bmpLen);
 
 // ═════════════════════════════════════════════════════════════
@@ -930,7 +954,7 @@ static bool decodeVoiceBmpToFrameBuffer(const uint8_t *bmpBytes, size_t bmpLen);
 void setup() {
     Serial.begin(115200);
     delay(3000);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 #endif
@@ -938,6 +962,7 @@ void setup() {
 
     gpioInit();
     ledInit();
+    ctx.wakeupReason = detectWakeupReason();
 
     epdInit();
     cacheInit();
@@ -997,11 +1022,9 @@ void setup() {
         return;
     }
 
-    bool focusFlag = false;
-    if (fetchFocusListeningFlag(&focusFlag)) {
-        focusListening = focusFlag;
-    } else {
+    if (!refreshActivityFlags()) {
         focusListening = false;
+        alwaysActive = false;
     }
     if (g_userAborted) {
         Serial.println("User aborted during focus fetch -> portal");
@@ -1082,13 +1105,22 @@ void setup() {
     }
 
     bool firstInstallLivePending = isFirstInstallLiveModePending();
-    if (firstInstallLivePending) {
+    bool buttonWakeActive = (ctx.wakeupReason == WakeupReason::BUTTON);
+    if (firstInstallLivePending || alwaysActive || buttonWakeActive) {
         ctx.liveMode = true;
         ctx.lastLivePollAt = 0;
         ctx.lastLiveWiFiRetryAt = 0;
-        markFirstInstallLiveModeDone();
+        if (firstInstallLivePending) {
+            markFirstInstallLiveModeDone();
+        }
         postRuntimeMode("active");
-        Serial.println("[LIVE] First install: default to active mode");
+        if (buttonWakeActive) {
+            Serial.println("[LIVE] Button wakeup: entering active mode");
+        } else {
+            Serial.println(firstInstallLivePending
+                           ? "[LIVE] First install: default to active mode"
+                           : "[LIVE] Always active config enabled");
+        }
     } else {
         postRuntimeMode("interval");
         if (focusListening) {
@@ -1101,6 +1133,14 @@ void setup() {
 
     ctx.state = DeviceState::DISPLAYING;
     ctx.setupDoneAt = millis();
+    if (!ctx.liveMode) {
+#if DEBUG_MODE
+        Serial.printf("[DEBUG] Boot complete, entering deep sleep for %d min\n", DEBUG_REFRESH_MIN);
+#else
+        Serial.printf("Boot complete, entering deep sleep for %d min\n", cfgSleepMin);
+#endif
+        enterDeepSleep(effectiveSleepMinutes());
+    }
 #if DEBUG_MODE
     Serial.printf("[DEBUG] Staying awake, refresh every %d min (user config: %d min)\n",
                   DEBUG_REFRESH_MIN, cfgSleepMin);
@@ -1134,6 +1174,8 @@ void loop() {
             postRuntimeMode("interval");
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
+            delay(500);
+            enterDeepSleep(effectiveSleepMinutes());
         } else {
             ctx.liveMode = true;
             ctx.lastLivePollAt = 0;
@@ -1240,31 +1282,10 @@ void loop() {
                 ledFeedback("fail");
             }
         }
-    } else if (ctx.wantSingleVoiceTurn) {
-#else
-    } else if (ctx.wantSingleVoiceTurn) {
-#endif
-        ctx.wantSingleVoiceTurn = false;
-        ctx.switchToModeId = "";
-        Serial.println("[VOICE] Short press -> single voice turn");
-        if (WiFi.status() != WL_CONNECTED && !connectWiFi()) {
-            Serial.println("[VOICE] WiFi reconnect failed, skip");
-        } else {
-            runSingleVoiceTurn();
-            ctx.btnPressStart = 0;
-            ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
-            if (ctx.switchToModeId.length() > 0) {
-                Serial.printf("[VOICE] Mode switch to %s, refreshing immediately\n",
-                              ctx.switchToModeId.c_str());
-                g_suppressAbortCheck = true;
-                triggerImmediateRefresh(false, true);
-                g_suppressAbortCheck = false;
-                WiFi.disconnect(true);
-                WiFi.mode(WIFI_OFF);
-                ctx.setupDoneAt = millis();
-            }
-        }
     } else if (ctx.wantEnterAiChatMode) {
+#else
+    } else if (ctx.wantEnterAiChatMode) {
+#endif
         ctx.wantEnterAiChatMode = false;
         ctx.switchToModeId = "";
         Serial.println("[AI CHAT] Dedicated switch long press -> enter conversation mode");
@@ -1319,6 +1340,9 @@ void loop() {
         triggerImmediateRefresh();
         ctx.wantRefresh = false;
         ctx.setupDoneAt = millis();
+        if (!ctx.liveMode) {
+            enterDeepSleep(effectiveSleepMinutes());
+        }
     }
 
     handleLiveMode();
@@ -1353,6 +1377,7 @@ void loop() {
 #endif
             triggerImmediateRefresh();
             ctx.setupDoneAt = millis();
+            enterDeepSleep(effectiveSleepMinutes());
         }
     }
 
@@ -1414,14 +1439,28 @@ void loop() {
 // ── Deep sleep ──────────────────────────────────────────────
 
 static void enterDeepSleep(int minutes) {
-    if (focusListening) {
-        Serial.println("[FOCUS] Focus listening enabled, skipping deep sleep");
+    if (focusListening || alwaysActive) {
+        Serial.println(focusListening
+                       ? "[FOCUS] Focus listening enabled, skipping deep sleep"
+                       : "[LIVE] Always active enabled, skipping deep sleep");
         return;
     }
+    ctx.state = DeviceState::SLEEPING;
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     epdSleep();
     Serial.printf("Deep sleep for %d min (~%duA)\n", minutes, 5);
     Serial.flush();
     esp_sleep_enable_timer_wakeup((uint64_t)minutes * 60ULL * 1000000ULL);
+#if PIN_CFG_BTN >= 0
+    const uint64_t wakeMask = 1ULL << PIN_CFG_BTN;
+#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C6
+    esp_deep_sleep_enable_gpio_wakeup(wakeMask, ESP_GPIO_WAKEUP_GPIO_LOW);
+#else
+    esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#endif
+    Serial.printf("[WAKE] Timer + GPIO%d button wake enabled\n", PIN_CFG_BTN);
+#endif
     esp_deep_sleep_start();
 }
 
@@ -1454,11 +1493,10 @@ static void handleFailure(const char *reason) {
         updateTimeDisplay();
         lastRenderedPeriod = currentPeriodIndex();
         ctx.lastClockTick = millis();
-        WiFi.disconnect(true);
-        WiFi.mode(WIFI_OFF);
         ctx.state = DeviceState::DISPLAYING;
         ctx.setupDoneAt = millis();
         resetRetryCount();
+        enterDeepSleep(effectiveSleepMinutes());
         return;
     }
 
@@ -1473,14 +1511,7 @@ static void handleFailure(const char *reason) {
     } else {
         Serial.println("Max retries reached, entering deep sleep");
         resetRetryCount();
-        if (focusListening) {
-            Serial.println("[FOCUS] Focus listening enabled, not entering deep sleep");
-            ctx.state = DeviceState::DISPLAYING;
-            ctx.setupDoneAt = millis();
-            return;
-        }
-        esp_sleep_enable_timer_wakeup((uint64_t)cfgSleepMin * 60ULL * 1000000ULL);
-        esp_deep_sleep_start();
+        enterDeepSleep(effectiveSleepMinutes());
     }
 }
 
@@ -1540,8 +1571,18 @@ static void handleLiveMode() {
     bool shouldExitLive = false;
     if (hasPendingRemoteAction(&shouldExitLive)) {
         Serial.println("[LIVE] Pending action detected, refreshing now");
+        bool wasAlwaysActive = alwaysActive;
+        refreshActivityFlags();
         triggerImmediateRefresh(false, true);
         ctx.setupDoneAt = millis();
+        if ((shouldExitLive || (wasAlwaysActive && !alwaysActive)) && !focusListening) {
+            ctx.liveMode = false;
+            postRuntimeMode("interval");
+            Serial.println(shouldExitLive
+                           ? "[LIVE] Backend requested interval mode after refresh"
+                           : "[LIVE] Always active disabled, entering interval deep sleep");
+            enterDeepSleep(effectiveSleepMinutes());
+        }
         return;
     }
     if (shouldExitLive) {
@@ -1550,6 +1591,7 @@ static void handleLiveMode() {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
         Serial.println("[LIVE] Backend requested interval mode");
+        enterDeepSleep(effectiveSleepMinutes());
         return;
     }
 
@@ -1581,162 +1623,6 @@ static bool decodeVoiceBmpToFrameBuffer(const uint8_t *bmpBytes, size_t bmpLen) 
         memcpy(imgBuf + dispY * ROW_BYTES, pixelData + (size_t)bmpY * ROW_STRIDE, ROW_BYTES);
     }
     return true;
-}
-
-// ── Single voice turn (short-press, one Q&A) ────────────────
-
-static void runSingleVoiceTurn() {
-#if !defined(BOARD_HAS_AUDIO)
-    return;
-#else
-    showVoiceIndicator(true);
-    ledFeedback("ack");
-
-    static Inmp441Max98357Codec codec(true);
-    if (!codec.Start()) {
-        Serial.println("[VOICE] Single turn: codec start failed");
-        hideVoiceIndicator();
-        return;
-    }
-
-    static AudioService audioService;
-    if (!audioService.Initialize(&codec)) {
-        Serial.println("[VOICE] Single turn: AudioService init failed");
-        codec.Stop();
-        hideVoiceIndicator();
-        return;
-    }
-
-    if (!voiceWsOpen(SAMPLE_RATE, W, H, false)) {
-        Serial.println("[VOICE] Single turn: WS open failed");
-        audioService.Stop();
-        codec.Stop();
-        hideVoiceIndicator();
-        return;
-    }
-
-    unsigned long readyStartAt = millis();
-    bool sessionReady = false;
-    while (millis() - readyStartAt < 6000) {
-        voiceWsLoop();
-        VoiceWsEvent event;
-        while (voiceWsPollEvent(event)) {
-            if (event.type == VoiceWsEventType::SessionReady) {
-                sessionReady = true;
-            }
-            voiceWsReleaseEvent(event);
-        }
-        if (sessionReady) break;
-        delay(10);
-    }
-
-    if (!sessionReady) {
-        Serial.println("[VOICE] Single turn: session ready timeout");
-        voiceWsClose();
-        audioService.Stop();
-        codec.Stop();
-        hideVoiceIndicator();
-        return;
-    }
-
-    audioService.Start();
-    audioService.FlushCaptureQueue();
-    Serial.println("[VOICE] Single turn: listening...");
-
-    bool speechDetected = false;
-    bool committed = false;
-    unsigned long lastVoiceAt = 0;
-
-    while (voiceWsConnected() && !committed) {
-        voiceWsLoop();
-        drainSendQueue(audioService);
-
-        AsCaptureChunk *cap = nullptr;
-        while (audioService.PollCaptureChunk(cap)) {
-            if (cap->sampleCount > 0) {
-                audioNoiseGateApply(cap->samples, cap->sampleCount, 80.0f);
-                float rms = audioCalculateRMS(cap->samples, cap->sampleCount);
-                if (!speechDetected && rms < VOICE_STREAM_VAD_THRESHOLD) {
-                    audioAdaptiveNoiseFloor(rms);
-                }
-                float noiseFloor = audioAdaptiveNoiseFloor(-1.0f);
-                float effectiveThreshold = max(VOICE_STREAM_VAD_THRESHOLD, noiseFloor * 3.0f);
-
-                if (rms >= effectiveThreshold) {
-                    speechDetected = true;
-                    lastVoiceAt = millis();
-                }
-                if (speechDetected) {
-                    audioService.PushForEncoding(cap->samples, cap->sampleCount);
-                }
-                bool silenceTimeout = speechDetected && lastVoiceAt > 0 &&
-                    (millis() - lastVoiceAt >= (unsigned long)VOICE_SILENCE_COMMIT_MS);
-                bool maxDuration = speechDetected &&
-                    (millis() - lastVoiceAt >= VOICE_MAX_CAPTURE_MS + VOICE_SILENCE_COMMIT_MS);
-                if (silenceTimeout || maxDuration) {
-                    drainSendQueue(audioService);
-                    voiceWsCommitTurn();
-                    committed = true;
-                }
-            }
-            audioService.ReleaseCaptureChunk(cap);
-        }
-        delay(5);
-    }
-
-    if (!committed) {
-        Serial.println("[VOICE] Single turn: no speech or WS dropped");
-        audioService.Stop();
-        voiceWsClose();
-        codec.Stop();
-        hideVoiceIndicator();
-        return;
-    }
-
-    Serial.println("[VOICE] Single turn: waiting for response...");
-    unsigned long waitStart = millis();
-    bool gotDone = false;
-    while (voiceWsConnected() && millis() - waitStart < 15000) {
-        voiceWsLoop();
-        drainSendQueue(audioService);
-
-        VoiceWsEvent event;
-        while (voiceWsPollEvent(event)) {
-            if (event.type == VoiceWsEventType::TtsAudioChunk) {
-                if (event.needsDecode) {
-                    audioService.PushForDecoding(event.data, event.dataLen, event.generationId);
-                } else {
-                    audioService.PushPcmForPlayback(event.data, event.dataLen, event.generationId);
-                }
-            } else if (event.type == VoiceWsEventType::TurnDone) {
-                gotDone = true;
-                if (event.switchToMode.length() > 0) {
-                    ctx.switchToModeId = event.switchToMode;
-                    Serial.printf("[VOICE] Single turn: mode switch -> %s\n", event.switchToMode.c_str());
-                }
-                voiceWsReleaseEvent(event);
-                break;
-            }
-            voiceWsReleaseEvent(event);
-        }
-        if (gotDone) break;
-        delay(10);
-    }
-
-    unsigned long drainStart = millis();
-    while (!audioService.IsPlaybackEmpty() && millis() - drainStart < 8000) {
-        voiceWsLoop();
-        delay(20);
-    }
-    delay(100);
-
-    audioService.Stop();
-    audioService.ResetPlayback();
-    voiceWsClose();
-    codec.Stop();
-    hideVoiceIndicator();
-    Serial.println("[VOICE] Single turn: done");
-#endif
 }
 
 // ── AI Chat conversation (display build, full-duplex) ───────
@@ -1772,6 +1658,10 @@ static bool runAiChatConversation() {
     VoiceTurnPerf turnPerf;
     unsigned long lastRmsLogAt = 0;
     float peakRms = 0;
+#if PIN_AI_CHAT_SW >= 0
+    bool exitButtonIgnoreUntilRelease = (digitalRead(PIN_AI_CHAT_SW) == LOW);
+    unsigned long exitButtonPressStart = 0;
+#endif
 
     showVoiceChatScreen();
 
@@ -1811,6 +1701,32 @@ static bool runAiChatConversation() {
     while (voiceWsConnected()) {
         voiceWsLoop();
         drainSendQueue(audioService);
+
+#if PIN_AI_CHAT_SW >= 0
+        bool exitButtonPressed = (digitalRead(PIN_AI_CHAT_SW) == LOW);
+        if (exitButtonIgnoreUntilRelease) {
+            if (!exitButtonPressed) {
+                exitButtonIgnoreUntilRelease = false;
+            }
+            exitButtonPressStart = 0;
+        } else if (exitButtonPressed) {
+            if (exitButtonPressStart == 0) {
+                exitButtonPressStart = millis();
+            } else if (millis() - exitButtonPressStart >= (unsigned long)AI_CHAT_BTN_HOLD_MS) {
+                Serial.printf("[AI CHAT] Switch held for %dms, exit conversation\n", AI_CHAT_BTN_HOLD_MS);
+                audioService.ResetPlayback();
+                voiceWsInterrupt();
+                audioService.Stop();
+                voiceWsClose();
+                codec.Stop();
+                ctx.aiBtnPressStart = 0;
+                ctx.ignoreAiButtonUntilRelease = true;
+                return true;
+            }
+        } else {
+            exitButtonPressStart = 0;
+        }
+#endif
 
         AsCaptureChunk *captureChunk = nullptr;
         while (audioService.PollCaptureChunk(captureChunk)) {
@@ -1895,6 +1811,7 @@ static bool runAiChatConversation() {
                 Serial.printf("[VOICE_PERF][DEVICE] turn=%d interrupted_after_commit_ms=%lu\n", turnPerf.turnIndex, voicePerfSince(turnPerf.commitAt));
             }
             audioService.ResetPlayback();
+            audioService.FlushCaptureQueue();
             audioService.SetGenerationId(audioService.GetGenerationId() + 1);
             resetVoiceTurnPerf(turnPerf);
         }
@@ -1935,6 +1852,9 @@ static bool runAiChatConversation() {
                     );
                 }
             } else if (event.type == VoiceWsEventType::TtsAudioChunk) {
+                waitingForTurnDone = true;
+                speechDetected = false;
+                lastVoiceAt = 0;
                 turnPerf.recvAudioChunks++;
                 turnPerf.recvAudioBytes += event.dataLen;
                 if (turnPerf.firstTtsChunkAt == 0) {
@@ -1962,8 +1882,8 @@ static bool runAiChatConversation() {
                     Serial.printf("[VOICE_PERF][DEVICE] turn=%d turn_interrupted_after_commit_ms=%lu\n", turnPerf.turnIndex, voicePerfSince(turnPerf.commitAt));
                 }
                 audioService.ResetPlayback();
+                audioService.FlushCaptureQueue();
             } else if (event.type == VoiceWsEventType::TurnDone) {
-                waitingForTurnDone = false;
                 speechDetected = false;
                 lastVoiceAt = 0;
                 exitConversation = event.exitConversation;
@@ -1978,8 +1898,10 @@ static bool runAiChatConversation() {
                     voiceWsLoop();
                     delay(20);
                 }
-                delay(120);
+                delay(VOICE_PLAYBACK_TAIL_CLEAR_MS);
                 audioService.ResetPlayback();
+                audioService.FlushCaptureQueue();
+                waitingForTurnDone = false;
                 Serial.printf(
                     "[VOICE_PERF][DEVICE] turn=%d done total_ms=%lu commit_to_done_ms=%lu recv_audio_chunks=%u recv_audio_bytes=%u exit=%s\n",
                     turnPerf.turnIndex,
@@ -2005,6 +1927,7 @@ static bool runAiChatConversation() {
                 speechDetected = false;
                 lastVoiceAt = 0;
                 audioService.ResetPlayback();
+                audioService.FlushCaptureQueue();
                 resetVoiceTurnPerf(turnPerf);
             }
             voiceWsReleaseEvent(event);
@@ -2325,8 +2248,7 @@ static void checkAiChatButton() {
                     }
                 }
 #else
-                Serial.printf("[VOICE] Short press %lums, queue single voice turn\n", duration);
-                ctx.wantSingleVoiceTurn = true;
+                // Short press is intentionally unused; long press enters AI chat.
 #endif
             }
         }
