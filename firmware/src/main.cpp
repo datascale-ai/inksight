@@ -1115,10 +1115,10 @@ void setup() {
         }
         postRuntimeMode("active");
         if (buttonWakeActive) {
-            Serial.println("[LIVE] Button wakeup: entering active mode");
+            Serial.println("[LIVE] Button wakeup: entering temporary active mode");
         } else {
             Serial.println(firstInstallLivePending
-                           ? "[LIVE] First install: default to active mode"
+                           ? "[LIVE] First install: temporary active mode"
                            : "[LIVE] Always active config enabled");
         }
     } else {
@@ -1327,6 +1327,12 @@ void loop() {
                 if (reconnected) {
                     lastContentChecksum = 0;  // force display refresh after AI chat UI
                     triggerImmediateRefresh(false, true);
+                    if (!focusListening && !alwaysActive) {
+                        ctx.liveMode = false;
+                        postRuntimeMode("interval");
+                        Serial.println("[AI CHAT] Refresh complete, entering interval deep sleep");
+                        enterDeepSleep(effectiveSleepMinutes());
+                    }
                 } else {
                     Serial.println("[AI CHAT] WiFi reconnect failed after conversation, will retry next cycle");
                 }
@@ -1340,7 +1346,12 @@ void loop() {
         triggerImmediateRefresh();
         ctx.wantRefresh = false;
         ctx.setupDoneAt = millis();
-        if (!ctx.liveMode) {
+        if (!focusListening && !alwaysActive) {
+            if (ctx.liveMode) {
+                ctx.liveMode = false;
+                postRuntimeMode("interval");
+                Serial.println("[LIVE] Manual refresh complete, entering interval deep sleep");
+            }
             enterDeepSleep(effectiveSleepMinutes());
         }
     }
@@ -1575,12 +1586,16 @@ static void handleLiveMode() {
         refreshActivityFlags();
         triggerImmediateRefresh(false, true);
         ctx.setupDoneAt = millis();
-        if ((shouldExitLive || (wasAlwaysActive && !alwaysActive)) && !focusListening) {
+        if (!focusListening && !alwaysActive) {
             ctx.liveMode = false;
             postRuntimeMode("interval");
-            Serial.println(shouldExitLive
-                           ? "[LIVE] Backend requested interval mode after refresh"
-                           : "[LIVE] Always active disabled, entering interval deep sleep");
+            if (shouldExitLive) {
+                Serial.println("[LIVE] Backend requested interval mode after refresh");
+            } else if (wasAlwaysActive) {
+                Serial.println("[LIVE] Always active disabled, entering interval deep sleep");
+            } else {
+                Serial.println("[LIVE] Temporary active refresh complete, entering interval deep sleep");
+            }
             enterDeepSleep(effectiveSleepMinutes());
         }
         return;
@@ -1603,6 +1618,12 @@ static void handleLiveMode() {
 #endif
         triggerImmediateRefresh(false, true);
         ctx.setupDoneAt = millis();
+        if (!focusListening && !alwaysActive) {
+            ctx.liveMode = false;
+            postRuntimeMode("interval");
+            Serial.println("[LIVE] Fallback refresh complete, entering interval deep sleep");
+            enterDeepSleep(effectiveSleepMinutes());
+        }
     }
 }
 
