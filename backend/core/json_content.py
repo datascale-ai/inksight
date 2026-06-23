@@ -83,6 +83,14 @@ def _resolve_uploaded_image_bytes(url: str) -> bytes | None:
         return None
 
 
+def _is_uploaded_image_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    return (parsed.path or "").startswith("/api/uploads/")
+
+
 def _has_cjk_text(text: str) -> bool:
     return any("\u4e00" <= ch <= "\u9fff" for ch in str(text or ""))
 
@@ -520,6 +528,10 @@ async def _prefetch_images(content: dict, mode_def: dict) -> dict:
                 local_bytes = _resolve_uploaded_image_bytes(url)
                 if local_bytes:
                     content[f"_prefetched_{field_name}"] = local_bytes
+                    continue
+                if _is_uploaded_image_url(url):
+                    content[f"_invalid_{field_name}"] = "Image link expired"
+                    logger.warning("[JSONContent] Uploaded image link expired for field %s: %s", field_name, url)
                     continue
                 try:
                     resp = await client.get(url)

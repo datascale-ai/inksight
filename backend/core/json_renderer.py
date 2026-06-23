@@ -2517,6 +2517,26 @@ def _resolve_local_asset(url: str) -> str | None:
     return None
 
 
+def _is_upload_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    path = parsed.path or url
+    return path.startswith("/api/uploads/")
+
+
+def _draw_image_placeholder(ctx: RenderContext, x: int, y: int, width: int, height: int, text: str) -> None:
+    ctx.draw.rectangle([x, y, x + width, y + height], outline=EINK_FG, width=1)
+    placeholder_font = load_font("noto_serif_light", int(12 * ctx.scale))
+    bbox = placeholder_font.getbbox(text)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    tx = x + (width - tw) // 2
+    ty = y + (height - th) // 2
+    ctx.draw.text((tx, ty), text, fill=EINK_FG, font=placeholder_font)
+
+
 def _render_image(ctx: RenderContext, block: dict) -> None:
     field_name = block.get("field", "image_url")
     image_url = str(ctx.get_field(field_name) or "")
@@ -2572,6 +2592,11 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
             return
         except (OSError, UnidentifiedImageError):
             logger.warning("[JSONRenderer] Failed to load local asset %s", local_path, exc_info=True)
+    elif _is_upload_url(image_url):
+        logger.warning("[JSONRenderer] Uploaded image link expired: %s", image_url)
+        _draw_image_placeholder(ctx, x, y, width, height, "Image link expired")
+        ctx.y = y + height + margin_bottom
+        return
     try:
         resp = None
         last_error = None
@@ -2612,16 +2637,8 @@ def _render_image(ctx: RenderContext, block: dict) -> None:
             ctx.paste_icon(img, (x, y))
         ctx.y = y + height + margin_bottom
     except (httpx.HTTPError, ValueError, OSError, UnidentifiedImageError):
-        logger.warning("[JSONRenderer] Failed to render image block", exc_info=True)
-        ctx.draw.rectangle([x, y, x + width, y + height], outline=EINK_FG, width=1)
-        placeholder_font = load_font("noto_serif_light", int(12 * ctx.scale))
-        placeholder_text = "Image unavailable"
-        bbox = placeholder_font.getbbox(placeholder_text)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        tx = x + (width - tw) // 2
-        ty = y + (height - th) // 2
-        ctx.draw.text((tx, ty), placeholder_text, fill=EINK_FG, font=placeholder_font)
+        logger.warning("[JSONRenderer] Failed to render image block: %s", image_url, exc_info=True)
+        _draw_image_placeholder(ctx, x, y, width, height, "Image link expired")
         ctx.y = y + height + int(block.get("margin_bottom", 6) * ctx.scale)
 
 

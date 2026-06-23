@@ -5,6 +5,7 @@
 import os
 import sys
 from io import BytesIO
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -675,6 +676,24 @@ def test_render_image_block_cover_fit_fills_frame():
     assert img.getpixel((119, 99)) == 255
 
 
+def test_render_missing_uploaded_image_does_not_fetch_remote():
+    mode_def = _make_mode_def([
+        {"type": "image", "field": "image_url", "width": 120, "height": 36, "x": 100, "y": 80}
+    ])
+    content = {
+        "image_url": "https://www.inksight.site/api/uploads/00000000-0000-4000-8000-000000000000",
+    }
+
+    with patch("core.json_renderer.httpx.Client") as mock_client:
+        img = render_json_mode(
+            mode_def, content,
+            date_str="2月18日", weather_str="晴", battery_pct=80,
+        ).convert("L")
+
+    mock_client.assert_not_called()
+    assert img.getpixel((100, 80)) == 0
+
+
 def test_render_forecast_cards_supports_custom_fields():
     mode_def = _make_mode_def([
         {
@@ -794,4 +813,3 @@ def test_render_context_resolve():
     assert ctx.resolve("{count} items") == "42 items"
     assert ctx.resolve("no placeholders") == "no placeholders"
     assert ctx.resolve("{missing}") == ""
-
