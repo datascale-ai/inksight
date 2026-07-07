@@ -3645,6 +3645,12 @@ function ConfigPageInner() {
                   "Upload up to 6 images. The device cycles to the next image on each refresh.",
                 )}
               </div>
+              <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {tr(
+                  "预览或下发只会临时生效；如需下次打开仍保留这些图片，请点击页面上的“保存到设备”。",
+                  "Previewing or sending is temporary. To keep these images next time, click \"Save to Device\" on this page.",
+                )}
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 {adaptiveImageUrls.map((url, i) => (
                   <div key={`${url}-${i}`} className="relative group aspect-[4/3] rounded border border-ink/15 overflow-hidden bg-paper-dark">

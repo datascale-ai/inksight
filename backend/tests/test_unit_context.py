@@ -10,6 +10,7 @@ from core.context import (
     get_weather,
     search_locations,
     _generate_weather_advice,
+    _weather_code_to_desc,
     _qweather_current,
     _qweather_forecast_to_standard,
     _qweather_icon_to_wmo,
@@ -222,6 +223,14 @@ class TestQWeatherHelpers:
             assert result["today_desc"] == "晴"
             assert len(result["forecast"]) >= 1
             assert result["forecast"][0]["desc"] == "多云"
+
+
+class TestWeatherCodeDescriptions:
+    def test_thunderstorm_with_hail_codes_use_general_thunderstorm_label(self):
+        assert _weather_code_to_desc(96, language="zh") == "雷阵雨"
+        assert _weather_code_to_desc(99, language="zh") == "雷阵雨"
+        assert _weather_code_to_desc(96, language="en") == "Thunderstorm"
+        assert _weather_code_to_desc(99, language="en") == "Thunderstorm"
 
 
 class TestSearchLocations:

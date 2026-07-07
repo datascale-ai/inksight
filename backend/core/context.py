@@ -1060,7 +1060,7 @@ def _weather_code_to_desc(code: int, language: str = "zh") -> str:
             61: "Light rain", 63: "Rain", 65: "Heavy rain",
             71: "Light snow", 73: "Snow", 75: "Heavy snow",
             80: "Showers", 81: "Showers", 82: "Storm rain",
-            95: "Thunderstorm", 96: "Hail", 99: "Hail",
+            95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
         }
         return mapping.get(code, "Unknown")
     mapping = {
@@ -1070,7 +1070,7 @@ def _weather_code_to_desc(code: int, language: str = "zh") -> str:
         61: "小雨", 63: "中雨", 65: "大雨",
         71: "小雪", 73: "中雪", 75: "大雪",
         80: "阵雨", 81: "阵雨", 82: "暴雨",
-        95: "雷阵雨", 96: "冰雹", 99: "冰雹",
+        95: "雷阵雨", 96: "雷阵雨", 99: "雷阵雨",
     }
     return mapping.get(code, "未知")
 
