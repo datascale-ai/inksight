@@ -5,11 +5,19 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
+#include <driver/gpio.h>
 #include <esp_sleep.h>
+#include <soc/soc_caps.h>
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+#include <driver/rtc_io.h>
+#endif
 #include <new>
 #include <WiFi.h>
 
 #include "config.h"
+#if PIN_RGB_LED >= 0
+#include <esp32-hal-rgb-led.h>
+#endif
 #if defined(BOARD_HAS_AUDIO)
 #include "audio.h"
 #include "audio_codec.h"
@@ -90,6 +98,11 @@ enum class WakeupReason : uint8_t {
     UNKNOWN,
 };
 
+enum class PortalEntryReason : uint8_t {
+    MANUAL,
+    AUTO_WIFI_FAILURE,
+};
+
 struct DeviceContext {
     DeviceState state = DeviceState::BOOT;
     WakeupReason wakeupReason = WakeupReason::POWER_ON;
@@ -100,16 +113,18 @@ struct DeviceContext {
     bool ignoreConfigButtonUntilRelease = false;
     bool ignoreAiButtonUntilRelease = false;
     bool liveMode = false;
+    unsigned long temporaryOnlineUntil = 0;
     unsigned long lastLivePollAt = 0;
     unsigned long lastLiveWiFiRetryAt = 0;
 
     // Timing
     unsigned long setupDoneAt = 0;
     unsigned long lastClockTick = 0;
+    unsigned long portalStartedAt = 0;
+    unsigned long portalTimeoutMs = 0;
 
     // Pending actions (set by button handler, consumed by loop)
     bool wantRefresh = false;
-    bool wantEnterLiveMode = false;
     bool wantEnterAiChatMode = false;
     bool wantEnterVocabReview = false;
     bool wantVocabFlip = false;
@@ -151,6 +166,33 @@ static int effectiveSleepMinutes() {
 #else
     return cfgSleepMin;
 #endif
+}
+
+static bool temporaryOnlineActive(unsigned long now = millis()) {
+    return ctx.temporaryOnlineUntil != 0 &&
+           (long)(now - ctx.temporaryOnlineUntil) < 0;
+}
+
+static bool temporaryOnlineExpired(unsigned long now = millis()) {
+    return ctx.temporaryOnlineUntil != 0 &&
+           (long)(now - ctx.temporaryOnlineUntil) >= 0;
+}
+
+static void clearTemporaryOnlineWindow() {
+    ctx.temporaryOnlineUntil = 0;
+}
+
+static void extendTemporaryOnlineWindow(const char *reason) {
+    ctx.temporaryOnlineUntil = millis() + TEMP_ONLINE_WINDOW_MS;
+    ctx.liveMode = true;
+    ctx.lastLivePollAt = 0;
+    ctx.lastLiveWiFiRetryAt = 0;
+    Serial.printf("[LIVE] Temporary online window: %lu min",
+                  TEMP_ONLINE_WINDOW_MS / 60000UL);
+    if (reason && reason[0]) {
+        Serial.printf(" (%s)", reason);
+    }
+    Serial.println();
 }
 
 static bool refreshActivityFlags() {
@@ -351,19 +393,36 @@ static bool fetchAndDisplayVocabPack() {
 static void checkConfigButton();
 static void triggerImmediateRefresh(bool nextMode = false, bool keepWiFi = false, bool partialVocabRating = false, const uint8_t *partialOldImage = nullptr, bool skipNtp = false);
 static void handleLiveMode();
+static bool temporaryOnlineActive(unsigned long now);
+static bool temporaryOnlineExpired(unsigned long now);
+static void clearTemporaryOnlineWindow();
+static void extendTemporaryOnlineWindow(const char *reason);
 static bool waitForContentReady();
 static void handleFailure(const char *reason);
-static void enterDeepSleep(int minutes);
-static void enterPortalMode();
+static void enterDeepSleep(int minutes, bool force = false);
+static void enterPortalMode(PortalEntryReason reason = PortalEntryReason::MANUAL);
+static void checkPortalTimeout();
 
 // ── LED feedback ────────────────────────────────────────────
 
 static void ledInit() {
+#if PIN_LED >= 0
     pinMode(PIN_LED, OUTPUT);
     digitalWrite(PIN_LED, LOW);
+#endif
+#if PIN_RGB_LED >= 0
+    neopixelWrite(PIN_RGB_LED, 0, 0, 0);
+#endif
 }
 
 static void ledFeedback(const char *pattern) {
+#if PIN_LED < 0
+    (void)pattern;
+#if PIN_RGB_LED >= 0
+    neopixelWrite(PIN_RGB_LED, 0, 0, 0);
+#endif
+    return;
+#else
     if (strcmp(pattern, "ack") == 0) {
         for (int i = 0; i < 2; i++) {
             digitalWrite(PIN_LED, HIGH); delay(80);
@@ -393,16 +452,17 @@ static void ledFeedback(const char *pattern) {
     } else if (strcmp(pattern, "off") == 0) {
         digitalWrite(PIN_LED, LOW);
     }
+#endif
 }
 
-static void enterPortalMode() {
+static void enterPortalMode(PortalEntryReason reason) {
     g_userAborted = false;
     String mac = WiFi.macAddress();
     String apName = "InkSight-" + mac.substring(mac.length() - 5);
     apName.replace(":", "");
 
     ctx.liveMode = false;
-    ctx.wantEnterLiveMode = false;
+    clearTemporaryOnlineWindow();
     ctx.wantRefresh = false;
     ctx.btnPressStart = 0;
 
@@ -415,6 +475,13 @@ static void enterPortalMode() {
     #endif
     startCaptivePortal();
     ctx.state = DeviceState::PORTAL;
+    ctx.portalStartedAt = millis();
+    ctx.portalTimeoutMs = (reason == PortalEntryReason::AUTO_WIFI_FAILURE)
+        ? PORTAL_AUTO_TIMEOUT_MS
+        : PORTAL_MANUAL_TIMEOUT_MS;
+    Serial.printf("[PORTAL] %s portal timeout: %lus\n",
+                  reason == PortalEntryReason::AUTO_WIFI_FAILURE ? "Auto" : "Manual",
+                  ctx.portalTimeoutMs / 1000UL);
     ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
 }
 // ── Shared voice helpers ────────────────────────────────────
@@ -828,15 +895,15 @@ static void runVoiceLoop(AudioService &audioService) {
 // ── setup (voice-only) ──────────────────────────────────────
 
 void setup() {
+    ledInit();
     Serial.begin(115200);
     delay(3000);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8)
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 #endif
     Serial.println("\n=== InkSight Voice ===");
 
-    ledInit();
     loadConfig();
 
     bool forcePortal = false;
@@ -943,7 +1010,7 @@ static void handleLiveMode();
 static bool waitForContentReady();
 static void handleFailure(const char *reason);
 static void handleWiFiFailure();
-static void enterDeepSleep(int minutes);
+static void enterDeepSleep(int minutes, bool force);
 static bool runAiChatConversation();
 static bool decodeVoiceBmpToFrameBuffer(const uint8_t *bmpBytes, size_t bmpLen);
 
@@ -952,16 +1019,16 @@ static bool decodeVoiceBmpToFrameBuffer(const uint8_t *bmpBytes, size_t bmpLen);
 // ═════════════════════════════════════════════════════════════
 
 void setup() {
+    ledInit();
     Serial.begin(115200);
     delay(3000);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8)
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 #endif
     Serial.println("\n=== InkSight ===");
 
     gpioInit();
-    ledInit();
     ctx.wakeupReason = detectWakeupReason();
 
     epdInit();
@@ -979,11 +1046,6 @@ void setup() {
         forcePortal = (digitalRead(PIN_CFG_BTN) == LOW);
     }
 
-    cacheInit();
-    Serial.println("EPD ready");
-
-    loadConfig();
-
     bool hasConfig = (cfgSSID.length() > 0);
 
     if (forcePortal || !hasConfig) {
@@ -991,13 +1053,6 @@ void setup() {
                                    : "No WiFi config -> portal");
         delay(5000);
         enterPortalMode();
-        String mac = WiFi.macAddress();
-        String apName = "InkSight-" + mac.substring(mac.length() - 5);
-        apName.replace(":", "");
-        ledFeedback("portal");
-        showSetupScreen(apName.c_str());
-        startCaptivePortal();
-        ctx.state = DeviceState::PORTAL;
         return;
     }
 
@@ -1105,23 +1160,26 @@ void setup() {
     }
 
     bool firstInstallLivePending = isFirstInstallLiveModePending();
-    bool buttonWakeActive = (ctx.wakeupReason == WakeupReason::BUTTON);
-    if (firstInstallLivePending || alwaysActive || buttonWakeActive) {
+    bool buttonTemporaryOnline = (ctx.wakeupReason == WakeupReason::BUTTON);
+    if (alwaysActive) {
         ctx.liveMode = true;
+        clearTemporaryOnlineWindow();
         ctx.lastLivePollAt = 0;
         ctx.lastLiveWiFiRetryAt = 0;
         if (firstInstallLivePending) {
             markFirstInstallLiveModeDone();
         }
         postRuntimeMode("active");
-        if (buttonWakeActive) {
-            Serial.println("[LIVE] Button wakeup: entering temporary active mode");
-        } else {
-            Serial.println(firstInstallLivePending
-                           ? "[LIVE] First install: temporary active mode"
-                           : "[LIVE] Always active config enabled");
-        }
+        Serial.println("[LIVE] Always active config enabled");
+    } else if (firstInstallLivePending) {
+        markFirstInstallLiveModeDone();
+        extendTemporaryOnlineWindow("first install");
+        postRuntimeMode("active");
+    } else if (buttonTemporaryOnline) {
+        extendTemporaryOnlineWindow("button wakeup");
+        postRuntimeMode("active");
     } else {
+        clearTemporaryOnlineWindow();
         postRuntimeMode("interval");
         if (focusListening) {
             Serial.println("[FOCUS] Focus listening enabled, keeping WiFi connected in interval mode");
@@ -1145,7 +1203,12 @@ void setup() {
     Serial.printf("[DEBUG] Staying awake, refresh every %d min (user config: %d min)\n",
                   DEBUG_REFRESH_MIN, cfgSleepMin);
 #else
-    Serial.printf("Staying awake, refresh every %d min\n", cfgSleepMin);
+    if (temporaryOnlineActive()) {
+        Serial.printf("Staying awake for temporary online window (%lu min)\n",
+                      TEMP_ONLINE_WINDOW_MS / 60000UL);
+    } else {
+        Serial.printf("Staying awake, refresh every %d min\n", cfgSleepMin);
+    }
 #endif
 }
 
@@ -1156,6 +1219,7 @@ void setup() {
 void loop() {
     if (ctx.state == DeviceState::PORTAL) {
         handlePortalClients();
+        checkPortalTimeout();
         checkConfigButton();
         checkAiChatButton();
         delay(5);
@@ -1165,30 +1229,8 @@ void loop() {
     checkConfigButton();
     checkAiChatButton();
 
-    if (ctx.wantEnterLiveMode) {
-        ctx.wantEnterLiveMode = false;
-        if (ctx.liveMode) {
-            ctx.liveMode = false;
-            Serial.println("[LIVE] Live mode disabled, back to interval mode");
-            ledFeedback("ack");
-            postRuntimeMode("interval");
-            WiFi.disconnect(true);
-            WiFi.mode(WIFI_OFF);
-            delay(500);
-            enterDeepSleep(effectiveSleepMinutes());
-        } else {
-            ctx.liveMode = true;
-            ctx.lastLivePollAt = 0;
-            ctx.lastLiveWiFiRetryAt = 0;
-            Serial.println("[LIVE] Live mode enabled");
-            ledFeedback("ack");
-            if (connectWiFi()) {
-                Serial.println("[LIVE] WiFi connected");
-                postRuntimeMode("active");
-            }
-        }
 #if VOCAB_REVIEW_BUILD
-    } else if (ctx.wantEnterVocabReview || ctx.wantVocabFlip || ctx.wantVocabNextRating || ctx.wantVocabSubmitRating || ctx.wantVocabExit) {
+    if (ctx.wantEnterVocabReview || ctx.wantVocabFlip || ctx.wantVocabNextRating || ctx.wantVocabSubmitRating || ctx.wantVocabExit) {
         bool doEnter = ctx.wantEnterVocabReview;
         bool doFlip = ctx.wantVocabFlip;
         bool doNextRating = ctx.wantVocabNextRating;
@@ -1282,10 +1324,9 @@ void loop() {
                 ledFeedback("fail");
             }
         }
-    } else if (ctx.wantEnterAiChatMode) {
-#else
-    } else if (ctx.wantEnterAiChatMode) {
+    } else
 #endif
+    if (ctx.wantEnterAiChatMode) {
         ctx.wantEnterAiChatMode = false;
         ctx.switchToModeId = "";
         Serial.println("[AI CHAT] Dedicated switch long press -> enter conversation mode");
@@ -1449,8 +1490,8 @@ void loop() {
 
 // ── Deep sleep ──────────────────────────────────────────────
 
-static void enterDeepSleep(int minutes) {
-    if (focusListening || alwaysActive) {
+static void enterDeepSleep(int minutes, bool force) {
+    if (!force && (focusListening || alwaysActive)) {
         Serial.println(focusListening
                        ? "[FOCUS] Focus listening enabled, skipping deep sleep"
                        : "[LIVE] Always active enabled, skipping deep sleep");
@@ -1460,19 +1501,55 @@ static void enterDeepSleep(int minutes) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     epdSleep();
+    ledFeedback("off");
     Serial.printf("Deep sleep for %d min (~%duA)\n", minutes, 5);
     Serial.flush();
     esp_sleep_enable_timer_wakeup((uint64_t)minutes * 60ULL * 1000000ULL);
 #if PIN_CFG_BTN >= 0
-    const uint64_t wakeMask = 1ULL << PIN_CFG_BTN;
-#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C6
-    esp_deep_sleep_enable_gpio_wakeup(wakeMask, ESP_GPIO_WAKEUP_GPIO_LOW);
+    pinMode(PIN_CFG_BTN, INPUT_PULLUP);
+    unsigned long releaseStartedAt = millis();
+    while (digitalRead(PIN_CFG_BTN) == LOW && millis() - releaseStartedAt < 3000UL) {
+        delay(10);
+    }
+    delay(50);
+    bool wakeButtonReady = (digitalRead(PIN_CFG_BTN) == HIGH);
+    if (!wakeButtonReady) {
+        Serial.printf("[WAKE] GPIO%d is still LOW; timer-only wake for this sleep cycle\n", PIN_CFG_BTN);
+    } else {
+        const uint64_t wakeMask = 1ULL << PIN_CFG_BTN;
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+        rtc_gpio_pullup_en((gpio_num_t)PIN_CFG_BTN);
+        rtc_gpio_pulldown_dis((gpio_num_t)PIN_CFG_BTN);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #else
-    esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ALL_LOW);
+        gpio_pullup_en((gpio_num_t)PIN_CFG_BTN);
+        gpio_pulldown_dis((gpio_num_t)PIN_CFG_BTN);
 #endif
-    Serial.printf("[WAKE] Timer + GPIO%d button wake enabled\n", PIN_CFG_BTN);
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+        esp_deep_sleep_enable_gpio_wakeup(wakeMask, ESP_GPIO_WAKEUP_GPIO_LOW);
+#elif CONFIG_IDF_TARGET_ESP32
+        esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+        esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
+        Serial.printf("[WAKE] Timer + GPIO%d button wake enabled\n", PIN_CFG_BTN);
+    }
 #endif
     esp_deep_sleep_start();
+}
+
+static void checkPortalTimeout() {
+    if (ctx.state != DeviceState::PORTAL || ctx.portalStartedAt == 0 || ctx.portalTimeoutMs == 0) {
+        return;
+    }
+    unsigned long now = millis();
+    if (now - ctx.portalStartedAt < ctx.portalTimeoutMs) {
+        return;
+    }
+    Serial.printf("[PORTAL] Timeout %lus, entering deep sleep\n", ctx.portalTimeoutMs / 1000UL);
+    ctx.portalStartedAt = 0;
+    ctx.portalTimeoutMs = 0;
+    enterDeepSleep(effectiveSleepMinutes(), true);
 }
 
 // ── Failure handler ─────────────────────────────────────────
@@ -1530,8 +1607,8 @@ static void handleFailure(const char *reason) {
 // All saved WiFi networks failed to associate (connectWiFi already swept the
 // full list once). Do a few quick in-place retry sweeps to ride out a brief
 // blip (e.g. router rebooting), then fall back to the captive portal so the
-// user can fix or add credentials. No multi-minute deep-sleep delays here —
-// the user is typically standing by waiting to reconfigure.
+// user can fix or add credentials. Auto-opened AP is time-limited so a
+// battery-powered device does not stay in high-power portal mode indefinitely.
 static void handleWiFiFailure() {
     for (int i = 0; i < WIFI_PORTAL_RETRY_SWEEPS; i++) {
         Serial.printf("[DIAG] WiFi unreachable, quick retry sweep %d/%d in %lus\n",
@@ -1546,7 +1623,7 @@ static void handleWiFiFailure() {
     }
     Serial.println("[DIAG] WiFi still unreachable -> captive portal");
     resetRetryCount();
-    enterPortalMode();
+    enterPortalMode(PortalEntryReason::AUTO_WIFI_FAILURE);
 }
 
 // ── Live mode ───────────────────────────────────────────────
@@ -1555,6 +1632,19 @@ static void handleLiveMode() {
     if (!ctx.liveMode) return;
 
     unsigned long now = millis();
+    if (ctx.temporaryOnlineUntil != 0 && alwaysActive) {
+        clearTemporaryOnlineWindow();
+    }
+    if (temporaryOnlineExpired(now) && !focusListening && !alwaysActive) {
+        ctx.liveMode = false;
+        clearTemporaryOnlineWindow();
+        if (WiFi.status() == WL_CONNECTED) {
+            postRuntimeMode("interval");
+        }
+        Serial.println("[LIVE] Temporary online window expired, entering deep sleep");
+        enterDeepSleep(effectiveSleepMinutes());
+        return;
+    }
 #if DEBUG_MODE
     unsigned long refreshInterval = (unsigned long)DEBUG_REFRESH_MIN * 60000UL;
 #else
@@ -1583,9 +1673,14 @@ static void handleLiveMode() {
     if (hasPendingRemoteAction(&shouldExitLive)) {
         Serial.println("[LIVE] Pending action detected, refreshing now");
         bool wasAlwaysActive = alwaysActive;
+        bool wasTemporaryOnline = (ctx.temporaryOnlineUntil != 0);
         refreshActivityFlags();
         triggerImmediateRefresh(false, true);
         ctx.setupDoneAt = millis();
+        if (wasTemporaryOnline && !focusListening && !alwaysActive) {
+            extendTemporaryOnlineWindow("remote action");
+            return;
+        }
         if (!focusListening && !alwaysActive) {
             ctx.liveMode = false;
             postRuntimeMode("interval");
@@ -1600,7 +1695,7 @@ static void handleLiveMode() {
         }
         return;
     }
-    if (shouldExitLive) {
+    if (shouldExitLive && ctx.temporaryOnlineUntil == 0) {
         ctx.liveMode = false;
         postRuntimeMode("interval");
         WiFi.disconnect(true);
@@ -1618,6 +1713,10 @@ static void handleLiveMode() {
 #endif
         triggerImmediateRefresh(false, true);
         ctx.setupDoneAt = millis();
+        if (ctx.temporaryOnlineUntil != 0 && !focusListening && !alwaysActive) {
+            Serial.println("[LIVE] Fallback refresh complete, temporary window remains active");
+            return;
+        }
         if (!focusListening && !alwaysActive) {
             ctx.liveMode = false;
             postRuntimeMode("interval");
@@ -2179,8 +2278,9 @@ static void checkConfigButton() {
         } else {
             unsigned long holdTime = millis() - ctx.btnPressStart;
             if (holdTime >= (unsigned long)CFG_BTN_HOLD_MS) {
-                Serial.printf("Config button held for %dms, restarting...\n", CFG_BTN_HOLD_MS);
-                ESP.restart();
+                Serial.printf("Config button held for %dms, entering portal...\n", CFG_BTN_HOLD_MS);
+                ctx.btnPressStart = 0;
+                enterPortalMode();
             }
         }
     } else {
@@ -2190,8 +2290,7 @@ static void checkConfigButton() {
 
             if (pressDuration >= (unsigned long)SHORT_PRESS_MIN_MS &&
                 pressDuration < (unsigned long)CFG_BTN_HOLD_MS) {
-                Serial.println("[BTN] Single click -> toggle live mode");
-                ctx.wantEnterLiveMode = true;
+                Serial.println("[BTN] Short press while awake; no action");
             }
         }
     }

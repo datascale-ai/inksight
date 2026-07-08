@@ -5,7 +5,7 @@ def merge_bin(source, target, env):
     firmware = str(target[0])
     board = env.BoardConfig()
     mcu = board.get("build.mcu", "esp32")
-    flash_mode = "dio"
+    flash_mode = env.GetProjectOption("board_build.flash_mode", "dio")
     flash_freq = board.get("build.f_flash", "40000000L").replace("L", "")
     flash_freq_m = str(int(int(flash_freq) / 1000000)) + "m"
     flash_size = board.get("upload.flash_size", "4MB")

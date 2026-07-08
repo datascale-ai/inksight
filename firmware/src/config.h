@@ -62,8 +62,24 @@
 #endif
 #define PIN_LED        5
 #define PIN_AI_CHAT_SW -1
+#elif defined(BOARD_PROFILE_YD_ESP32_S3_N16R8)
+#define PIN_EPD_MOSI   11
+#define PIN_EPD_SCK    12
+#define PIN_EPD_CS     10
+#define PIN_EPD_DC     9
+#define PIN_EPD_RST    8
+#define PIN_EPD_BUSY   7
+#define PIN_BAT_ADC    4
+#define PIN_CFG_BTN    0
+#define PIN_LED        -1
+#define PIN_RGB_LED    48
+#define PIN_AI_CHAT_SW -1
 #else
 #error "Unsupported board profile"
+#endif
+
+#ifndef PIN_RGB_LED
+#define PIN_RGB_LED -1
 #endif
 
 // ── Display constants ────────────────────────────────────────
@@ -118,6 +134,9 @@ static const int   VOCAB_EXIT_HOLD_MS = 5000; // Long press duration to exit voc
 static const int   SHORT_PRESS_MIN_MS = 50;   // Minimum short press duration (debounce)
 static const int   LIVE_POLL_MS = 5000;       // Poll interval for pending remote actions
 static const int   LIVE_WIFI_RETRY_MS = 5000; // Retry interval when WiFi is disconnected
+static const unsigned long TEMP_ONLINE_WINDOW_MS = 10UL * 60UL * 1000UL;
+static const unsigned long PORTAL_AUTO_TIMEOUT_MS = 3UL * 60UL * 1000UL;
+static const unsigned long PORTAL_MANUAL_TIMEOUT_MS = 10UL * 60UL * 1000UL;
 static const unsigned long HEARTBEAT_INTERVAL_MS = 10UL * 60UL * 1000UL;
 static const int   MAX_RETRY_COUNT = 5;       // Max retries before deep sleep
 // WiFi -> captive portal fallback: when ALL saved networks fail to connect,

@@ -1096,6 +1096,8 @@ def build_firmware_manifest(version: str, download_url: str, chip_family: str = 
 
 def chip_family_from_asset_name(asset_name: str) -> str:
     name = (asset_name or "").lower()
+    if "_s3" in name or "esp32s3" in name or "esp32-s3" in name:
+        return "ESP32-S3"
     if "wroom32e" in name or "_esp32" in name:
         return "ESP32"
     if "_c3" in name or "esp32c3" in name:

@@ -11,7 +11,7 @@
 #include <LittleFS.h>
 #include <mbedtls/base64.h>
 #include <time.h>
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8)
 #include <esp_adc_cal.h>
 #endif
 

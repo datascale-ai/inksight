@@ -2969,8 +2969,8 @@ function ConfigPageInner() {
                         <div className="font-medium">{tr("始终保持活跃", "Keep device always active")}</div>
                         <div className="text-xs text-ink-light mt-1">
                           {tr(
-                            "开启后，设备会持续保持活跃，不进入间歇状态或深度睡眠。",
-                            "When enabled, the device stays active continuously and will not enter interval mode or deep sleep.",
+                            "开启后，设备会持续保持活跃，不进入间歇状态或深度睡眠。设备在线时会立即生效；若设备在深睡，请先短按 BOOT 唤醒后再保存，或等待下次唤醒后生效。",
+                            "When enabled, the device stays active continuously and will not enter interval mode or deep sleep. For immediate effect, wake the device with BOOT before saving; otherwise it applies on the next wake.",
                           )}
                         </div>
                       </div>

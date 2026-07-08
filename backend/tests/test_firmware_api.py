@@ -161,16 +161,23 @@ def test_expand_release_assets_returns_multiple_bin_entries():
                 "size": 1140784,
                 "browser_download_url": "https://example.com/epd_42_wroom32e.bin",
             },
+            {
+                "name": "epd_42_yd_s3_n16r8.bin",
+                "size": 1150000,
+                "browser_download_url": "https://example.com/epd_42_yd_s3_n16r8.bin",
+            },
         ],
     }
 
     items = shared_api.expand_firmware_release_assets(release)
 
-    assert len(items) == 2
+    assert len(items) == 3
     assert items[0]["asset_name"] == "epd_42_c3.bin"
     assert items[0]["chip_family"] == "ESP32-C3"
     assert items[1]["asset_name"] == "epd_42_wroom32e.bin"
     assert items[1]["chip_family"] == "ESP32"
+    assert items[2]["asset_name"] == "epd_42_yd_s3_n16r8.bin"
+    assert items[2]["chip_family"] == "ESP32-S3"
 
 
 def test_render_api_key_invalid_image_uses_project_font_loader(monkeypatch):
