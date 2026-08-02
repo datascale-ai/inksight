@@ -15,6 +15,7 @@ from core.config_store import (
     get_or_create_claim_token,
     remove_mode_from_all_configs,
 )
+from core.config import get_default_llm_model_for_provider
 
 
 @pytest.fixture(autouse=True)
@@ -202,3 +203,6 @@ class TestConfigStore:
         assert "STOIC" in config["modes"]
         assert "CUSTOM_DELETED" not in config["mode_overrides"]
         assert config["mode_overrides"]["STOIC"]["city"] == "杭州"
+
+    def test_get_default_llm_model_for_provider_minimax(self):
+        assert get_default_llm_model_for_provider("minimax") == "MiniMax-M3"
