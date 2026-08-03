@@ -276,3 +276,9 @@ docs/mobile-app-design.md
 inksight_tech/
 lab/
 .cursor/
+
+# Claude Code local session/worktree state
+.claude/
+
+# Firmware build output
+firmware.bin

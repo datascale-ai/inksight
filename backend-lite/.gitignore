@@ -1,0 +1,21 @@
+# 运行时数据库
+*.db
+*.db-shm
+*.db-wal
+
+# 虚拟环境
+.venv/
+venv/
+
+# OTA 上传的固件
+ota_files/
+
+# 环境
+.env
+
+# 字体（由 setup_fonts.py 下载，不入库）
+fonts/
+
+# Python 缓存
+__pycache__/
+*.pyc

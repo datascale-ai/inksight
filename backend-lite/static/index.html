@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>InkSight · backend-lite</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --canvas: #f3f1eb;
+    --canvas-deep: #e9e6dd;
+    --panel: rgba(255, 254, 250, .94);
+    --panel-solid: #fffefa;
+    --ink: #182329;
+    --ink-soft: #536067;
+    --ink-faint: #7c878b;
+    --line: #deded5;
+    --line-strong: #c9cbc1;
+    --accent: #0f766e;
+    --accent-deep: #0a5f59;
+    --accent-soft: #e1f1ec;
+    --warning: #b45309;
+    --warning-soft: #fff1d6;
+    --danger: #b42318;
+    --success: #13795b;
+    --shadow: 0 18px 50px rgba(38, 46, 44, .08), 0 2px 8px rgba(38, 46, 44, .04);
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { min-width: 320px; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 8% 0%, rgba(208, 229, 218, .52), transparent 30rem),
+      radial-gradient(circle at 100% 15%, rgba(226, 216, 187, .42), transparent 26rem),
+      var(--canvas);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button, input, select, textarea { font: inherit; }
+  button { -webkit-tap-highlight-color: transparent; }
+
+  .page-shell {
+    width: min(1240px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 34px 0 56px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 28px;
+    margin-bottom: 22px;
+  }
+
+  .brand-kicker,
+  .panel-kicker {
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .brand-title {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    color: var(--ink);
+    font-size: clamp(26px, 3vw, 38px);
+    font-weight: 760;
+    letter-spacing: -.045em;
+    line-height: 1.05;
+  }
+
+  .brand-title span {
+    color: var(--ink-faint);
+    font-size: 13px;
+    font-weight: 550;
+    letter-spacing: 0;
+  }
+
+  .top-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink-soft);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .meta-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 5px var(--accent-soft);
+  }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    min-height: 76px;
+    margin-bottom: 22px;
+    padding: 16px 20px;
+    overflow: hidden;
+    border: 1px solid rgba(15, 118, 110, .18);
+    border-radius: var(--radius);
+    background: linear-gradient(110deg, rgba(239, 250, 245, .9), rgba(255, 254, 250, .9));
+    box-shadow: 0 8px 24px rgba(24, 65, 55, .06);
+  }
+
+  .status-content { min-width: 0; flex: 1; }
+
+  .status-loading,
+  .status-empty {
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+
+  .status-main {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .status-title {
+    font-weight: 750;
+    letter-spacing: -.01em;
+  }
+
+  .status-mac {
+    color: var(--ink-soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .status-badge,
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .76);
+    color: var(--ink-soft);
+    font-size: 11px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .status-badge::before {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    content: "";
+  }
+
+  .status-badge.is-online { color: var(--success); }
+  .status-badge.is-offline { color: var(--danger); }
+
+  .status-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 16px;
+    margin-top: 6px;
+    color: var(--ink-soft);
+    font-size: 11px;
+  }
+
+  .status-facts strong { color: var(--ink); font-weight: 700; }
+
+  .status-side {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+    border: 1px solid rgba(15, 118, 110, .15);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .58);
+    color: var(--accent);
+    font-size: 22px;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr);
+    align-items: start;
+    gap: 22px;
+  }
+
+  .settings-column,
+  .live-column {
+    display: grid;
+    gap: 18px;
+    min-width: 0;
+  }
+
+  .live-column {
+    position: sticky;
+    top: 20px;
+  }
+
+  .panel {
+    overflow: hidden;
+    border: 1px solid rgba(33, 43, 43, .1);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 22px 15px;
+    border-bottom: 1px solid rgba(33, 43, 43, .08);
+  }
+
+  .panel-title {
+    margin: 0;
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 760;
+    letter-spacing: -.025em;
+    line-height: 1.2;
+  }
+
+  .panel-description {
+    max-width: 420px;
+    margin: 5px 0 0;
+    color: var(--ink-faint);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .panel-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .panel-body { padding: 19px 22px 22px; }
+  .panel-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 0 22px 20px;
+  }
+
+  .field-grid {
+    display: grid;
+    gap: 15px;
+  }
+
+  .field-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .field-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .field { min-width: 0; }
+
+  .field-label {
+    display: block;
+    margin: 0 0 7px;
+    color: var(--ink-soft);
+    font-size: 11px;
+    font-weight: 760;
+    letter-spacing: .02em;
+  }
+
+  .field-hint {
+    margin: 6px 0 0;
+    color: var(--ink-faint);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .control {
+    width: 100%;
+    min-height: 40px;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    outline: none;
+    background: rgba(255, 255, 255, .72);
+    color: var(--ink);
+    transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+  }
+
+  .control:hover { border-color: var(--line-strong); background: var(--panel-solid); }
+  .control:focus {
+    border-color: rgba(15, 118, 110, .66);
+    background: var(--panel-solid);
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, .11);
+  }
+
+  textarea.control { min-height: 82px; resize: vertical; }
+  input[type="file"].control { padding: 7px; }
+  input[type="file"].control::file-selector-button {
+    margin-right: 8px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--canvas-deep);
+    color: var(--ink);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+  }
+
+  .section-block + .section-block {
+    margin-top: 21px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    margin: 0;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 760;
+  }
+
+  .section-note {
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+
+  .mode-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chip {
+    padding: 7px 11px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .58);
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 650;
+    user-select: none;
+    transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+  }
+
+  .chip:hover { border-color: rgba(15, 118, 110, .45); transform: translateY(-1px); }
+  .chip.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+  .check-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .check-list.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+    margin: 0;
+    padding: 12px 13px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .48);
+    color: var(--ink);
+    cursor: pointer;
+    font-weight: 400;
+    transition: border-color .16s ease, background .16s ease;
+  }
+
+  .check-row:hover { border-color: rgba(15, 118, 110, .42); background: var(--panel-solid); }
+
+  .check-row input[type="checkbox"],
+  .check-row input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    margin: 2px 0 0;
+    padding: 0;
+    accent-color: var(--accent);
+  }
+
+  .check-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .check-copy strong { font-size: 12px; font-weight: 760; line-height: 1.35; }
+  .check-copy small { color: var(--ink-faint); font-size: 11px; line-height: 1.45; }
+
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 760;
+    letter-spacing: .01em;
+    transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+  }
+
+  .button:hover { transform: translateY(-1px); }
+  .button:active { transform: translateY(0); }
+  .button-primary { background: var(--accent); color: #fff; box-shadow: 0 5px 12px rgba(15, 118, 110, .18); }
+  .button-primary:hover { background: var(--accent-deep); }
+  .button-secondary { border-color: var(--line); background: rgba(255, 255, 255, .62); color: var(--ink); }
+  .button-secondary:hover { border-color: var(--line-strong); background: var(--panel-solid); }
+  .button-warning { background: var(--warning); color: #fff; box-shadow: 0 5px 12px rgba(180, 83, 9, .16); }
+
+  .inline-status {
+    min-height: 18px;
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+
+  .inline-status:empty { display: none; }
+  .inline-status.is-ok { color: var(--success); }
+  .inline-status.is-error { color: var(--danger); }
+
+  .preview-panel .panel-body { padding-bottom: 16px; }
+
+  .preview-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 10px;
+    margin-bottom: 17px;
+  }
+
+  .preview-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 240px;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background:
+      linear-gradient(45deg, #f0eee8 25%, transparent 25%),
+      linear-gradient(-45deg, #f0eee8 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #f0eee8 75%),
+      linear-gradient(-45deg, transparent 75%, #f0eee8 75%),
+      #faf9f5;
+    background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+    background-size: 12px 12px;
+  }
+
+  #preview {
+    display: block;
+    width: min(100%, 400px);
+    max-height: 100%;
+    object-fit: contain;
+    border: 1px solid rgba(24, 35, 41, .12);
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(38, 46, 44, .12);
+  }
+
+  .panel-note {
+    margin: 12px 0 0;
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+
+  .device-state {
+    min-height: 100px;
+    padding: 13px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(248, 248, 243, .8);
+  }
+
+  .device-state-empty { color: var(--ink-faint); font-size: 12px; }
+
+  .device-state-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .state-item { min-width: 0; }
+  .state-label { display: block; margin-bottom: 2px; color: var(--ink-faint); font-size: 10px; }
+  .state-value { display: block; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+  .state-value.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+
+  .action-row { display: flex; flex-wrap: wrap; gap: 9px; }
+
+  .subtle-panel {
+    background: rgba(255, 254, 250, .76);
+    box-shadow: 0 10px 30px rgba(38, 46, 44, .05);
+  }
+
+  .alert-callout {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--warning-soft);
+    color: var(--warning);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .muted { color: var(--ink-faint); font-size: 11px; }
+  .ok { color: var(--success); }
+  .err { color: var(--danger); }
+
+  @media (max-width: 980px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .live-column { position: static; }
+    .preview-frame { min-height: 260px; }
+  }
+
+  @media (max-width: 620px) {
+    .page-shell { width: min(100% - 24px, 560px); padding-top: 22px; }
+    .topbar { align-items: flex-start; flex-direction: column; gap: 12px; }
+    .status-bar { align-items: flex-start; padding: 14px 15px; }
+    .status-side { display: none; }
+    .panel-header { padding: 17px 16px 13px; }
+    .panel-body { padding: 16px; }
+    .panel-footer { padding: 0 16px 17px; }
+    .field-grid.two,
+    .field-grid.three,
+    .check-list.two { grid-template-columns: 1fr; }
+    .preview-toolbar { grid-template-columns: 1fr; align-items: stretch; }
+    .preview-toolbar .button { width: 100%; }
+    .preview-frame { min-height: 0; }
+    .device-state-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div>
+        <p class="brand-kicker">InkSight / Local Control Plane</p>
+        <h1 class="brand-title">backend-lite <span>单设备管理</span></h1>
+      </div>
+      <div class="top-meta"><span class="meta-dot"></span>局域网免认证 · 400×300 · 4 色</div>
+    </header>
+
+    <section class="status-bar" aria-live="polite">
+      <div id="status" class="status-content"><div class="status-loading">正在读取设备状态…</div></div>
+      <div class="status-side" aria-hidden="true">墨</div>
+    </section>
+
+    <main class="dashboard-grid">
+      <section class="settings-column" aria-label="设置">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">01 / Provider</p>
+              <h2 class="panel-title">LLM 设置</h2>
+              <p class="panel-description">API Key 会加密保存到本地数据库，仅用于内容生成。</p>
+            </div>
+            <div class="panel-mark">AI</div>
+          </div>
+          <div class="panel-body">
+            <div class="field-grid two">
+              <div class="field">
+                <label class="field-label" for="llm-provider">Provider</label>
+                <select class="control" id="llm-provider">
+                  <option value="deepseek">deepseek</option>
+                  <option value="aliyun">aliyun (DashScope)</option>
+                  <option value="moonshot">moonshot</option>
+                  <option value="openai_compat">openai_compat</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="llm-model">模型名</label>
+                <input class="control" id="llm-model" placeholder="例如: gpt-4o-mini / qwen-plus / kimi-k2">
+              </div>
+            </div>
+            <div class="field-grid two" style="margin-top:15px">
+              <div class="field">
+                <label class="field-label" for="llm-baseurl">Base URL <span class="muted">（兼容模式）</span></label>
+                <input class="control" id="llm-baseurl" placeholder="https://api.example.com/v1">
+              </div>
+              <div class="field">
+                <label class="field-label" for="llm-key">API Key</label>
+                <input class="control" id="llm-key" type="password" placeholder="未设置时留空则保留已存值">
+              </div>
+            </div>
+            <div class="field-grid" style="margin-top:15px">
+              <div class="field">
+                <label class="field-label" for="llm-imgkey">Image API Key <span class="muted">（可选）</span></label>
+                <input class="control" id="llm-imgkey" type="password" placeholder="图像生成 key">
+              </div>
+            </div>
+          </div>
+          <div class="panel-footer">
+            <button class="button button-primary" type="button" onclick="saveKey()">保存 LLM 设置</button>
+            <span id="key-status" class="inline-status" aria-live="polite"></span>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">02 / Device Profile</p>
+              <h2 class="panel-title">设备配置</h2>
+              <p class="panel-description">选择屏幕上轮换的内容，以及设备的更新节奏。</p>
+            </div>
+            <div class="panel-mark">设</div>
+          </div>
+          <div class="panel-body">
+            <div class="section-block">
+              <div class="section-heading">
+                <h3 class="section-title">内容模式</h3>
+                <span class="section-note">点击启用 / 取消</span>
+              </div>
+              <div id="modes" class="mode-list"></div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-heading">
+                <h3 class="section-title">刷新与位置</h3>
+                <span class="section-note">设备下一次取图时生效</span>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label class="field-label" for="cfg-strategy">刷新策略</label>
+                  <select class="control" id="cfg-strategy">
+                    <option value="random">随机</option>
+                    <option value="cycle">顺序轮换</option>
+                    <option value="time_slot">按时间段</option>
+                    <option value="smart">智能时段</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfg-interval">刷新间隔 <span class="muted">（10–1440 分钟）</span></label>
+                  <input class="control" id="cfg-interval" type="number" min="10" max="1440">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfg-city">城市</label>
+                  <input class="control" id="cfg-city" placeholder="杭州">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfg-language">内容语言</label>
+                  <select class="control" id="cfg-language">
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-heading">
+                <h3 class="section-title">内容偏好</h3>
+                <span class="section-note">影响生成语气与上下文</span>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label class="field-label" for="cfg-tone">内容语气</label>
+                  <select class="control" id="cfg-tone">
+                    <option value="neutral">平衡</option>
+                    <option value="positive">积极</option>
+                    <option value="deep">深度</option>
+                    <option value="humor">幽默</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfg-memo">备忘 memo</label>
+                  <textarea class="control" id="cfg-memo" placeholder="可选：补充给内容生成的长期信息"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-heading">
+                <h3 class="section-title">运行开关</h3>
+                <span class="section-note">影响设备在线行为</span>
+              </div>
+              <div class="check-list two">
+                <label class="check-row" for="cfg-focus">
+                  <input id="cfg-focus" type="checkbox">
+                  <span class="check-copy">
+                    <strong>专注监听</strong>
+                    <small>开启焦点提醒轮询。</small>
+                  </span>
+                </label>
+                <label class="check-row" for="cfg-active">
+                  <input id="cfg-active" type="checkbox">
+                  <span class="check-copy">
+                    <strong>始终活跃</strong>
+                    <small>保持设备在线，支持即时操作。</small>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="panel-footer">
+            <button class="button button-primary" type="button" onclick="saveConfig()">保存设备配置</button>
+            <span id="cfg-status" class="inline-status" aria-live="polite"></span>
+          </div>
+        </article>
+
+        <article class="panel subtle-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">03 / Focus</p>
+              <h2 class="panel-title">焦点提醒</h2>
+              <p class="panel-description">专注监听开启后，设备会定期拉取提醒图。</p>
+            </div>
+            <div class="panel-mark">醒</div>
+          </div>
+          <div class="panel-body">
+            <label class="check-row" for="alert-active">
+              <input id="alert-active" type="checkbox">
+              <span class="check-copy">
+                <strong>启用提醒</strong>
+                <small>开启后设备约 10 秒内拉取最新提醒。</small>
+              </span>
+            </label>
+            <div class="field" style="margin-top:14px">
+              <label class="field-label" for="alert-text">提醒文字 <span class="muted">（最多 64 字）</span></label>
+              <input class="control" id="alert-text" placeholder="该喝水了">
+            </div>
+            <div class="alert-callout">提醒图会覆盖当前屏幕内容，关闭后设备恢复正常内容。</div>
+          </div>
+          <div class="panel-footer">
+            <button class="button button-secondary" type="button" onclick="saveAlert()">保存提醒</button>
+            <span id="alert-status" class="inline-status" aria-live="polite"></span>
+          </div>
+        </article>
+
+        <article class="panel subtle-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">04 / Firmware</p>
+              <h2 class="panel-title">OTA 固件更新</h2>
+              <p class="panel-description">上传固件或提供设备可访问的下载地址。</p>
+            </div>
+            <div class="panel-mark">固</div>
+          </div>
+          <div class="panel-body">
+            <div class="field-grid two">
+              <div class="field">
+                <label class="field-label" for="ota-file">本地 bin 文件</label>
+                <input class="control" id="ota-file" type="file" accept=".bin">
+              </div>
+              <div class="field">
+                <label class="field-label" for="ota-version">版本号 <span class="muted">（可选）</span></label>
+                <input class="control" id="ota-version" placeholder="v0.6.1">
+              </div>
+            </div>
+            <div class="field" style="margin-top:15px">
+              <label class="field-label" for="ota-url">或固件 URL</label>
+              <input class="control" id="ota-url" placeholder="http://<本机IP>:8090/api/admin/ota/file/xxx.bin">
+            </div>
+          </div>
+          <div class="panel-footer">
+            <button class="button button-warning" type="button" onclick="otaSet()">下发 OTA</button>
+            <span id="ota-status" class="inline-status" aria-live="polite"></span>
+          </div>
+        </article>
+      </section>
+
+      <aside class="live-column" aria-label="实时面板">
+        <article class="panel preview-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Live Preview</p>
+              <h2 class="panel-title">屏幕预览</h2>
+              <p class="panel-description">固定模拟 4.2 英寸屏幕：400×300 / 黑白红黄 4 色。</p>
+            </div>
+            <div class="panel-mark">看</div>
+          </div>
+          <div class="panel-body">
+            <div class="preview-toolbar">
+              <div class="field">
+                <label class="field-label" for="prev-mode">预览模式</label>
+                <select class="control" id="prev-mode"></select>
+              </div>
+              <button class="button button-primary" type="button" onclick="doPreview()">生成预览</button>
+            </div>
+            <div class="preview-frame">
+              <img id="preview" alt="InkSight 屏幕预览">
+            </div>
+            <p class="panel-note">预览使用当前 LLM 和设备配置，不会改变设备运行状态。</p>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Device Control</p>
+              <h2 class="panel-title">设备操作</h2>
+              <p class="panel-description">远程触发刷新，或让在线设备退出活跃模式。</p>
+            </div>
+            <div class="panel-mark">控</div>
+          </div>
+          <div class="panel-body">
+            <div id="device-state" class="device-state" aria-live="polite">
+              <div class="device-state-empty">等待设备状态…</div>
+            </div>
+          </div>
+          <div class="panel-footer">
+            <div class="action-row">
+              <button class="button button-primary" type="button" onclick="doRefresh()">触发刷新</button>
+              <button class="button button-secondary" type="button" onclick="exitActive()">退出活跃</button>
+            </div>
+            <span id="op-status" class="inline-status" aria-live="polite"></span>
+          </div>
+        </article>
+      </aside>
+    </main>
+  </div>
+<script src="/static/app.js"></script>
+</body>
+</html>
