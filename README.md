@@ -129,7 +129,7 @@ If you are a developer, want to run your own local deployment, or want to go bey
 - 中文部署文档：[`docs/deploy.md`](docs/deploy.md)
 - Architecture: [`docs/en/architecture.md`](docs/en/architecture.md)
 - API: [`docs/en/api.md`](docs/en/api.md)
-- Plugin / extension development: [`docs/en/plugin-dev.md`](docs/en/plugin-dev.md)
+- Plugin / extension development: [`docs/en/custom-mode-dev.md`](docs/en/custom-mode-dev.md)
 
 ## Community
 

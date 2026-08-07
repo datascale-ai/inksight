@@ -127,7 +127,7 @@
 - English deployment guide: [`docs/en/deploy.md`](docs/en/deploy.md)
 - 架构设计：[`docs/architecture.md`](docs/architecture.md)
 - API：[`docs/api.md`](docs/api.md)
-- 插件 / 扩展开发：[`docs/plugin-dev.md`](docs/plugin-dev.md)
+- 插件 / 扩展开发：[`docs/custom-mode-dev.md`](docs/custom-mode-dev.md)
 
 ## 社区
 
