@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+Pillow>=10.0
+httpx>=0.27
+openai>=1.40
+python-dotenv>=1.0
+python-multipart>=0.0.9
+cryptography>=42.0
+tenacity>=8.2
+zhdate>=0.1

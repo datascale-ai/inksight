@@ -32,6 +32,9 @@ FONT_FAMILIES: dict[str, list[str]] = {
     "Inter": [
         "Inter_24pt-Medium.ttf",
     ],
+    "Gentium+Plus": [
+        "GentiumPlus-Regular.ttf",
+    ],
 }
 
 BITMAP_FONT_URLS: dict[str, str] = {
