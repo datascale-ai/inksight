@@ -101,7 +101,6 @@ async def generate_and_render(
     Returns:
         Tuple of (rendered image, content dict).
     """
-    time_str = date_ctx.get("time_str", "")
     weather_str = weather["weather_str"]
     weather_code = weather.get("weather_code", -1)
     cfg = get_effective_mode_config(config, persona)
@@ -119,6 +118,7 @@ async def generate_and_render(
     eff_cfg = get_effective_mode_config(config, persona)
     _eff_lang = eff_cfg.get("mode_language", "") or DEFAULT_LANGUAGE
     date_str = _format_date_str(date_ctx, _eff_lang)
+    render_time_str = datetime.now().strftime("%H:%M:%S")
 
     img = await _render_for_persona(
         persona,
@@ -127,7 +127,7 @@ async def generate_and_render(
         weather_str=weather_str,
         battery_pct=battery_pct,
         weather_code=weather_code,
-        time_str=time_str,
+        time_str=render_time_str,
         date_ctx=date_ctx,
         screen_w=screen_w,
         screen_h=screen_h,

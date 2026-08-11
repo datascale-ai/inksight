@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from PIL import Image, ImageDraw, ImageFont
-from core.patterns.utils import load_font
+from core.patterns.utils import load_font, refresh_status_bar_dynamic_right
 
 try:  # pragma: no cover - exercised implicitly at import time
     from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -646,7 +646,14 @@ async def build_image(
         )
         if cached_img:
             cache_hit = True
-            img = cached_img
+            img = refresh_status_bar_dynamic_right(
+                cached_img,
+                battery_pct,
+                time_str=datetime.now().strftime("%H:%M:%S"),
+                screen_w=screen_w,
+                screen_h=screen_h,
+                colors=colors,
+            )
 
     if mac and config and is_mode_cacheable and not skip_cache:
         if not intent_only:
@@ -661,7 +668,14 @@ async def build_image(
         )
         if cached_img:
             cache_hit = True
-            img = cached_img
+            img = refresh_status_bar_dynamic_right(
+                cached_img,
+                battery_pct,
+                time_str=datetime.now().strftime("%H:%M:%S"),
+                screen_w=screen_w,
+                screen_h=screen_h,
+                colors=colors,
+            )
             # 即使缓存命中，如果这是需要 LLM 的模式且用户额度为0，也应该检查并返回兜底图
             # 避免用户通过缓存绕过额度限制
             # Root 用户无需检查额度
