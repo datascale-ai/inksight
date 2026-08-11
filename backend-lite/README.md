@@ -15,6 +15,20 @@ InkSight 的轻量单用户后端。直接复用上游 `backend/core/` 渲染内
 
 不支持（固件遇非 200 自动降级）：vocab 词汇复习、voice 语音对话、mode marketplace、自定义模式编辑器 UI。
 
+## 管理页截图
+
+### 管理页总览
+
+![backend-lite 管理页总览](imgs/3.png)
+
+### 设备配置与预览
+
+![backend-lite 设备配置与预览](imgs/2.png)
+
+### 焦点提醒、OTA 与设备控制
+
+![backend-lite 焦点提醒、OTA 与设备控制](imgs/1.png)
+
 ## 与上游的关系
 
 ```
