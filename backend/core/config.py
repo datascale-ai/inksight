@@ -420,7 +420,7 @@ def get_default_llm_model_for_provider(provider: Optional[str]) -> str:
     - 百炼(aliyun)：默认 deepseek-v3.2（兼容模式）
     - DeepSeek：默认 deepseek-chat
     - Moonshot：默认 moonshot-v1-8k
-    - MiniMax：默认 MiniMax-M3
+    - MiniMax: MiniMax-M3 by default
     - 其他/未知：回退到 DEFAULT_LLM_MODEL
     """
     p = (provider or "").strip().lower() or DEFAULT_LLM_PROVIDER

@@ -42,7 +42,7 @@ class TestGetClientApiKeyLogic:
             assert max_tokens > 0
 
     def test_get_client_uses_minimax_defaults(self):
-        """测试 _get_client 为 MiniMax 使用预设 base_url 和环境变量"""
+        """Test that MiniMax uses its preset base URL and environment key."""
         env_api_key = "minimax-demo"
 
         with (
