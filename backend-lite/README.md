@@ -19,7 +19,7 @@ InkSight 的轻量单用户后端。直接复用上游 `backend/core/` 渲染内
 
 ### 管理页总览
 
-![backend-lite 管理页总览](imgs/3.png)
+![backend-lite 管理页总览](imgs/1.png)
 
 ### 设备配置与预览
 
@@ -27,7 +27,7 @@ InkSight 的轻量单用户后端。直接复用上游 `backend/core/` 渲染内
 
 ### 焦点提醒、OTA 与设备控制
 
-![backend-lite 焦点提醒、OTA 与设备控制](imgs/1.png)
+![backend-lite 焦点提醒、OTA 与设备控制](imgs/3.png)
 
 ## 与上游的关系
 
