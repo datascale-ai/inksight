@@ -1830,6 +1830,7 @@ def _poetry_card(props: dict[str, Any]) -> dict[str, Any]:
         "field": props.get("lines_field", "lines"),
         "limit": props.get("lines_limit", 8),
         "gap": props.get("lines_gap", 8),
+        "auto_pair_on_overflow": props.get("auto_pair_on_overflow", True),
         "item": _text_node(
             field="_value",
             font=props.get("lines_font"),
@@ -1870,7 +1871,7 @@ def _poetry_card(props: dict[str, Any]) -> dict[str, Any]:
                 },
             )
         )
-    return _compact(
+    root = _compact(
         {
             "type": "column",
             "padding_x": props.get("padding_x", 18),
@@ -1881,6 +1882,14 @@ def _poetry_card(props: dict[str, Any]) -> dict[str, Any]:
             "children": children,
         }
     )
+    adaptive_typography = props.get("adaptive_typography")
+    if isinstance(adaptive_typography, dict):
+        adaptive_meta = deepcopy(adaptive_typography)
+        adaptive_meta.setdefault("title_field", props.get("title_field", "title"))
+        adaptive_meta.setdefault("lines_field", props.get("lines_field", "lines"))
+        adaptive_meta.setdefault("note_field", props.get("note_field", "note"))
+        root["adaptive_typography"] = adaptive_meta
+    return root
 
 
 def _progress_metric(metric: dict[str, Any]) -> dict[str, Any]:
@@ -2354,7 +2363,7 @@ PRESET_REGISTRY: dict[str, PresetSpec] = {
     ),
     "poetry_card": PresetSpec(
         builder=_poetry_card,
-        props=("padding_x", "padding_y", "justify", "gap", "content_bias_px", "top_gap", "title_field", "title_font", "title_font_name", "title_font_size", "title_max_lines", "author_field", "author_font", "author_font_name", "author_font_size", "author_max_lines", "separator_width", "lines_inset_x", "lines_field", "lines_limit", "lines_gap", "lines_font", "lines_font_name", "lines_font_size", "line_max_lines", "lines_pair_step", "lines_pair_separator", "note_field", "note_font", "note_font_name", "note_font_size", "note_max_lines"),
+        props=("padding_x", "padding_y", "justify", "gap", "content_bias_px", "top_gap", "title_field", "title_font", "title_font_name", "title_font_size", "title_max_lines", "author_field", "author_font", "author_font_name", "author_font_size", "author_max_lines", "separator_width", "lines_inset_x", "lines_field", "lines_limit", "lines_gap", "lines_font", "lines_font_name", "lines_font_size", "line_max_lines", "lines_pair_step", "lines_pair_separator", "note_field", "note_font", "note_font_name", "note_font_size", "note_max_lines", "adaptive_typography"),
         defaults={"title_field": "title", "title_font": "noto_serif_bold", "title_font_size": 20, "title_max_lines": 1, "author_field": "author", "author_font": "noto_serif_light", "author_font_size": 14, "author_max_lines": 1, "separator_width": 50, "lines_field": "lines", "lines_font": "noto_serif_light", "lines_font_size": 16, "lines_limit": 8, "lines_gap": 4, "line_max_lines": 1, "lines_inset_x": 24, "note_field": "note", "note_font": "noto_serif_light", "note_font_size": 12, "note_max_lines": 2, "padding_x": 18, "padding_y": 10, "justify": "center", "gap": 5, "top_gap": 6},
     ),
     "lifebar_card": PresetSpec(

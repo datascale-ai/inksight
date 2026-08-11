@@ -1,6 +1,8 @@
 """
 Unit tests for the unified generate_and_render pipeline.
 """
+from datetime import datetime as real_datetime
+
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from PIL import Image
@@ -159,7 +161,9 @@ class TestGenerateAndRender:
             patch("core.mode_registry.get_registry", return_value=mock_reg),
             patch("core.json_content.generate_json_mode_content", new_callable=AsyncMock) as mock_gc,
             patch("core.json_renderer.render_json_mode", return_value=mock_img) as mock_rm,
+            patch("core.pipeline.datetime") as mock_datetime,
         ):
+            mock_datetime.now.return_value = real_datetime(2026, 8, 11, 14, 37, 59)
             mock_gc.return_value = {"quote": "Test", "author": "Author"}
 
             result_img, result_content = await generate_and_render(
@@ -169,6 +173,7 @@ class TestGenerateAndRender:
             assert result_content == {"quote": "Test", "author": "Author"}
             mock_gc.assert_called_once()
             mock_rm.assert_called_once()
+            assert mock_rm.call_args.kwargs["time_str"] == "14:37:59"
 
     @pytest.mark.asyncio
     async def test_none_config_treated_as_empty(self, sample_date_ctx, sample_weather):

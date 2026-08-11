@@ -114,7 +114,18 @@
       "note_field": "note",
       "note_font": "noto_serif_light",
       "note_font_size": 10,
-      "note_max_lines": 2
+      "note_max_lines": 2,
+      "adaptive_typography": {
+        "screen": "400x300",
+        "trigger_margin": 8,
+        "compact_title_font_size": 16,
+        "compact_lines_font_size": 14,
+        "compact_lines_gap": 4,
+        "compact_gap": 4,
+        "compact_top_gap": 8,
+        "compact_padding_y": 6,
+        "compact_note_max_lines": 1
+      }
     },
     "footer": {
       "label": "POETRY",

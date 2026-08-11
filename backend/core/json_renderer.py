@@ -1078,6 +1078,206 @@ def _paint_component_node(ctx: RenderContext, node: ComponentNode, theme: dict, 
         )
 
 
+def _adaptive_typography_int(config: dict[str, Any], key: str, minimum: int = 0) -> int | None:
+    value = config.get(key)
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= minimum else None
+
+
+def _component_apply_adaptive_typography(
+    node: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    is_root: bool = False,
+    in_lines_repeat: bool = False,
+) -> None:
+    """Apply a preset's compact typography settings to its definition tree."""
+    if not isinstance(node, dict):
+        return
+
+    kind = node.get("type")
+    if is_root and kind == "column":
+        compact_gap = _adaptive_typography_int(config, "compact_gap")
+        if compact_gap is not None:
+            node["gap"] = compact_gap
+        compact_padding_y = _adaptive_typography_int(config, "compact_padding_y")
+        if compact_padding_y is not None:
+            node["padding_y"] = compact_padding_y
+        compact_top_gap = _adaptive_typography_int(config, "compact_top_gap")
+        if compact_top_gap is not None:
+            for child in node.get("children", []):
+                if isinstance(child, dict) and child.get("type") == "spacer":
+                    child["height"] = compact_top_gap
+                    break
+
+    if kind == "text":
+        field = node.get("field")
+        if field == config.get("title_field"):
+            compact_title_size = _adaptive_typography_int(config, "compact_title_font_size", 1)
+            if compact_title_size is not None:
+                node["font_size"] = compact_title_size
+        elif in_lines_repeat and field == "_value":
+            compact_lines_size = _adaptive_typography_int(config, "compact_lines_font_size", 1)
+            if compact_lines_size is not None:
+                node["font_size"] = compact_lines_size
+        elif field == config.get("note_field"):
+            compact_note_max_lines = _adaptive_typography_int(config, "compact_note_max_lines")
+            if compact_note_max_lines is not None:
+                node["max_lines"] = compact_note_max_lines
+
+    if kind == "repeat" and node.get("field") == config.get("lines_field"):
+        compact_lines_gap = _adaptive_typography_int(config, "compact_lines_gap")
+        if compact_lines_gap is not None:
+            node["gap"] = compact_lines_gap
+        item = node.get("item")
+        if isinstance(item, dict):
+            _component_apply_adaptive_typography(
+                item, config, in_lines_repeat=True,
+            )
+
+    for child in node.get("children", []):
+        if isinstance(child, dict):
+            _component_apply_adaptive_typography(
+                child, config, in_lines_repeat=in_lines_repeat,
+            )
+
+
+def _component_maybe_apply_adaptive_typography(
+    body_tree: dict[str, Any],
+    root: ComponentNode,
+    screen_w: int,
+    screen_h: int | None,
+    available_height: int,
+) -> bool:
+    """Compact an explicitly opted-in component tree when it nearly overflows."""
+    config = body_tree.get("adaptive_typography")
+    if not isinstance(config, dict) or config.get("enabled") is False:
+        return False
+    if screen_h is None:
+        return False
+
+    target_screen = str(config.get("screen", "") or "").strip()
+    if target_screen and target_screen != f"{screen_w}x{screen_h}":
+        return False
+
+    trigger_margin = _adaptive_typography_int(config, "trigger_margin") or 0
+    trigger_height = max(0, available_height - trigger_margin)
+    if root.measured_height < trigger_height:
+        return False
+
+    _component_apply_adaptive_typography(body_tree, config, is_root=True)
+    return True
+
+
+def _component_has_auto_pair(node: ComponentNode) -> bool:
+    """True if any repeat node was condensed two-per-row by auto-pairing."""
+    if node.kind == "repeat" and node.props.get("pair_step") == 2 and node.props.get("auto_pair_on_overflow"):
+        return True
+    return any(_component_has_auto_pair(child) for child in node.children)
+
+
+def _component_auto_pair_repeat_nodes(node: ComponentNode, footer_top: int, theme: dict, scale: float) -> None:
+    """Condense overflowing ``repeat`` nodes two-per-row (``pair_step=2``).
+
+    Recurses through the component tree. When a repeat node marked with
+    ``auto_pair_on_overflow`` extends past ``footer_top``, its ``pair_step`` /
+    ``pair_separator`` props are set so each line carries two items, then the
+    node is re-measured in place.
+    """
+    if node.box is not None and node.box.y >= footer_top:
+        return
+    for child in node.children:
+        _component_auto_pair_repeat_nodes(child, footer_top, theme, scale)
+    if node.kind != "repeat" or not node.props.get("auto_pair_on_overflow"):
+        return
+    if node.box is not None and node.measured_height <= max(1, footer_top - node.box.y):
+        return
+    pair_sep = str(node.props.get("pair_separator", "，"))
+    node.props["pair_step"] = 2
+    node.props["pair_separator"] = pair_sep
+    # Rebuild children (pairing happens in _build_component_node) and re-measure.
+    node.children = _build_component_node(node.props, node.content).children
+    _measure_component_node(node, node.measured_width, theme, scale)
+
+
+def _fit_component_scale(
+    body_tree: dict,
+    content: dict,
+    screen_w: int,
+    theme: dict,
+    base_scale: float,
+    available_height: int,
+) -> float | None:
+    """Binary-search the largest component scale whose measured height fits.
+
+    Returns None when even the smallest scale still overflows (caller falls back
+    to the original scale rather than shrinking below a readable floor).
+    """
+    lo = 0.72
+    hi = base_scale
+    if hi <= lo:
+        return None
+    best: float | None = None
+    for _ in range(8):
+        mid = (lo + hi) / 2.0
+        node = _build_component_node(body_tree, content)
+        _measure_component_node(node, screen_w, theme, mid)
+        if node.measured_height <= available_height:
+            best = mid
+            lo = mid
+        else:
+            hi = mid
+    return best
+
+
+def _auto_fit_component_scale(
+    body_tree: dict,
+    content: dict,
+    screen_w: int,
+    theme: dict,
+    base_scale: float,
+    status_bar_bottom: int,
+    footer_top: int,
+    screen_h: int | None = None,
+) -> float:
+    """Return the effective component scale after auto-fitting content.
+
+    Content can exceed the body area (e.g. an 8-line poem on 400×300 where the
+    last lines would slip under the footer). Strategies, tried in order:
+      1. explicit adaptive typography can compact a preset before overflow,
+      2. auto_pair_on_overflow: overflowing repeat nodes condense two-per-row,
+         preserving font size (e.g. 律诗 becomes 每行两句),
+      3. scale-down: shrink the whole component scale so everything fits.
+
+    ``auto_pair_on_overflow`` mutates node props in place (shared with the
+    ``body_tree`` dicts), so pairing persists into the final render.
+    """
+    scale = base_scale
+    root = _build_component_node(body_tree, content)
+    available_height = max(0, footer_top - status_bar_bottom)
+    _measure_component_node(root, screen_w, theme, scale)
+    if _component_maybe_apply_adaptive_typography(
+        body_tree, root, screen_w, screen_h, available_height,
+    ):
+        root = _build_component_node(body_tree, content)
+        _measure_component_node(root, screen_w, theme, scale)
+    _layout_component_node(root, 0, status_bar_bottom, screen_w, available_height, theme, scale)
+    _component_auto_pair_repeat_nodes(root, footer_top, theme, scale)
+    if _component_has_auto_pair(root):
+        # Re-measure the whole tree so parent heights reflect the condensed lines.
+        _measure_component_node(root, screen_w, theme, scale)
+    if root.measured_height > available_height:
+        fit_scale = _fit_component_scale(body_tree, content, screen_w, theme, scale, available_height)
+        if fit_scale is not None:
+            scale = fit_scale
+    return scale
+
+
 def _render_component_tree_mode(
     draw: ImageDraw.ImageDraw,
     img: Image.Image,
@@ -1103,10 +1303,15 @@ def _render_component_tree_mode(
         footer_top_offset=footer_top_offset,
         colors=colors,
     )
-    scale = _component_tree_scale(ctx, theme)
+    scale = _auto_fit_component_scale(
+        body_tree, content, screen_w, theme,
+        _component_tree_scale(ctx, theme),
+        status_bar_bottom, ctx.footer_top,
+        screen_h=screen_h,
+    )
     root = _build_component_node(body_tree, content)
-    available_height = max(0, ctx.footer_top - status_bar_bottom)
     _measure_component_node(root, screen_w, theme, scale)
+    available_height = max(0, ctx.footer_top - status_bar_bottom)
     root_height = available_height if root.kind == "column" else min(available_height, root.measured_height)
     _layout_component_node(root, 0, status_bar_bottom, screen_w, root_height, theme, scale)
     _paint_component_node(ctx, root, theme, scale)

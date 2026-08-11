@@ -327,6 +327,141 @@ def draw_dashed_line(
         x += dash_len + gap_len
 
 
+def _resolve_status_bar_time(time_str: str = "") -> tuple[str, int]:
+    """Return a zero-padded HH:MM string and its hour for period labels."""
+    match = re.match(r"^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$", str(time_str or ""))
+    if match:
+        try:
+            hour = int(match.group(1))
+            minute = int(match.group(2))
+            second = int(match.group(3) or 0)
+            if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
+                return f"{hour:02d}:{minute:02d}", hour
+        except ValueError:
+            pass
+
+    now = datetime.now()
+    return f"{now.hour:02d}:{now.minute:02d}", now.hour
+
+
+def _status_bar_dynamic_group_layout(
+    draw: ImageDraw.ImageDraw,
+    time_text: str,
+    battery_pct: int,
+    font_en: ImageFont.ImageFont,
+    screen_w: int,
+    screen_h: int,
+) -> dict[str, int]:
+    """Calculate the right-aligned time and battery group using real text bounds."""
+    scale = screen_w / 400.0
+    pad_pct = 0.02 if screen_h < 200 else 0.03
+    pad_x = int(screen_w * pad_pct)
+    battery_text = f"{int(battery_pct)}%"
+    battery_bbox = draw.textbbox((0, 0), battery_text, font=font_en)
+    time_bbox = draw.textbbox((0, 0), time_text, font=font_en)
+    battery_text_x = screen_w - pad_x - battery_bbox[2]
+    battery_text_left = battery_text_x + battery_bbox[0]
+    battery_box_w = int(22 * scale)
+    battery_box_h = int(11 * scale)
+    battery_gap = int(6 * scale)
+    battery_x = battery_text_left - battery_gap - battery_box_w
+    time_gap = int(8 * scale)
+    time_right = battery_x - time_gap
+    time_x = time_right - time_bbox[2]
+    return {
+        "time_x": time_x,
+        "time_y": int(screen_h * (0.02 if screen_h < 200 else 0.03)),
+        "time_left": time_x + time_bbox[0],
+        "time_right": time_x + time_bbox[2],
+        "battery_x": battery_x,
+        "battery_y": int(screen_h * (0.02 if screen_h < 200 else 0.03)) + 1,
+        "battery_box_w": battery_box_w,
+        "battery_box_h": battery_box_h,
+        "battery_text_x": battery_text_x,
+        "battery_text_y": int(screen_h * (0.02 if screen_h < 200 else 0.03)),
+        "battery_text_right": battery_text_x + battery_bbox[2],
+        "group_left": min(time_x + time_bbox[0], battery_x),
+        "group_right": screen_w - pad_x,
+    }
+
+
+def _draw_status_bar_dynamic_group(
+    draw: ImageDraw.ImageDraw,
+    time_text: str,
+    battery_pct: int,
+    font_en: ImageFont.ImageFont,
+    screen_w: int,
+    screen_h: int,
+    colors: int,
+) -> dict[str, int]:
+    """Draw the right-side time and battery group and return its geometry."""
+    layout = _status_bar_dynamic_group_layout(
+        draw, time_text, battery_pct, font_en, screen_w, screen_h,
+    )
+    battery_text = f"{int(battery_pct)}%"
+    battery_fill = EINK_FG
+    available = EINK_COLOR_AVAILABILITY.get(colors, frozenset())
+    if battery_pct < 20 and "red" in available:
+        battery_fill = EINK_COLOR_NAME_MAP["red"]
+    elif battery_pct < 50 and "yellow" in available:
+        battery_fill = EINK_COLOR_NAME_MAP["yellow"]
+
+    draw.text((layout["time_x"], layout["time_y"]), time_text, fill=EINK_FG, font=font_en)
+    bx = layout["battery_x"]
+    by = layout["battery_y"]
+    batt_box_w = layout["battery_box_w"]
+    batt_box_h = layout["battery_box_h"]
+    scale = screen_w / 400.0
+    draw.rectangle([bx, by, bx + batt_box_w, by + batt_box_h], outline=battery_fill, width=1)
+    draw.rectangle(
+        [bx + batt_box_w, by + int(3 * scale), bx + batt_box_w + int(2 * scale), by + int(8 * scale)],
+        fill=battery_fill,
+    )
+    fill_w = int((batt_box_w - 4) * battery_pct / 100)
+    if fill_w > 0:
+        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + batt_box_h - 2], fill=battery_fill)
+    draw.text(
+        (layout["battery_text_x"], layout["battery_text_y"]),
+        battery_text,
+        fill=battery_fill,
+        font=font_en,
+    )
+    return layout
+
+
+def refresh_status_bar_dynamic_right(
+    img: Image.Image,
+    battery_pct: int,
+    *,
+    time_str: str = "",
+    screen_w: int | None = None,
+    screen_h: int | None = None,
+    colors: int = 2,
+) -> Image.Image:
+    """Refresh only the right-side time/battery area on a cached image copy."""
+    updated = img.copy()
+    width = screen_w or updated.width
+    height = screen_h or updated.height
+    draw = ImageDraw.Draw(updated)
+    apply_text_fontmode(draw)
+    scale = width / 400.0
+    time_text, _ = _resolve_status_bar_time(time_str)
+    font_en = load_font("inter_medium", int(FONT_SIZES["status_bar"]["en"] * scale))
+
+    max_layout = _status_bar_dynamic_group_layout(
+        draw, time_text, 100, font_en, width, height,
+    )
+    line_y = int(height * 0.11)
+    clear_bottom = max(0, min(height, line_y))
+    clear_left = max(0, max_layout["group_left"] - max(1, int(2 * scale)))
+    if clear_bottom > 0:
+        draw.rectangle([clear_left, 0, width - 1, clear_bottom - 1], fill=EINK_BG)
+    _draw_status_bar_dynamic_group(
+        draw, time_text, int(battery_pct), font_en, width, height, colors,
+    )
+    return updated
+
+
 def draw_status_bar(
     draw: ImageDraw.ImageDraw,
     img: Image.Image,
@@ -357,15 +492,7 @@ def draw_status_bar(
             period_font = load_font("noto_serif_regular", period_font_size)
     font_en = load_font("inter_medium", int(FONT_SIZES["status_bar"]["en"] * scale))
 
-    match = re.match(r"^\s*(\d{1,2})\s*:", time_str or "")
-    hour = datetime.now().hour
-    if match:
-        try:
-            parsed_hour = int(match.group(1))
-            if 0 <= parsed_hour <= 23:
-                hour = parsed_hour
-        except ValueError:
-            pass
+    time_text, hour = _resolve_status_bar_time(time_str)
 
     if is_en:
         if hour >= 23 or hour < 5:
@@ -413,28 +540,9 @@ def draw_status_bar(
     else:
         draw.text((wx, y), weather_str, fill=EINK_FG, font=font_date)
 
-    batt_text = f"{battery_pct}%"
-    bbox = draw.textbbox((0, 0), batt_text, font=font_en)
-    batt_text_w = bbox[2] - bbox[0]
-
-    batt_fill = EINK_FG
-    available = EINK_COLOR_AVAILABILITY.get(colors, frozenset())
-    if battery_pct < 20 and "red" in available:
-        batt_fill = EINK_COLOR_NAME_MAP["red"]
-    elif battery_pct < 50 and "yellow" in available:
-        batt_fill = EINK_COLOR_NAME_MAP["yellow"]
-
-    batt_box_w = int(22 * scale)
-    batt_box_h = int(11 * scale)
-    bx = screen_w - pad_x - batt_text_w - int(6 * scale) - batt_box_w
-    by = y + 1
-    draw.rectangle([bx, by, bx + batt_box_w, by + batt_box_h], outline=batt_fill, width=1)
-    draw.rectangle([bx + batt_box_w, by + int(3 * scale), bx + batt_box_w + int(2 * scale), by + int(8 * scale)], fill=batt_fill)
-    fill_w = int((batt_box_w - 4) * battery_pct / 100)
-    if fill_w > 0:
-        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + batt_box_h - 2], fill=batt_fill)
-
-    draw.text((bx + batt_box_w + int(6 * scale), y), batt_text, fill=batt_fill, font=font_en)
+    _draw_status_bar_dynamic_group(
+        draw, time_text, battery_pct, font_en, screen_w, screen_h, colors,
+    )
 
     if separator_y is not None:
         line_y = max(0, min(int(separator_y), max(0, screen_h - 1)))

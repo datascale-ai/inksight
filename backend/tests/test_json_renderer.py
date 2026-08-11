@@ -2,15 +2,31 @@
 测试 JSON 渲染引擎
 验证各种布局原语能正确渲染到 1-bit e-ink 图像
 """
+import json
 import os
 import sys
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from PIL import Image
-from core.json_renderer import render_json_mode, RenderContext, _localized_footer_label, _localized_footer_attribution, _component_aligned_y
+from copy import deepcopy
+
+from core.json_renderer import (
+    render_json_mode,
+    RenderContext,
+    _localized_footer_label,
+    _localized_footer_attribution,
+    _component_aligned_y,
+    _auto_fit_component_scale,
+    _merge_layout_dict,
+    _build_component_node,
+    _component_has_auto_pair,
+    _measure_component_node,
+)
+from core.layout_presets import expand_layout_presets
 from core.config import SCREEN_WIDTH as SCREEN_W, SCREEN_HEIGHT as SCREEN_H
 
 
@@ -49,6 +65,28 @@ def _make_component_tree_mode_def(body_tree, footer=None):
             "footer": footer or {"label": "TREE", "attribution_template": ""},
         },
     }
+
+
+def _load_builtin_poetry_mode():
+    path = Path(__file__).resolve().parents[1] / "core" / "modes" / "builtin" / "poetry.json"
+    return json.loads(path.read_text())
+
+
+def _find_component_def(node, predicate):
+    if not isinstance(node, dict):
+        return None
+    if predicate(node):
+        return node
+    for child in node.get("children", []):
+        found = _find_component_def(child, predicate)
+        if found is not None:
+            return found
+    item = node.get("item")
+    if isinstance(item, dict):
+        found = _find_component_def(item, predicate)
+        if found is not None:
+            return found
+    return None
 
 
 def test_render_list_wraps_to_multiple_lines():
@@ -423,6 +461,297 @@ def test_render_component_tree_poetry_preset_mode():
         date_str="2月18日", weather_str="晴", battery_pct=80,
     )
     assert img.size == (SCREEN_W, SCREEN_H)
+
+
+def test_poetry_auto_pair_on_overflow():
+    """8-line poems auto-pair two-per-row; 4-line poems stay single-column."""
+    mode_def = {
+        "mode_id": "POETRY_PRESET",
+        "display_name": "Poetry Preset",
+        "content": {"type": "static"},
+        "layout": {
+            "layout_engine": "component_tree",
+            "status_bar": {"line_width": 1, "dashed": True},
+            "body_preset": "poetry_card",
+            "preset_props": {
+                "title_field": "title",
+                "author_field": "author",
+                "lines_field": "lines",
+                "note_field": "note",
+            },
+            "footer": {"label": "POETRY", "attribution_template": "— {author}"},
+        },
+    }
+    status_bar_bottom = int(SCREEN_H * 0.12)
+    footer_top = SCREEN_H - 30
+    available = footer_top - status_bar_bottom
+
+    eight_line = {
+        "title": "春江花月夜",
+        "author": "唐·张若虚",
+        "lines": [
+            "春江潮水连海平", "海上明月共潮生",
+            "滟滟随波千万里", "何处春江无月明",
+            "江流宛转绕芳甸", "月照花林皆似霰",
+            "空里流霜不觉飞", "汀上白沙看不见",
+        ],
+        "note": "孤篇压全唐",
+    }
+    four_line = {
+        "title": "静夜思",
+        "author": "唐·李白",
+        "lines": ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"],
+        "note": "千古思乡名篇",
+    }
+
+    layout = expand_layout_presets(mode_def["layout"])
+    body = layout["body"]
+
+    # 8-line overflows without pairing, then auto-pairs and fits.
+    base_root = _build_component_node(deepcopy(body), eight_line)
+    _measure_component_node(base_root, SCREEN_W, {}, 1.0)
+    assert base_root.measured_height > available
+
+    body_8 = deepcopy(body)
+    scale_8 = _auto_fit_component_scale(
+        body_8, eight_line, SCREEN_W, {}, 1.0, status_bar_bottom, footer_top,
+    )
+    root_8 = _build_component_node(body_8, eight_line)
+    _measure_component_node(root_8, SCREEN_W, {}, scale_8)
+    assert _component_has_auto_pair(root_8)
+    assert root_8.measured_height <= available
+    assert scale_8 == 1.0
+
+    # 4-line already fits — no pairing, no scale-down.
+    body_4 = deepcopy(body)
+    scale_4 = _auto_fit_component_scale(
+        body_4, four_line, SCREEN_W, {}, 1.0, status_bar_bottom, footer_top,
+    )
+    root_4 = _build_component_node(body_4, four_line)
+    _measure_component_node(root_4, SCREEN_W, {}, scale_4)
+    assert not _component_has_auto_pair(root_4)
+    assert root_4.measured_height <= available
+    assert scale_4 == 1.0
+
+    # End-to-end render still succeeds for both.
+    for content in (eight_line, four_line):
+        img = render_json_mode(
+            mode_def, content,
+            date_str="2月18日", weather_str="晴", battery_pct=80,
+        )
+        assert img.size == (SCREEN_W, SCREEN_H)
+
+
+def test_poetry_adaptive_typography_compacts_long_ci_only():
+    """Long ci uses a larger title and smaller verse text on 400x300."""
+    mode_def = _load_builtin_poetry_mode()
+    layout = expand_layout_presets(mode_def["layout"])
+    body = layout["body"]
+    long_ci = {
+        "title": "水调歌头·明月几时有",
+        "author": "宋·苏轼",
+        "lines": [
+            "明月几时有？把酒问青天。",
+            "不知天上宫阙，今夕是何年。",
+            "我欲乘风归去，又恐琼楼玉宇，高处不胜寒。",
+            "起舞弄清影，何似在人间。",
+            "转朱阁，低绮户，照无眠。",
+            "不应有恨，何事长向别时圆？",
+        ],
+        "note": "此事古难全·宋苏轼",
+    }
+    status_bar_bottom = 36
+    footer_top = 270
+    available = footer_top - status_bar_bottom
+
+    normal_root = _build_component_node(deepcopy(body), long_ci)
+    _measure_component_node(normal_root, SCREEN_W, {}, 1.0)
+    assert normal_root.measured_height >= available - 8
+
+    compact_body = deepcopy(body)
+    scale = _auto_fit_component_scale(
+        compact_body,
+        long_ci,
+        SCREEN_W,
+        {},
+        1.0,
+        status_bar_bottom,
+        footer_top,
+        screen_h=SCREEN_H,
+    )
+    compact_root = _build_component_node(compact_body, long_ci)
+    _measure_component_node(compact_root, SCREEN_W, {}, scale)
+
+    title = _find_component_def(
+        compact_body,
+        lambda node: node.get("type") == "text" and node.get("field") == "title",
+    )
+    verse = _find_component_def(
+        compact_body,
+        lambda node: node.get("type") == "text" and node.get("field") == "_value",
+    )
+    repeat = _find_component_def(
+        compact_body,
+        lambda node: node.get("type") == "repeat" and node.get("field") == "lines",
+    )
+    note = _find_component_def(
+        compact_body,
+        lambda node: node.get("type") == "text" and node.get("field") == "note",
+    )
+    assert title is not None and verse is not None and repeat is not None and note is not None
+    assert title["font_size"] == 16
+    assert verse["font_size"] == 14
+    assert title["font_size"] > verse["font_size"]
+    assert repeat["gap"] == 4
+    assert compact_body["gap"] == 4
+    assert compact_body["padding_y"] == 6
+    assert compact_body["children"][0]["height"] == 8
+    assert note["max_lines"] == 1
+    assert not _component_has_auto_pair(compact_root)
+    assert scale == 1.0
+    assert compact_root.measured_height <= available
+
+    image = render_json_mode(
+        mode_def,
+        long_ci,
+        date_str="8月10日",
+        weather_str="晴",
+        battery_pct=80,
+        screen_w=SCREEN_W,
+        screen_h=SCREEN_H,
+    )
+    assert image.size == (SCREEN_W, SCREEN_H)
+
+
+def test_poetry_short_ci_keeps_normal_typography():
+    mode_def = _load_builtin_poetry_mode()
+    layout = expand_layout_presets(mode_def["layout"])
+    body = deepcopy(layout["body"])
+    short_ci = {
+        "title": "静夜思",
+        "author": "唐·李白",
+        "lines": ["床前明月光", "疑是地上霜", "举头望明月", "低头思故乡"],
+        "note": "千古思乡名篇",
+    }
+    scale = _auto_fit_component_scale(
+        body, short_ci, SCREEN_W, {}, 1.0, 36, 270, screen_h=SCREEN_H,
+    )
+    title = _find_component_def(
+        body,
+        lambda node: node.get("type") == "text" and node.get("field") == "title",
+    )
+    verse = _find_component_def(
+        body,
+        lambda node: node.get("type") == "text" and node.get("field") == "_value",
+    )
+    root = _build_component_node(body, short_ci)
+    _measure_component_node(root, SCREEN_W, {}, scale)
+    assert title is not None and verse is not None
+    assert title["font_size"] == 14
+    assert verse["font_size"] == 16
+    assert not _component_has_auto_pair(root)
+    assert scale == 1.0
+
+
+def test_poetry_adaptive_typography_is_scoped_to_400x300():
+    mode_def = _load_builtin_poetry_mode()
+    content = {
+        "title": "水调歌头·明月几时有",
+        "author": "宋·苏轼",
+        "lines": ["明月几时有？把酒问青天。"] * 8,
+        "note": "此事古难全",
+    }
+    expected = {
+        "296x128": (11, 10),
+        "648x480": (18, 18),
+        "800x480": (22, 24),
+    }
+    for size_key, (title_size, verse_size) in expected.items():
+        width, height = (int(value) for value in size_key.split("x"))
+        layout = _merge_layout_dict(mode_def["layout"], mode_def["layout_overrides"][size_key])
+        body = expand_layout_presets(layout)["body"]
+        title = _find_component_def(
+            body,
+            lambda node: node.get("type") == "text" and node.get("field") == "title",
+        )
+        verse = _find_component_def(
+            body,
+            lambda node: node.get("type") == "text" and node.get("field") == "_value",
+        )
+        assert title is not None and verse is not None
+        assert title["font_size"] == title_size
+        assert verse["font_size"] == verse_size
+
+        _auto_fit_component_scale(
+            body,
+            content,
+            width,
+            {},
+            0.92 if width < 400 else 1.35,
+            int(height * (0.11 if height <= 128 else 0.12)) + (2 if height <= 128 else 0),
+            height - (24 if height <= 128 else int(30 * min(width / 400, height / 300))),
+            screen_h=height,
+        )
+        assert title["font_size"] == title_size
+        assert verse["font_size"] == verse_size
+
+
+def test_component_tree_scale_down_when_pairing_unavailable():
+    """Without auto_pair, overflowing content shrinks via binary-search scale."""
+    body_tree = {
+        "type": "column",
+        "padding_x": 12,
+        "gap": 6,
+        "children": [
+            {
+                "type": "repeat",
+                "field": "lines",
+                "gap": 10,
+                "item": {
+                    "type": "text",
+                    "field": "_value",
+                    "font": "noto_serif_regular",
+                    "font_size": 20,
+                    "align": "center",
+                    "max_lines": 1,
+                },
+            }
+        ],
+    }
+    content = {
+        "lines": [
+            "第一行内容足够长一些",
+            "第二行内容足够长一些",
+            "第三行内容足够长一些",
+            "第四行内容足够长一些",
+            "第五行内容足够长一些",
+            "第六行内容足够长一些",
+            "第七行内容足够长一些",
+            "第八行内容足够长一些",
+            "第九行内容足够长一些",
+            "第十行内容足够长一些",
+        ]
+    }
+    status_bar_bottom = 36
+    footer_top = 270
+    available = footer_top - status_bar_bottom
+
+    base_root = _build_component_node(deepcopy(body_tree), content)
+    _measure_component_node(base_root, SCREEN_W, {}, 1.0)
+    assert base_root.measured_height > available
+
+    body = deepcopy(body_tree)
+    fit_scale = _auto_fit_component_scale(
+        body, content, SCREEN_W, {}, 1.0, status_bar_bottom, footer_top,
+    )
+    assert fit_scale is not None
+    assert fit_scale < 1.0
+    assert fit_scale >= 0.72
+    assert not _component_has_auto_pair(_build_component_node(body, content))
+
+    fitted = _build_component_node(body, content)
+    _measure_component_node(fitted, SCREEN_W, {}, fit_scale)
+    assert fitted.measured_height <= available
 
 
 def test_render_component_tree_lifebar_preset_mode():
