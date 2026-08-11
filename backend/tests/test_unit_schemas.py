@@ -72,6 +72,10 @@ class TestConfigRequest:
         with pytest.raises(ValidationError, match="无效 LLM 提供商"):
             ConfigRequest(mac="AA:BB:CC:DD:EE:FF", llmProvider="openai")
 
+    def test_minimax_provider_accepted(self):
+        body = ConfigRequest(mac="AA:BB:CC:DD:EE:FF", llmProvider="minimax")
+        assert body.llmProvider == "minimax"
+
     def test_invalid_strategy(self):
         with pytest.raises(ValidationError, match="无效刷新策略"):
             ConfigRequest(mac="AA:BB:CC:DD:EE:FF", refreshStrategy="sequential")
