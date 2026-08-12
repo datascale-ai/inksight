@@ -13,6 +13,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, TypedDict
 
+import httpx
 import websockets
 from PIL import Image, ImageDraw
 
@@ -94,8 +95,27 @@ VOICE_PROMPT_TTS_FINISH_DELAY_MS = _env_int("VOICE_PROMPT_TTS_FINISH_DELAY_MS", 
 VOICE_DASHSCOPE_API_KEY = _env_str("VOICE_DASHSCOPE_API_KEY", "")
 VOICE_STT_API_KEY = _env_str("VOICE_STT_API_KEY", "")
 VOICE_TTS_API_KEY = _env_str("VOICE_TTS_API_KEY", "")
+VOICE_TTS_PROVIDER = _env_str("VOICE_TTS_PROVIDER", "")
+VOICE_MINIMAX_TTS_MODEL = _env_str("VOICE_MINIMAX_TTS_MODEL", "speech-2.8-hd")
+VOICE_MINIMAX_TTS_REGION = _env_str("VOICE_MINIMAX_TTS_REGION", "global_en")
+VOICE_MINIMAX_TTS_VOICE = _env_str("VOICE_MINIMAX_TTS_VOICE", "")
 VOICE_OPUS_FRAME_DURATION_MS = 60
 VOICE_OPUS_FRAME_SIZE = 16000 * VOICE_OPUS_FRAME_DURATION_MS // 1000
+
+MINIMAX_TTS_MODELS = (
+    "speech-2.8-hd",
+    "speech-2.8-turbo",
+    "speech-2.6-hd",
+    "speech-2.6-turbo",
+    "speech-02-hd",
+    "speech-02-turbo",
+    "speech-01-hd",
+    "speech-01-turbo",
+)
+MINIMAX_TTS_ENDPOINTS = {
+    "global_en": "https://api.minimax.io/v1/t2a_v2",
+    "cn_zh": "https://api.minimaxi.com/v1/t2a_v2",
+}
 
 
 class VoiceTurn(TypedDict):
@@ -116,6 +136,10 @@ class VoiceRuntimeSettings:
     llm_base_url: str | None = None
     stt_api_key: str | None = None
     tts_api_key: str | None = None
+    tts_provider: str = "default"
+    tts_model: str = VOICE_MINIMAX_TTS_MODEL
+    tts_region: str = VOICE_MINIMAX_TTS_REGION
+    tts_voice: str = VOICE_MINIMAX_TTS_VOICE
 
     @classmethod
     def from_llm(
@@ -129,6 +153,10 @@ class VoiceRuntimeSettings:
         shared_voice_api_key = VOICE_DASHSCOPE_API_KEY or _env_str("DASHSCOPE_API_KEY", "") or None
         env_stt_key = VOICE_STT_API_KEY or shared_voice_api_key
         env_tts_key = VOICE_TTS_API_KEY or shared_voice_api_key
+        configured_tts_provider = VOICE_TTS_PROVIDER.strip().lower()
+        use_minimax_tts = configured_tts_provider == "minimax" or (
+            not configured_tts_provider and llm_provider == "minimax"
+        )
         user_aliyun_key = (
             str(llm_api_key).strip()
             if llm_provider == "aliyun" and llm_api_key and str(llm_api_key).strip()
@@ -141,6 +169,9 @@ class VoiceRuntimeSettings:
         else:
             stt_api_key = env_stt_key
             tts_api_key = env_tts_key
+        if use_minimax_tts:
+            user_minimax_key = str(llm_api_key).strip() if llm_provider == "minimax" and llm_api_key else ""
+            tts_api_key = user_minimax_key or VOICE_TTS_API_KEY or _env_str("MINIMAX_API_KEY", "") or None
         return cls(
             llm_provider=llm_provider,
             llm_model=llm_model,
@@ -148,6 +179,7 @@ class VoiceRuntimeSettings:
             llm_base_url=llm_base_url,
             stt_api_key=stt_api_key,
             tts_api_key=tts_api_key,
+            tts_provider="minimax" if use_minimax_tts else "default",
         )
 
 
@@ -204,7 +236,7 @@ class VoiceWsSessionState:
     active_turn_id: str | None = None
     active_turn_transcript: str = ""
     turn_metrics: "VoiceWsTurnMetrics | None" = None
-    pending_tts_bridge: "_StreamingTtsBridge | None" = None
+    pending_tts_bridge: "_StreamingTtsBridge | _MiniMaxTtsBridge | None" = None
     _auto_commit_task: asyncio.Task[None] | None = None
 
 
@@ -535,6 +567,15 @@ def _dashscope_tts_ws_url() -> str:
     if normalized.startswith("https://"):
         return f"wss://{normalized[len('https://'):]}/api-ws/v1/inference"
     return VOICE_STREAMING_TTS_WS_URL
+
+
+def _minimax_tts_url(region: str) -> str:
+    normalized = region.strip().lower()
+    try:
+        return MINIMAX_TTS_ENDPOINTS[normalized]
+    except KeyError as exc:
+        supported = ", ".join(MINIMAX_TTS_ENDPOINTS)
+        raise ValueError(f"Unsupported MiniMax TTS region: {region}. Expected one of: {supported}") from exc
 
 
 async def _transcribe_pcm_bytes(
@@ -910,7 +951,7 @@ def _split_delta_tts_segments(buffer: str, *, final: bool, idle_break: bool) -> 
 
 async def _synthesize_reply_pcm(reply_text: str, *, settings: VoiceRuntimeSettings) -> bytes:
     started_at = time.perf_counter()
-    bridge = _StreamingTtsBridge(settings=settings, finish_delay_ms=VOICE_PROMPT_TTS_FINISH_DELAY_MS)
+    bridge = _create_tts_bridge(settings=settings, finish_delay_ms=VOICE_PROMPT_TTS_FINISH_DELAY_MS)
     bridge.start()
     bridge.feed_text(reply_text)
     bridge.finish()
@@ -1138,15 +1179,114 @@ class _StreamingTtsBridge:
                 self._loop.call_soon_threadsafe(self._audio_queue.put_nowait, None)
 
 
+async def _synthesize_minimax_pcm(text: str, *, settings: VoiceRuntimeSettings) -> bytes:
+    if settings.tts_model not in MINIMAX_TTS_MODELS:
+        raise ValueError(f"Unsupported MiniMax TTS model: {settings.tts_model}")
+    if not settings.tts_api_key:
+        raise RuntimeError("Missing MiniMax API key")
+
+    request_body: dict[str, Any] = {
+        "model": settings.tts_model,
+        "text": text,
+        "stream": False,
+        "output_format": "hex",
+        "audio_setting": {
+            "format": "pcm",
+            "sample_rate": VOICE_STREAMING_TTS_SAMPLE_RATE,
+        },
+    }
+    if settings.tts_voice:
+        request_body["voice_setting"] = {"voice_id": settings.tts_voice}
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.post(
+            _minimax_tts_url(settings.tts_region),
+            headers={"Authorization": f"Bearer {settings.tts_api_key}"},
+            json=request_body,
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    base_resp = payload.get("base_resp") or {}
+    if base_resp.get("status_code") != 0:
+        message = base_resp.get("status_msg") or "MiniMax TTS request failed"
+        raise RuntimeError(message)
+    audio_hex = str((payload.get("data") or {}).get("audio") or "")
+    if not audio_hex:
+        raise RuntimeError("MiniMax TTS response did not include audio")
+    try:
+        return bytes.fromhex(audio_hex)
+    except ValueError as exc:
+        raise RuntimeError("MiniMax TTS response included invalid hex audio") from exc
+
+
+class _MiniMaxTtsBridge:
+    """Buffer text segments and synthesize them with the MiniMax HTTP API."""
+
+    def __init__(self, *, settings: VoiceRuntimeSettings, finish_delay_ms: int = 0) -> None:
+        self._settings = settings
+        self._finish_delay_ms = max(0, finish_delay_ms)
+        self._text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._started_at = time.perf_counter()
+        self._first_audio_at = 0.0
+
+    def start(self) -> None:
+        return
+
+    def feed_text(self, text: str) -> None:
+        self._text_queue.put_nowait(text)
+
+    def finish(self) -> None:
+        self._text_queue.put_nowait(None)
+
+    async def iter_audio(self) -> AsyncIterator[bytes]:
+        text_parts: list[str] = []
+        while True:
+            text = await self._text_queue.get()
+            if text is None:
+                break
+            normalized = _normalize_tts_stream_text(text)
+            if normalized:
+                text_parts.append(normalized)
+        if not text_parts:
+            return
+        if self._finish_delay_ms:
+            await asyncio.sleep(self._finish_delay_ms / 1000)
+        audio = await _synthesize_minimax_pcm(" ".join(text_parts), settings=self._settings)
+        self._first_audio_at = time.perf_counter()
+        yield audio
+
+    @property
+    def first_audio_delay_ms(self) -> int:
+        if self._first_audio_at <= 0:
+            return -1
+        return int((self._first_audio_at - self._started_at) * 1000)
+
+
+def _create_tts_bridge(
+    *,
+    settings: VoiceRuntimeSettings,
+    finish_delay_ms: int = 0,
+) -> _StreamingTtsBridge | _MiniMaxTtsBridge:
+    if settings.tts_provider == "minimax":
+        return _MiniMaxTtsBridge(settings=settings, finish_delay_ms=finish_delay_ms)
+    return _StreamingTtsBridge(settings=settings, finish_delay_ms=finish_delay_ms)
+
+
 async def synthesize_prompt_pcm(text: str, settings: VoiceRuntimeSettings | None = None) -> bytes:
     effective_settings = settings or VoiceRuntimeSettings.from_llm(
         llm_provider="aliyun",
         llm_model="qwen3-coder-480b-a35b-instruct",
     )
+    use_minimax_tts = effective_settings.tts_provider == "minimax"
+    tts_model = effective_settings.tts_model if use_minimax_tts else VOICE_STREAMING_TTS_MODEL
+    tts_voice = effective_settings.tts_voice if use_minimax_tts else VOICE_STREAMING_TTS_VOICE
     cache_key = "|".join(
         [
-            VOICE_STREAMING_TTS_MODEL,
-            VOICE_STREAMING_TTS_VOICE,
+            effective_settings.tts_provider,
+            tts_model,
+            effective_settings.tts_region,
+            tts_voice,
             text,
         ]
     )
@@ -1621,7 +1761,7 @@ async def _run_voice_ws_generation_streaming(
             tts_bridge = session.pending_tts_bridge
             session.pending_tts_bridge = None
         else:
-            tts_bridge = _StreamingTtsBridge(settings=session.settings)
+            tts_bridge = _create_tts_bridge(settings=session.settings)
             tts_bridge.start()
         llm_done = asyncio.Event()
 
@@ -2114,7 +2254,7 @@ async def commit_voice_ws_audio(session: VoiceWsSessionState) -> None:
     if should_warmup:
         _start_voice_ws_generation(session, transcript=speculative_transcript, turn_id=turn_id, warmup=True)
     if VOICE_STREAMING_TTS_ENABLED and session.pending_tts_bridge is None:
-        session.pending_tts_bridge = _StreamingTtsBridge(settings=session.settings)
+        session.pending_tts_bridge = _create_tts_bridge(settings=session.settings)
         session.pending_tts_bridge.start()
     transcript = await session.asr_bridge.commit()
     old_asr_bridge = session.asr_bridge
