@@ -14,7 +14,7 @@ from .config import get_supported_modes
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
 # 允许的 LLM 提供商
-_VALID_PROVIDERS = {"deepseek", "aliyun", "moonshot"}
+_VALID_PROVIDERS = {"deepseek", "aliyun", "moonshot", "minimax"}
 _VALID_IMAGE_PROVIDERS = {"aliyun"}
 
 # 允许的语言选项

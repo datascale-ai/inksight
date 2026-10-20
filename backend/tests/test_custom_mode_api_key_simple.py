@@ -41,6 +41,23 @@ class TestGetClientApiKeyLogic:
             assert client is not None
             assert max_tokens > 0
 
+    def test_get_client_uses_minimax_defaults(self):
+        """Test that MiniMax uses its preset base URL and environment key."""
+        env_api_key = "minimax-demo"
+
+        with (
+            patch.dict(os.environ, {"MINIMAX_API_KEY": env_api_key}, clear=False),
+            patch("core.content.AsyncOpenAI") as mock_openai,
+        ):
+            mock_openai.return_value = MagicMock()
+            client, max_tokens = _get_client("minimax", "MiniMax-M3", api_key=None)
+
+            assert client is mock_openai.return_value
+            assert max_tokens > 0
+            assert mock_openai.call_args is not None
+            assert mock_openai.call_args.kwargs.get("api_key") == env_api_key
+            assert mock_openai.call_args.kwargs.get("base_url") == "https://api.minimax.io/v1"
+
     def test_get_client_raises_error_when_user_key_empty(self):
         """测试 _get_client 在用户配置的 api_key 为空时抛出错误"""
         with (
@@ -178,4 +195,3 @@ class TestApiKeyFlow:
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": env_api_key}, clear=False):
             client, max_tokens = _get_client("deepseek", "deepseek-chat", api_key=device_api_key)
             assert client is not None
-

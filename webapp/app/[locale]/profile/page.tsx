@@ -260,6 +260,9 @@ export default function ProfilePage() {
     if (provider === "aliyun") {
       return ["qwen3.5-flash", "deepseek-v3.2", "Moonshot-Kimi-K2-Instruct"];
     }
+    if (provider === "minimax") {
+      return ["MiniMax-M3.1-Flash", "MiniMax-M3"];
+    }
     // 默认 DeepSeek
     return ["deepseek-chat", "deepseek-reasoner"];
   };
@@ -268,6 +271,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (llmAccessMode !== "preset") return;
     const opts = getLlmModelOptions(llmProvider);
+    // Keep saved MiniMax model IDs even when they leave the preset catalog.
+    if (llmProvider === "minimax" && llmModel) return;
     if (!opts.includes(llmModel)) {
       setLlmModel(opts[0]);
     }
@@ -625,11 +630,15 @@ export default function ProfilePage() {
                     <Field label={tr("API 服务商", "API Provider")}>
                       <select
                         value={llmProvider}
-                        onChange={(e) => setLlmProvider(e.target.value)}
+                        onChange={(e) => {
+                          setLlmProvider(e.target.value);
+                          setLlmModel(getLlmModelOptions(e.target.value)[0]);
+                        }}
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                       >
                         <option value="aliyun">{tr("阿里百炼", "Alibaba Bailian")}</option>
                         <option value="deepseek">DeepSeek</option>
+                        <option value="minimax">MiniMax</option>
                       </select>
                     </Field>
                     <Field label={tr("模型名称", "Model Name")}>
@@ -638,18 +647,14 @@ export default function ProfilePage() {
                         onChange={(e) => setLlmModel(e.target.value)}
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white"
                       >
-                        {llmProvider === "aliyun" ? (
-                          <>
-                            <option value="qwen3.5-flash">qwen3.5-flash</option>
-                            <option value="deepseek-v3.2">deepseek-v3.2</option>
-                            <option value="Moonshot-Kimi-K2-Instruct">Moonshot-Kimi-K2-Instruct</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="deepseek-chat">deepseek-chat</option>
-                            <option value="deepseek-reasoner">deepseek-reasoner</option>
-                          </>
+                        {llmProvider === "minimax" && llmModel && !getLlmModelOptions(llmProvider).includes(llmModel) && (
+                          <option value={llmModel}>{llmModel}</option>
                         )}
+                        {getLlmModelOptions(llmProvider).map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
                       </select>
                     </Field>
                     <Field label={tr("API Key", "API Key")}>
@@ -714,6 +719,7 @@ export default function ProfilePage() {
                         onChange={(e) => setLlmBaseUrl(e.target.value)}
                         placeholder={tr("例如：https://api.deepseek.com/v1", "e.g. https://api.deepseek.com/v1")}
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                        list="llm-base-url-presets"
                       />
                     </Field>
                     <Field label={tr("模型名称", "Model Name")}>
@@ -723,6 +729,7 @@ export default function ProfilePage() {
                         onChange={(e) => setLlmModel(e.target.value)}
                         placeholder={tr("例如：deepseek-chat", "e.g. deepseek-chat")}
                         className="w-full rounded-sm border border-ink/20 px-3 py-2 text-sm bg-white font-mono"
+                        list="llm-model-presets"
                       />
                     </Field>
                     <Field label={tr("API Key", "API Key")}>
@@ -735,6 +742,14 @@ export default function ProfilePage() {
                         autoComplete="off"
                       />
                     </Field>
+                    <datalist id="llm-base-url-presets">
+                      <option value="https://api.minimax.io/v1" />
+                      <option value="https://api.minimaxi.com/v1" />
+                    </datalist>
+                    <datalist id="llm-model-presets">
+                      <option value="MiniMax-M3.1-Flash" />
+                      <option value="MiniMax-M3" />
+                    </datalist>
 
                     {/* ── 图像生成 ── */}
                     <div className="pt-4 border-t border-ink/10">

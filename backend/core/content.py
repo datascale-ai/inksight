@@ -86,6 +86,13 @@ LLM_CONFIGS = {
             "kimi-k2-turbo-preview": {"name": "Kimi K2 Turbo", "max_tokens": 1024},
         },
     },
+    "minimax": {
+        "base_url": "https://api.minimax.io/v1",
+        "models": {
+            "MiniMax-M3.1-Flash": {"name": "MiniMax-M3.1-Flash", "max_tokens": 1024},
+            "MiniMax-M3": {"name": "MiniMax-M3", "max_tokens": 1024},
+        },
+    },
     # Custom OpenAI-compatible provider: base_url must be provided at call-time.
     "openai_compat": {
         "base_url": "",
@@ -292,6 +299,7 @@ def _get_client(
             "deepseek": "DEEPSEEK_API_KEY",
             "aliyun": "DASHSCOPE_API_KEY",
             "moonshot": "MOONSHOT_API_KEY",
+            "minimax": "MINIMAX_API_KEY",
         }
         env_key = api_key_map.get(provider, "DEEPSEEK_API_KEY")
         api_key = os.getenv(env_key, "")
@@ -314,7 +322,9 @@ def _get_client(
         resolved_base_url = (base_url or "").strip()
         if not resolved_base_url:
             raise LLMKeyMissingError("Missing base_url for openai_compat provider.")
-    model_config = config["models"].get(model, {"max_tokens": 120})
+    # Preserve the request budget for saved legacy MiniMax configurations.
+    fallback_max_tokens = 1024 if provider == "minimax" and model == "MiniMax-M2.7" else 120
+    model_config = config["models"].get(model, {"max_tokens": fallback_max_tokens})
     max_tokens = model_config["max_tokens"]
 
     return AsyncOpenAI(api_key=api_key, base_url=resolved_base_url), max_tokens
