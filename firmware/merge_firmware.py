@@ -11,8 +11,8 @@ def merge_bin(source, target, env):
     flash_size = board.get("upload.flash_size", "4MB")
 
     esptool = os.path.join(
-        env.PioPlatform().get_package_dir("tool-esptoolpy") or "",
-        "esptool.py",
+        env.PioPlatform().get_package_dir("tool-esptool") or "",
+        "esptool",
     )
     output = os.path.join(env.subst("$BUILD_DIR"), "firmware_merged.bin")
 
@@ -24,7 +24,7 @@ def merge_bin(source, target, env):
     print("==========================")
 
     cmd = [
-        "$PYTHONEXE", esptool,
+        esptool,
         "--chip", mcu,
         "merge_bin",
         "--flash_mode", flash_mode,

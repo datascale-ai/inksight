@@ -7,6 +7,9 @@
 #define PIN_EPD_MOSI   6
 #define PIN_EPD_SCK    4
 #define PIN_EPD_CS     7
+#ifndef PIN_EPD_CS2
+#define PIN_EPD_CS2    5
+#endif
 #define PIN_EPD_DC     1
 #define PIN_EPD_RST    2
 #define PIN_EPD_BUSY   10

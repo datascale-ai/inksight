@@ -68,6 +68,25 @@ If you want to inspect other built-in profiles in code, see:
 
 For a first build, the default **4.2-inch** setup is still the recommended path.
 
+### WFH0420CZ11 dual-UC8154 B/W panel
+
+The 400×300 `WFH0420CZ11 LW` (back label `WF0420T1PCZ11` / `EPD-U008`, Hanshow Stellar-XL) uses two UC8154s, each driving a 200×300 half. Use a 24-pin driver board exposing **CS2**.
+
+| Board | PlatformIO environment |
+|-------|------------------------|
+| ESP32-C3 standard, external USB-to-serial | `epd_42_wfh0420cz11_uc8154_2ic_c3_std` |
+| ESP32-C3 Pro mini, native USB CDC | `epd_42_wfh0420cz11_uc8154_2ic_c3_promini` |
+
+Wiring: MOSI=GPIO6, SCK=GPIO4, DC=GPIO1, RST=GPIO2, BUSY=GPIO10, **CS1=GPIO7 (left), CS2=GPIO8 (right)**. BUSY is active low. For the V1.5 driver board used in the reference test, select **0.47Ω RESE**. Other dual-IC profiles defaulting to CS2=GPIO5 use different wiring.
+
+From `firmware/`, run `pio run -e epd_42_wfh0420cz11_uc8154_2ic_c3_std`. Flash `.pio/build/epd_42_wfh0420cz11_uc8154_2ic_c3_std/firmware_merged.bin` at **0x0**; `firmware.bin` in the same directory is the OTA image.
+
+The driver uses the supplied technical document's tested `fw` LUTs and baseline registers (VCOM=0x0a, CCSET=0x01). It expands the 1-bit B/W framebuffer into the ICs' 2-bit format and powers off and deep-sleeps after each full refresh. Fast, partial, and deep-clear calls use the same full-refresh sequence. Serial logs report PON/DRF/POF timing and BUSY timeouts.
+
+The reference MicroPython test confirmed orientation and half-screen selection. The C++ driver has been flashed to an ESP32-C3 standard board, and the user confirmed that hardware testing passed. The Pro Mini configuration has passed compilation but has not been tested on hardware. The documented gray-white background issue has not been confirmed resolved. This panel needs a different driver from the single-UC8176 WFH0420CZ35 and dual-SSD1608 HINK-E042A03-A1.
+
+Reference: [dotnfc CZ11 driver](https://github.com/dotnfc/EPD_mpy_efont/blob/master/examples/panel/epd_cz11.py). Run `python3 firmware/tests/test_uc8154.py` from the repository root for host GPIO/SPI, pixel mapping, shutdown, and timeout checks (requires a C++ compiler).
+
 ## 4. Pin mappings
 
 The current pin definitions are implemented in: `firmware/src/config.h`

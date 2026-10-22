@@ -23,7 +23,7 @@
 #include "audio_codec.h"
 #include "audio_service.h"
 #endif
-#include "network.h"
+#include "ink_network.h"
 #include "storage.h"
 #include "portal.h"
 

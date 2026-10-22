@@ -67,6 +67,31 @@
 
 但如果你只是第一次搭建，建议直接使用默认的 **4.2寸方案**。
 
+### WFH0420CZ11：双 UC8154 黑白屏
+
+新增适配威峰 `WFH0420CZ11 LW`（屏背 `WF0420T1PCZ11` / `EPD-U008`，汉朔 Stellar-XL 拆机屏），分辨率 400×300。两颗 UC8154 各驱动左右 200×300，需使用带 **CS2** 的 24 pin 墨水屏驱动板。
+
+| 开发板 | PlatformIO 环境 |
+|--------|----------------|
+| ESP32-C3 标准版（独立串口芯片） | `epd_42_wfh0420cz11_uc8154_2ic_c3_std` |
+| ESP32-C3 Pro mini（原生 USB CDC） | `epd_42_wfh0420cz11_uc8154_2ic_c3_promini` |
+
+接线：MOSI=GPIO6、SCK=GPIO4、DC=GPIO1、RST=GPIO2、BUSY=GPIO10，**CS1=GPIO7（左半屏）、CS2=GPIO8（右半屏）**。BUSY 为低电平忙；使用「墨水屏驱动板 V1.5」时，按参考测试接线将 RESE 设为 **0.47Ω**。其他双 IC 屏配置中的 CS2=GPIO5 不适用于这里的默认接线。
+
+在 `firmware/` 目录运行：
+
+```sh
+pio run -e epd_42_wfh0420cz11_uc8154_2ic_c3_std
+```
+
+生成的 `.pio/build/epd_42_wfh0420cz11_uc8154_2ic_c3_std/firmware_merged.bin` 是完整烧录文件，写入地址为 `0x0`；同目录的 `firmware.bin` 用于 OTA。
+
+驱动采用所提供技术文档中已实测可显示的 `fw` 波形和基线寄存器（VCOM=0x0a、CCSET=0x01），不采用未验证的电压或波形变体。项目保留 1 bit 黑白画布，发送时转换为芯片要求的 2 bit 数据；每次全屏刷新后掉电并深睡。快速和局部刷新均回退到全屏刷新，深度清屏入口也使用同一全刷序列。串口输出 PON、DRF、POF 耗时与 BUSY 超时信息。
+
+**验证范围**：参考 MicroPython 测试已确认左右分屏和显示方向；本项目 C++ 驱动已在 ESP32-C3 标准版上烧录，用户确认实机测试通过。Pro Mini 配置已编译通过，尚未实机验证。技术文档记录的白底发灰问题尚未确认解决，不能保证恢复原厂白度。该屏与单 UC8176 的 WFH0420CZ35、双 SSD1608 的 HINK-E042A03-A1 使用不同驱动。
+
+参考：[dotnfc 的 CZ11 驱动](https://github.com/dotnfc/EPD_mpy_efont/blob/master/examples/panel/epd_cz11.py)。在主机上可运行 `python3 firmware/tests/test_uc8154.py`，验证 GPIO/SPI 输出、分屏像素、掉电及超时处理（需要 C++ 编译器）。
+
 ## 4. 引脚定义
 
 当前引脚定义位于：`firmware/src/config.h`

@@ -1,4 +1,4 @@
-#include "network.h"
+#include "ink_network.h"
 #include "config.h"
 #include "storage.h"
 #include "certs.h"
