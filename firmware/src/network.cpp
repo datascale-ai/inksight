@@ -55,6 +55,21 @@ static bool gVoiceWsOpusEnabled = false;
 static bool gVoiceWsServerVadEnabled = false;
 static QueueHandle_t gVoiceWsEventQueue = nullptr;
 
+// XIAO ESP32S3 routes onboard battery ADC and EPD_DC to GPIO10, so battery
+// sampling must temporarily release the display DC line while the EPD bus is idle.
+#if defined(BOARD_PROFILE_XIAO_ESP32S3) && (PIN_BAT_ADC == PIN_EPD_DC)
+static void beginBatteryAdcSample() {
+    digitalWrite(PIN_EPD_CS, HIGH);
+    pinMode(PIN_EPD_DC, INPUT);
+    delayMicroseconds(50);
+}
+
+static void endBatteryAdcSample() {
+    pinMode(PIN_EPD_DC, OUTPUT);
+    digitalWrite(PIN_EPD_DC, LOW);
+}
+#endif
+
 // ── WiFi connection ─────────────────────────────────────────
 
 // Associate with a single AP and wait up to WIFI_TIMEOUT. Returns true on
@@ -176,10 +191,16 @@ float readBatteryVoltage() {
     const int DISCARD = 2;  // Discard highest and lowest outliers
     int readings[SAMPLES];
 
+#if defined(BOARD_PROFILE_XIAO_ESP32S3) && (PIN_BAT_ADC == PIN_EPD_DC)
+    beginBatteryAdcSample();
+#endif
     for (int i = 0; i < SAMPLES; i++) {
         readings[i] = analogRead(PIN_BAT_ADC);
         delayMicroseconds(100);
     }
+#if defined(BOARD_PROFILE_XIAO_ESP32S3) && (PIN_BAT_ADC == PIN_EPD_DC)
+    endBatteryAdcSample();
+#endif
 
     // Sort for outlier removal
     for (int i = 0; i < SAMPLES - 1; i++)
@@ -610,6 +631,7 @@ bool fetchBMP(bool nextMode, bool *isFallback, String *renderedModeIdOut) {
     float v = readBatteryVoltage();
     String mac = WiFi.macAddress();
     int rssi = WiFi.RSSI();
+    const int colorCapability = EPD_COLOR_CAPABILITY;
 #if DEBUG_MODE
     int effectiveRefreshMin = DEBUG_REFRESH_MIN;
 #else
